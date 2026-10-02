@@ -171,10 +171,12 @@ describe('templates, queries and dashboards', () => {
 
   it('lists dashboards and validates their widgets', async () => {
     const ds = (await api(admin).get(`/${key}/dashboards`)).body;
-    expect(ds[0]).toMatchObject({ key: 'overview', isPublic: false });
+    expect(ds[0]).toMatchObject({ key: 'overview', isPublic: false, filters: { areaType: 'province', period: false } });
     expect(ds[0].widgets.length).toBeGreaterThan(5);
     const bad = await api(admin).post(`/${key}/dashboards`, { key: 'x', name: 'X', widgets: [{ id: 'a', type: 'kpi', query: { kind: 'kpi', aggregation: 'median' } }] });
     expect(bad.status).toBe(400);
+    const badFilter = await api(admin).put(`/${key}/dashboards/overview`, { ...ds[0], filters: { areaType: 'planet', period: true } });
+    expect(badFilter.status).toBe(400);
   });
 });
 
@@ -281,6 +283,26 @@ describe('jobs and public projects', () => {
     expect(map.status).toBe(200);
     expect(map.body.freshness.status).toBe('fresh');
     expect((await h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}/dashboards/live/widgets/nope`)).status).toBe(404);
+  });
+
+  it('applies dashboard parameters to public widgets, only within the declared filters', async () => {
+    const tenant = (await h.admin('GET', `/platform/tenants/${tenantId}`)).body;
+    const pub = (path: string) => h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}/dashboards/live${path}`);
+    const live = (await api(admin).get(`/${key}/dashboards`)).body.find((d: { key: string }) => d.key === 'live');
+    expect((await pub('/areas')).body).toEqual([]); // no area filter yet
+    const ireland = (await api(admin).get(`/${key}/entities?type=country&q=Ireland`)).body.items[0];
+    expect((await pub(`/widgets/tracked?area=${ireland.id}`)).status).toBe(200); // ignored without a filter
+
+    await api(admin).put(`/${key}/dashboards/live`, { ...live, filters: { areaType: 'country', period: true } });
+    const areas = (await pub('/areas')).body;
+    expect(areas.map((a: { name: string }) => a.name)).toEqual(expect.arrayContaining(['Ireland', 'United Kingdom']));
+    // A year-long window keeps the fixture's fixed timestamps in range.
+    const all = (await pub('/widgets/tracked?hours=8760')).body.rows[0].value;
+    const ie = (await pub(`/widgets/tracked?area=${ireland.id}&hours=8760`)).body.rows[0].value;
+    expect(all).toBe(2);
+    expect(ie).toBe(1);
+    expect((await pub(`/widgets/tracked?area=${uuidv7()}`)).status).toBe(404); // not an area of this dashboard
+    expect((await pub('/widgets/tracked?hours=5')).status).toBe(400);
   });
 
   it('keeps private projects private', async () => {

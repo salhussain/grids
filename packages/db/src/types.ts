@@ -499,6 +499,7 @@ export interface CellDB {
     description: Generated<string>;
     widgets: JsonDefault<unknown[]>;
     is_public: Generated<boolean>;
+    filters: JsonDefault<Record<string, unknown>>;
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;

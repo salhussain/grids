@@ -2,8 +2,11 @@ import { sql, type RawBuilder, type Transaction } from 'kysely';
 import { freshness, worstFreshness } from '@grids/data';
 import type { CellDB } from '@grids/db';
 import {
+  applyParams,
+  DashboardFilters,
   uuidv7,
   Widget,
+  type DashboardParams,
   type DashboardDto,
   type Freshness,
   type PublicProjectDto,
@@ -317,7 +320,7 @@ export class QueryService {
 
   // ---------- dashboards ----------
 
-  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; updated_at: Date }): DashboardDto {
+  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; updated_at: Date }): DashboardDto {
     return {
       id: d.id,
       key: d.key,
@@ -325,6 +328,7 @@ export class QueryService {
       description: d.description,
       widgets: d.widgets.map((w) => Widget.parse(w)),
       isPublic: d.is_public,
+      filters: DashboardFilters.parse(d.filters ?? {}),
       updatedAt: iso(d.updated_at),
     };
   }
@@ -342,12 +346,19 @@ export class QueryService {
     const a = await this.projects.access(actor, tenantId, project, 'manager');
     const ids = input.widgets.map((w) => w.id);
     if (new Set(ids).size !== ids.length) throw badRequest('Widget ids must be unique');
+    if (input.filters.areaType) {
+      const t = await this.projects.cellTx(tenantId, (tx) =>
+        tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.filters.areaType!).executeTakeFirst(),
+      );
+      if (!t) throw badRequest(`Unknown entity type "${input.filters.areaType}" for the area filter`);
+    }
     const values = {
       key: input.key,
       name: input.name,
       description: input.description,
       widgets: JSON.stringify(input.widgets),
       is_public: input.isPublic,
+      filters: JSON.stringify(input.filters),
       updated_at: this.ctx.now(),
     };
     try {
@@ -399,6 +410,37 @@ export class QueryService {
     };
   }
 
+  private async areaExists(tx: Tx, projectId: string, typeKey: string, id: string) {
+    return !!(await tx
+      .selectFrom('entity as e')
+      .innerJoin('entity_type as t', 't.id', 'e.type_id')
+      .select('e.id')
+      .where('e.project_id', '=', projectId)
+      .where('t.key', '=', typeKey)
+      .where('e.id', '=', id)
+      .executeTakeFirst());
+  }
+
+  /** Choices for a public dashboard's area filter. */
+  async publicAreas(tenantSlug: string, projectKey: string, dashboardKey: string): Promise<{ id: string; name: string }[]> {
+    const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
+    return this.projects.cellTx(tenant.id, async (tx) => {
+      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      if (!d?.is_public) throw notFound('Dashboard');
+      const { areaType } = DashboardFilters.parse(d.filters ?? {});
+      if (!areaType) return [];
+      return tx
+        .selectFrom('entity as e')
+        .innerJoin('entity_type as t', 't.id', 'e.type_id')
+        .select(['e.id', 'e.name'])
+        .where('e.project_id', '=', project.id)
+        .where('t.key', '=', areaType)
+        .orderBy('e.name')
+        .limit(1000)
+        .execute();
+    });
+  }
+
   /** Ids of a public project, for anonymous event streams. */
   async publicTarget(tenantSlug: string, projectKey: string) {
     const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
@@ -406,21 +448,23 @@ export class QueryService {
   }
 
   /** Runs one widget's stored query for anonymous viewers (no arbitrary queries). */
-  async publicWidget(tenantSlug: string, projectKey: string, dashboardKey: string, widgetId: string): Promise<QueryResult> {
+  async publicWidget(tenantSlug: string, projectKey: string, dashboardKey: string, widgetId: string, params: DashboardParams = {}): Promise<QueryResult> {
     const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
-    const w = await this.projects.cellTx(tenant.id, async (tx) => {
+    const spec = await this.projects.cellTx(tenant.id, async (tx) => {
       const d = await tx
         .selectFrom('dashboard')
-        .select(['widgets', 'is_public'])
+        .select(['widgets', 'is_public', 'filters'])
         .where('project_id', '=', project.id)
         .where('key', '=', dashboardKey)
         .executeTakeFirst();
       if (!d?.is_public) throw notFound('Dashboard');
       const w = (d.widgets as unknown[]).map((x) => Widget.parse(x)).find((x) => x.id === widgetId);
       if (!w?.query) throw notFound('Widget');
-      return w;
+      const filters = DashboardFilters.parse(d.filters ?? {});
+      // Anonymous viewers may only pick areas of the dashboard's area type in this project.
+      if (params.area && filters.areaType && !(await this.areaExists(tx, project.id, filters.areaType, params.area))) throw notFound('Area');
+      return applyParams(w.query, params, filters);
     });
-    const spec = w.query!;
     return this.cached(tenant.id, project.id, null, spec, () => this.projects.cellTx(tenant.id, (tx) => this.run(tx, project.id, null, spec)));
   }
 }

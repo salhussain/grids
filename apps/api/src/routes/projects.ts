@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   DashboardDto,
   DashboardInput,
+  DashboardParams,
   DataElementDto,
   DataElementInput,
   DatasetDto,
@@ -325,10 +326,18 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
   });
   app.get(
     '/public/projects/:tenant/:project/dashboards/:dashboard/widgets/:widget',
-    { schema: { params: Params.extend({ dashboard: z.string().max(63), widget: z.string().max(40) }), response: { 200: QueryResult } } },
+    { schema: { params: Params.extend({ dashboard: z.string().max(63), widget: z.string().max(40) }), querystring: DashboardParams, response: { 200: QueryResult } } },
     async (req, reply) => {
       reply.header('cache-control', 'public, max-age=30');
-      return s.query.publicWidget(req.params.tenant, req.params.project, req.params.dashboard, req.params.widget);
+      return s.query.publicWidget(req.params.tenant, req.params.project, req.params.dashboard, req.params.widget, req.query);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/dashboards/:dashboard/areas',
+    { schema: { params: Params.extend({ dashboard: z.string().max(63) }), response: { 200: z.array(z.object({ id: z.string(), name: z.string() })) } } },
+    async (req, reply) => {
+      reply.header('cache-control', 'public, max-age=60');
+      return s.query.publicAreas(req.params.tenant, req.params.project, req.params.dashboard);
     },
   );
 };
