@@ -174,11 +174,35 @@ export class JobService {
     const runId = await this.projects.cellTx(tenantId, async (tx) => {
       const job = await tx.selectFrom('job').select(['id']).where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
       if (!job) throw notFound('Job');
-      const busy = await tx.selectFrom('run').select('id').where('job_id', '=', job.id).where('status', 'in', ['queued', 'running']).executeTakeFirst();
-      if (busy) throw conflict('Already running', 'This job already has a run queued or in progress.');
-      return enqueueRun(tx, { tenantId, projectId: a.project.id, jobId: job.id, trigger: 'manual', triggeredBy: actor.id });
+      return this.enqueueIdle(tx, tenantId, a.project.id, job.id, 'manual', actor.id);
     });
     return (await this.run(actor, tenantId, project, runId)) as RunDto;
+  }
+
+  /**
+   * Re-runs a finished run's job with the current definition. A run's writes are
+   * all-or-nothing (one transaction), so a failed run left no partial data and
+   * re-running it whole is equivalent to resuming from the failed step.
+   */
+  async rerun(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDto> {
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const id = await this.projects.cellTx(tenantId, async (tx) => {
+      const r = await tx.selectFrom('run').select(['job_id', 'status']).where('id', '=', runId).where('project_id', '=', a.project.id).executeTakeFirst();
+      if (!r) throw notFound('Run');
+      if (r.status === 'queued' || r.status === 'running') throw conflict('Run in progress', 'Wait for this run to finish, or cancel it first.');
+      const next = await this.enqueueIdle(tx, tenantId, a.project.id, r.job_id, 'rerun', actor.id);
+      await tx.insertInto('run_log').values({ tenant_id: tenantId, run_id: next, level: 'info', step: null, message: `Re-run of ${runId}` }).execute();
+      return next;
+    });
+    await audit(this.ctx, actor.id, tenantId, 'job.rerun', { project: a.project.key, run: runId });
+    return (await this.run(actor, tenantId, project, id)) as RunDto;
+  }
+
+  /** Queues a run unless the job already has one queued or in progress. */
+  private async enqueueIdle(tx: Parameters<Parameters<ProjectService['cellTx']>[1]>[0], tenantId: string, projectId: string, jobId: string, trigger: string, actorId: string | null) {
+    const busy = await tx.selectFrom('run').select('id').where('job_id', '=', jobId).where('status', 'in', ['queued', 'running']).executeTakeFirst();
+    if (busy) throw conflict('Already running', 'This job already has a run queued or in progress.');
+    return enqueueRun(tx, { tenantId, projectId, jobId, trigger, triggeredBy: actorId });
   }
 
   async cancel(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDetail> {

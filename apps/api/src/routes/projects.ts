@@ -193,6 +193,9 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   app.post('/tenants/:tenantId/projects/:project/runs/:id/cancel', { schema: { params: PId, response: { 200: RunDetail } } }, (req) =>
     s.jobs.cancel(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
   );
+  app.post('/tenants/:tenantId/projects/:project/runs/:id/rerun', { schema: { params: PId, response: { 202: RunDto } } }, async (req, reply) =>
+    reply.status(202).send(await s.jobs.rerun(actorOf(req), req.params.tenantId, req.params.project, req.params.id)),
+  );
   app.get('/tenants/:tenantId/projects/:project/datasets', { schema: { params: P, response: { 200: z.array(DatasetDto) } } }, (req) =>
     s.jobs.datasets(actorOf(req), req.params.tenantId, req.params.project),
   );

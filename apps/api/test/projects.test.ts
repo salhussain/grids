@@ -299,4 +299,14 @@ describe('jobs and public projects', () => {
     const runs = (await api(admin).get(`/${key}/runs?status=cancelled`)).body;
     expect(runs.total).toBe(1);
   });
+
+  it('re-runs a finished run as a new run of the same job', async () => {
+    const first = (await api(admin).get(`/${key}/runs?status=cancelled`)).body.items[0];
+    expect((await api(vi).post(`/${key}/runs/${first.id}/rerun`)).status).toBe(403);
+    const again = await api(admin).post(`/${key}/runs/${first.id}/rerun`);
+    expect(again.status).toBe(202);
+    expect(again.body).toMatchObject({ status: 'queued', trigger: 'rerun', jobId: first.jobId });
+    expect((await api(admin).post(`/${key}/runs/${again.body.id}/rerun`)).status).toBe(409); // still queued
+    await api(admin).post(`/${key}/runs/${again.body.id}/cancel`);
+  });
 });

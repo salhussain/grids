@@ -22,7 +22,7 @@ import {
   usePagination,
   useToast,
 } from '@grids/ui';
-import { CircleCheck, CircleX, Clock, Loader, Pencil, Play, Plus, Workflow, XCircle } from 'lucide-react';
+import { CircleCheck, CircleX, Clock, Loader, Pencil, Play, Plus, RotateCcw, Workflow, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
 import { FreshnessBadge } from '../../viz/Freshness';
@@ -187,7 +187,7 @@ export function JobsTab() {
         </Table>
         {runs.data && <Pagination {...pg} total={runs.data.total} onChange={setPg} />}
       </Panel>
-      {openRun && <RunDialog runId={openRun} onClose={() => setOpenRun(null)} />}
+      {openRun && <RunDialog runId={openRun} onClose={() => setOpenRun(null)} onOpen={setOpenRun} />}
       {editing && <JobEditor job={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -199,7 +199,7 @@ const summary = (r: RunDto) =>
     .map(([k, v]) => `${v.toLocaleString()} ${k.replace(/_/g, ' ')}`)
     .join(' · ');
 
-function RunDialog({ runId, onClose }: { runId: string; onClose(): void }) {
+function RunDialog({ runId, onClose, onOpen }: { runId: string; onClose(): void; onOpen(id: string): void }) {
   const { tenantId, project, can } = useProject();
   const qc = useQueryClient();
   const r = useQuery({
@@ -214,16 +214,33 @@ function RunDialog({ runId, onClose }: { runId: string; onClose(): void }) {
       void qc.invalidateQueries({ queryKey: ['runs', tenantId, project.key] });
     },
   });
+  const rerun = useMutation({
+    mutationFn: () => api.rerun(tenantId, project.key, runId),
+    onSuccess: (next) => {
+      void qc.invalidateQueries({ queryKey: ['runs', tenantId, project.key] });
+      void qc.invalidateQueries({ queryKey: ['jobs', tenantId, project.key] });
+      onOpen(next.id);
+    },
+  });
   const d = r.data;
+  const active = d && ['queued', 'running'].includes(d.status);
   return (
     <Dialog
       open
       wide
       onClose={onClose}
       title={d ? `${d.jobName} · run` : 'Run'}
-      footer={d && ['queued', 'running'].includes(d.status) && can('editor') ? <Button variant="danger" onClick={() => cancel.mutate()} loading={cancel.isPending}>Cancel run</Button> : undefined}
+      footer={
+        d && can('editor') ? (
+          active ? (
+            <Button variant="danger" onClick={() => cancel.mutate()} loading={cancel.isPending}>Cancel run</Button>
+          ) : (
+            <Button variant="secondary" icon={RotateCcw} onClick={() => rerun.mutate()} loading={rerun.isPending}>Re-run</Button>
+          )
+        ) : undefined
+      }
     >
-      <ErrorNotice error={r.error ?? cancel.error} />
+      <ErrorNotice error={r.error ?? cancel.error ?? rerun.error} />
       {d && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">

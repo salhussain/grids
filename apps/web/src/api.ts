@@ -105,6 +105,7 @@ export const api = {
     request<Page<S.RunDto>>('GET', `${t(id)}/projects/${p}/runs${qs(query)}`),
   run: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
+  rerun: (id: string, p: string, runId: string) => request<S.RunDto>('POST', `${t(id)}/projects/${p}/runs/${runId}/rerun`),
   cancelRun: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('POST', `${t(id)}/projects/${p}/runs/${runId}/cancel`),
   datasets: (id: string, p: string) => request<S.DatasetDto[]>('GET', `${t(id)}/projects/${p}/datasets`),
