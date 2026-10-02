@@ -1,4 +1,4 @@
-import { applyParams, type DashboardDto, type ExploreDto, type MapOverlayDto, type OverlayResult, type QueryResult, type SearchHit, type Widget } from '@grids/schema';
+import { type DashboardDto, type ExploreDto, type MapOverlayDto, type OverlayResult, type QueryResult, type SearchHit, type Widget } from '@grids/schema';
 import { api } from '../api';
 
 /** Where the explorer reads from: a member's project, or a public project anonymously. */
@@ -31,7 +31,7 @@ export function memberSource(tenantId: string, project: string): ExplorerSource 
     search: (q) => api.searchPlaces(tenantId, project, q),
     dashboards: () => api.dashboards(tenantId, project),
     names: async () => Object.fromEntries((await api.elements(tenantId, project)).map((e) => [e.key, e.name])),
-    widget: (d, w, params) => api.query(tenantId, project, applyParams(w.query!, params, { areaType: null, period: d.filters.period })),
+    widget: (d, w, params) => api.widget(tenantId, project, d.key, w.id, params),
   };
 }
 

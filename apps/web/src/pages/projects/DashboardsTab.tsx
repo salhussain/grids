@@ -11,11 +11,12 @@ import {
   type WidgetInput,
 } from '@grids/schema';
 import { Button, CopyField, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { ArrowDown, ArrowUp, BarChart3, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, BarChart3, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
 import { DashboardFilterBar } from '../../viz/DashboardFilters';
+import { GroupSelect, LockBadge } from './permissions';
 import { WidgetView } from '../../viz/WidgetView';
 import { useElementNames, useProject } from './context';
 
@@ -47,7 +48,7 @@ export function DashboardsTab() {
 
   const save = useMutation({
     mutationFn: (d: DashboardDto) =>
-      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic, filters: d.filters }, d.key),
+      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic, filters: d.filters, permissionGroup: d.permissionGroup }, d.key),
     onSuccess: (data) => {
       qc.setQueryData(['dashboards', tenantId, project.key], data);
       setEditing(false);
@@ -101,6 +102,7 @@ export function DashboardsTab() {
               className={cx('px-3 py-1.5 text-sm', d.key === current.key ? 'bg-ink text-canvas' : 'bg-snow hover:bg-zinc-50')}
             >
               {d.name}
+              {d.permissionGroup && <Lock className="ms-1.5 inline size-3 opacity-60" aria-label="Restricted" />}
             </button>
           ))}
         </div>
@@ -165,6 +167,7 @@ export function DashboardsTab() {
             checked={draft.filters.period}
             onChange={(v: boolean) => setDraft({ ...draft, filters: { ...draft.filters, period: v } })}
           />
+          <GroupSelect label="Who can see this dashboard" value={draft.permissionGroup} onChange={(g) => setDraft({ ...draft, permissionGroup: g })} />
         </div>
       )}
       {!editing && (current.description || current.filters.areaType || current.filters.period) && (
@@ -196,11 +199,13 @@ export function DashboardsTab() {
             widget={w}
             names={names}
             queryKey={['widget', tenantId, project.key, shown.key]}
-            load={() => api.query(tenantId, project.key, w.query as QuerySpecInput)}
+            // Saved widgets load by reference (permission-checked); drafts run their query.
+            load={() => (editing ? api.query(tenantId, project.key, w.query as QuerySpecInput) : api.widget(tenantId, project.key, shown.key, w.id, params))}
             onSelectEntity={(id) => void navigate({ to: `${base}/entities/${id}` })}
             actions={
               editing ? (
-                <span className="flex gap-0.5">
+                <span className="flex items-center gap-0.5">
+                  <LockBadge group={w.permissionGroup} />
                   <IconBtn label="Move earlier" onClick={() => move(i, -1)} icon={ArrowUp} />
                   <IconBtn label="Move later" onClick={() => move(i, 1)} icon={ArrowDown} />
                   <IconBtn label={`Edit ${w.title}`} onClick={() => setWidgetDialog({ index: i })} icon={Pencil} />
@@ -378,6 +383,9 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
           <Field label="Height (rows)">
             <Input type="number" min={1} max={6} value={w.h} onChange={(e) => setW({ ...w, h: Number(e.target.value) })} />
           </Field>
+          <div className="sm:col-span-2">
+            <GroupSelect value={w.permissionGroup} onChange={(g) => setW({ ...w, permissionGroup: g ?? undefined })} />
+          </div>
           <Field label="Unit">
             <Input value={w.options?.unit ?? ''} onChange={(e) => setO({ unit: e.target.value || undefined })} />
           </Field>

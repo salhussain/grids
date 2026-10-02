@@ -98,6 +98,8 @@ export const Widget = z.object({
   query: QuerySpec.optional(),
   /** Markdown-ish text for `text` widgets. */
   text: z.string().max(4000).optional(),
+  /** Only members of this permission group (or a group above it) see the widget. */
+  permissionGroup: Key.optional(),
   options: z
     .object({
       unit: z.string().max(20).optional(),
@@ -164,6 +166,8 @@ export const DashboardInput = z.object({
   widgets: z.array(Widget).max(40).default([]),
   isPublic: z.boolean().default(false),
   filters: DashboardFilters.default({ areaType: null, period: false }),
+  /** Only members of this permission group (or a group above it) see the dashboard. */
+  permissionGroup: Key.nullable().default(null),
 });
 export type DashboardInput = z.input<typeof DashboardInput>;
 export const DashboardDto = z.object({
@@ -174,6 +178,7 @@ export const DashboardDto = z.object({
   widgets: z.array(Widget),
   isPublic: z.boolean(),
   filters: DashboardFilters,
+  permissionGroup: z.string().nullable(),
   updatedAt: z.string(),
 });
 export type DashboardDto = z.infer<typeof DashboardDto>;

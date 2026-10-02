@@ -18,7 +18,7 @@ import type { DashboardInput } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import type { EventBus } from './events.js';
-import type { ProjectService } from './projects.js';
+import { canSee, type ProjectService } from './projects.js';
 import { iso, isUniqueViolation } from './util.js';
 import { DEFAULT_THEME, Theme } from '@grids/schema';
 
@@ -137,8 +137,12 @@ export class QueryService {
     return freshness(last.rows[0]?.at ?? null, null, this.ctx.now());
   }
 
+  /**
+   * Ad-hoc queries (building dashboards, data exploration) need the editor role:
+   * viewers read data only through visuals, which their permission groups gate.
+   */
   async query(actor: Actor, tenantId: string, project: string, spec: QuerySpec): Promise<QueryResult> {
-    const a = await this.projects.access(actor, tenantId, project);
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
     return this.cached(tenantId, a.project.id, a.rootPath, spec, () => this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec)));
   }
 
@@ -320,7 +324,7 @@ export class QueryService {
 
   // ---------- dashboards ----------
 
-  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; updated_at: Date }): DashboardDto {
+  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; permission_group: string | null; updated_at: Date }): DashboardDto {
     return {
       id: d.id,
       key: d.key,
@@ -329,23 +333,42 @@ export class QueryService {
       widgets: d.widgets.map((w) => Widget.parse(w)),
       isPublic: d.is_public,
       filters: DashboardFilters.parse(d.filters ?? {}),
+      permissionGroup: d.permission_group,
       updatedAt: iso(d.updated_at),
     };
   }
 
+  /** Dashboards and widgets the caller's permission groups allow (managers see all). */
   async dashboards(actor: Actor, tenantId: string, project: string): Promise<DashboardDto[]> {
     const a = await this.projects.access(actor, tenantId, project);
-    return this.projects.cellTx(tenantId, async (tx) =>
-      (await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).orderBy('sort').orderBy('name').execute()).map((d) =>
-        this.toDashboard(d),
-      ),
+    const all = await this.projects.cellTx(tenantId, async (tx) =>
+      (await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).orderBy('sort').orderBy('name').execute()).map((d) => this.toDashboard(d)),
     );
+    return all.filter((d) => canSee(a, d.permissionGroup)).map((d) => ({ ...d, widgets: d.widgets.filter((w) => canSee(a, w.permissionGroup)) }));
+  }
+
+  /** One widget's stored query for a member, with explorer/dashboard parameters, if permitted. */
+  async widget(actor: Actor, tenantId: string, project: string, dashboardKey: string, widgetId: string, params: DashboardParams): Promise<QueryResult> {
+    const a = await this.projects.access(actor, tenantId, project);
+    const spec = await this.projects.cellTx(tenantId, async (tx) => {
+      const row = await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      const d = row && this.toDashboard(row);
+      if (!d || !canSee(a, d.permissionGroup)) throw notFound('Dashboard');
+      const w = d.widgets.find((x) => x.id === widgetId);
+      if (!w?.query || !canSee(a, w.permissionGroup)) throw notFound('Widget');
+      if (params.entity && !(await this.areaExists(tx, a.project.id, null, params.entity))) throw notFound('Place');
+      return applyParams(w.query, params, d.filters);
+    });
+    return this.cached(tenantId, a.project.id, a.rootPath, spec, () => this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec)));
   }
 
   async saveDashboard(actor: Actor, tenantId: string, project: string, input: z.output<typeof DashboardInput>, existingKey?: string): Promise<DashboardDto[]> {
     const a = await this.projects.access(actor, tenantId, project, 'manager');
     const ids = input.widgets.map((w) => w.id);
     if (new Set(ids).size !== ids.length) throw badRequest('Widget ids must be unique');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      for (const g of new Set([input.permissionGroup, ...input.widgets.map((w) => w.permissionGroup)])) await this.projects.assertGroup(tx, a.project.id, g);
+    });
     if (input.filters.areaType) {
       const t = await this.projects.cellTx(tenantId, (tx) =>
         tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.filters.areaType!).executeTakeFirst(),
@@ -359,6 +382,7 @@ export class QueryService {
       widgets: JSON.stringify(input.widgets),
       is_public: input.isPublic,
       filters: JSON.stringify(input.filters),
+      permission_group: input.permissionGroup,
       updated_at: this.ctx.now(),
     };
     try {
@@ -402,14 +426,15 @@ export class QueryService {
     const { tenant, project, theme } = await this.publicProject(tenantSlug, projectKey);
     const [dashboards, elements] = await this.projects.cellTx(tenant.id, (tx) =>
       Promise.all([
-        tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).orderBy('sort').execute(),
+        tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).where('permission_group', 'is', null).orderBy('sort').execute(),
         tx.selectFrom('data_element').select(['key', 'name', 'unit']).where('project_id', '=', project.id).orderBy('key').execute(),
       ]),
     );
     return {
       tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor },
       project: { key: project.key, name: project.name, description: project.description, color: project.color },
-      dashboards: dashboards.map((d) => this.toDashboard(d)),
+      // Anonymous viewers have no permission group: only unrestricted widgets.
+      dashboards: dashboards.map((d) => this.toDashboard(d)).map((d) => ({ ...d, widgets: d.widgets.filter((w) => !w.permissionGroup) })),
       elements,
     };
   }
@@ -424,8 +449,8 @@ export class QueryService {
   async publicAreas(tenantSlug: string, projectKey: string, dashboardKey: string): Promise<{ id: string; name: string }[]> {
     const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
     return this.projects.cellTx(tenant.id, async (tx) => {
-      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
-      if (!d?.is_public) throw notFound('Dashboard');
+      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters', 'permission_group']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      if (!d?.is_public || d.permission_group) throw notFound('Dashboard');
       const { areaType } = DashboardFilters.parse(d.filters ?? {});
       if (!areaType) return [];
       return tx
@@ -452,13 +477,13 @@ export class QueryService {
     const spec = await this.projects.cellTx(tenant.id, async (tx) => {
       const d = await tx
         .selectFrom('dashboard')
-        .select(['widgets', 'is_public', 'filters'])
+        .select(['widgets', 'is_public', 'filters', 'permission_group'])
         .where('project_id', '=', project.id)
         .where('key', '=', dashboardKey)
         .executeTakeFirst();
-      if (!d?.is_public) throw notFound('Dashboard');
+      if (!d?.is_public || d.permission_group) throw notFound('Dashboard');
       const w = (d.widgets as unknown[]).map((x) => Widget.parse(x)).find((x) => x.id === widgetId);
-      if (!w?.query) throw notFound('Widget');
+      if (!w?.query || w.permissionGroup) throw notFound('Widget');
       const filters = DashboardFilters.parse(d.filters ?? {});
       // Anonymous viewers may only pick areas of the dashboard's area type in this project.
       if (params.area && filters.areaType && !(await this.areaExists(tx, project.id, filters.areaType, params.area))) throw notFound('Area');

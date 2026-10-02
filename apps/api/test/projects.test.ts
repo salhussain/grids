@@ -223,6 +223,46 @@ describe('templates, queries and dashboards', () => {
     expect((await api(ed).post(`/${key}/overlays`, { key: 'x', name: 'X', element: 'ili_cases' })).status).toBe(403);
   });
 
+  it('hides dashboards, widgets and overlays outside a member’s permission groups', async () => {
+    const p = api(admin);
+    await p.post(`/${key}/permission-groups`, { key: 'admin', name: 'Admin' });
+    await p.post(`/${key}/permission-groups`, { key: 'staff', name: 'Staff', parent: 'admin' });
+    const tree = (await p.post(`/${key}/permission-groups`, { key: 'public', name: 'Public', parent: 'staff' })).body;
+    expect(tree.map((g: { key: string; depth: number }) => [g.key, g.depth])).toEqual([['admin', 0], ['staff', 1], ['public', 2]]);
+    expect((await p.put(`/${key}/permission-groups/admin`, { key: 'admin', name: 'Admin', parent: 'public' })).status).toBe(400); // no cycles
+
+    const overview = (await p.get(`/${key}/dashboards`)).body[0];
+    const widgets = overview.widgets.map((w: { id: string }) => (w.id === 'malaria' ? { ...w, permissionGroup: 'admin' } : w));
+    expect((await p.post(`/${key}/dashboards`, { key: 'bad', name: 'Bad', permissionGroup: 'nope' })).status).toBe(400);
+    await p.post(`/${key}/dashboards`, { key: 'staff_only', name: 'Staff only', permissionGroup: 'staff', widgets: [overview.widgets[1]] });
+    await p.put(`/${key}/dashboards/overview`, { ...overview, widgets });
+    await p.post(`/${key}/overlays`, { key: 'secret', name: 'Secret', element: 'deaths', permissionGroup: 'admin' });
+
+    // ed: a viewer (scoped to Central) without a group sees only unrestricted visuals.
+    const ed_ = api(ed);
+    const seen = async () => (await ed_.get(`/${key}/dashboards`)).body.map((d: { key: string; widgets: { id: string }[] }) => [d.key, d.widgets.some((w) => w.id === 'malaria')]);
+    expect(await seen()).toEqual([['overview', false]]);
+    expect((await ed_.get(`/${key}/dashboards/overview/widgets/malaria`)).status).toBe(404);
+    expect((await ed_.get(`/${key}/dashboards/overview/widgets/ili`)).status).toBe(200);
+    expect((await ed_.get(`/${key}/overlays`)).body.some((o: { key: string }) => o.key === 'secret')).toBe(false);
+    expect((await ed_.get(`/${key}/overlays/secret/values`)).status).toBe(404);
+    expect((await ed_.post(`/${key}/query`, { kind: 'kpi', element: 'malaria_cases' })).status).toBe(403); // no ad-hoc queries for viewers
+
+    // In "staff": the staff dashboard and everything below; still not admin's widget.
+    const userId = await h.userId(tenantId, 'ed@ih.org');
+    expect((await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'nope' })).status).toBe(400);
+    const members = (await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'staff' })).body;
+    expect(members.find((m: { email: string }) => m.email === 'ed@ih.org').permissionGroup).toBe('staff');
+    expect(await seen()).toEqual([['overview', false], ['staff_only', false]]);
+    // In "admin": everything.
+    await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'admin' });
+    expect(await seen()).toEqual([['overview', true], ['staff_only', false]]);
+    expect((await ed_.get(`/${key}/overlays/secret/values`)).status).toBe(200);
+
+    expect((await p.del(`/${key}/permission-groups/staff`)).status).toBe(409); // still used
+    expect((await p.get(`/${key}/permission-groups`)).body.find((g: { key: string }) => g.key === 'admin').memberCount).toBe(1);
+  });
+
   it('validates overlays', async () => {
     const p = api(admin);
     expect((await p.post(`/${key}/overlays`, { key: 'bad', name: 'Bad', element: 'nope' })).status).toBe(400);

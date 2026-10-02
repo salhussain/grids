@@ -114,6 +114,12 @@ export const api = {
   deleteOverlay: (id: string, p: string, key: string) => request<S.MapOverlayDto[]>('DELETE', `${t(id)}/projects/${p}/overlays/${key}`),
   overlayValues: (id: string, p: string, key: string, entity?: string | null) =>
     request<S.OverlayResult>('GET', `${t(id)}/projects/${p}/overlays/${key}/values${qs({ entity })}`),
+  permissionGroups: (id: string, p: string) => request<S.PermissionGroupDto[]>('GET', `${t(id)}/projects/${p}/permission-groups`),
+  savePermissionGroup: (id: string, p: string, input: In<typeof S.PermissionGroupInput>, key?: string) =>
+    request<S.PermissionGroupDto[]>(key ? 'PUT' : 'POST', `${t(id)}/projects/${p}/permission-groups${key ? `/${key}` : ''}`, input),
+  deletePermissionGroup: (id: string, p: string, key: string) => request<S.PermissionGroupDto[]>('DELETE', `${t(id)}/projects/${p}/permission-groups/${key}`),
+  widget: (id: string, p: string, dashboard: string, widget: string, params: S.DashboardParams = {}) =>
+    request<S.QueryResult>('GET', `${t(id)}/projects/${p}/dashboards/${dashboard}/widgets/${widget}${qs(params)}`),
   files: (id: string, p: string) => request<S.FileDto[]>('GET', `${t(id)}/projects/${p}/files`),
   uploadFile: (id: string, p: string, key: string, file: File) =>
     request<S.UploadResult>('PUT', `${t(id)}/projects/${p}/files/${key}${qs({ name: file.name, type: file.type || undefined })}`, file),

@@ -28,6 +28,8 @@ import {
   ObservationBatch,
   OverlayResult,
   PageQuery,
+  PermissionGroupDto,
+  PermissionGroupInput,
   ProjectDto,
   ProjectInput,
   ProjectMemberDto,
@@ -111,6 +113,21 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
     '/tenants/:tenantId/projects/:project/members/:userId',
     { schema: { params: P.extend({ userId: z.uuid() }), response: Members } },
     (req) => s.projects.removeMember(actorOf(req), req.params.tenantId, req.params.project, req.params.userId),
+  );
+
+  // ----- permission groups -----
+  const Groups = { 200: z.array(PermissionGroupDto) };
+  app.get('/tenants/:tenantId/projects/:project/permission-groups', { schema: { params: P, response: Groups } }, (req) =>
+    s.projects.permissionGroups(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/permission-groups', { schema: { params: P, body: PermissionGroupInput, response: Groups } }, (req) =>
+    s.projects.savePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/permission-groups/:key', { schema: { params: PK, body: PermissionGroupInput, response: Groups } }, (req) =>
+    s.projects.savePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/permission-groups/:key', { schema: { params: PK, response: Groups } }, (req) =>
+    s.projects.deletePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
   );
 
   // ----- entity types -----
@@ -277,6 +294,11 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
   app.post('/tenants/:tenantId/projects/:project/dashboards', { schema: { params: P, body: DashboardInput, response: Dashboards } }, (req) =>
     s.query.saveDashboard(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.get(
+    '/tenants/:tenantId/projects/:project/dashboards/:key/widgets/:widget',
+    { schema: { params: PK.extend({ widget: z.string().max(40) }), querystring: DashboardParams, response: { 200: QueryResult } } },
+    (req) => s.query.widget(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.params.widget, req.query),
   );
   app.put('/tenants/:tenantId/projects/:project/dashboards/:key', { schema: { params: PK, body: DashboardInput, response: Dashboards } }, (req) =>
     s.query.saveDashboard(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),

@@ -12,7 +12,7 @@ import {
 } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
-import type { ProjectService } from './projects.js';
+import { canSee, type ProjectService } from './projects.js';
 import type { QueryService } from './query.js';
 import { iso, isUniqueViolation } from './util.js';
 
@@ -56,7 +56,7 @@ export class ExploreService {
   private async overlayRows(tx: Tx, projectId: string, publicOnly = false): Promise<MapOverlayDto[]> {
     let q = tx.selectFrom('map_overlay').selectAll().where('project_id', '=', projectId).orderBy('sort').orderBy('key');
     if (publicOnly) q = q.where('is_public', '=', true);
-    const rows = await q.execute();
+    const rows = (await q.execute()).filter((r) => !publicOnly || !(r.config as { permissionGroup?: string | null }).permissionGroup);
     const names = new Map(
       (await tx.selectFrom('data_element').select(['key', 'name']).where('project_id', '=', projectId).execute()).map((d) => [d.key, d.name]),
     );
@@ -68,7 +68,7 @@ export class ExploreService {
 
   async overlays(actor: Actor, tenantId: string, project: string): Promise<MapOverlayDto[]> {
     const a = await this.projects.access(actor, tenantId, project);
-    return this.projects.cellTx(tenantId, (tx) => this.overlayRows(tx, a.project.id));
+    return (await this.projects.cellTx(tenantId, (tx) => this.overlayRows(tx, a.project.id))).filter((o) => canSee(a, o.permissionGroup));
   }
 
   async saveOverlay(actor: Actor, tenantId: string, project: string, input: MapOverlay, existingKey?: string): Promise<MapOverlayDto[]> {
@@ -77,6 +77,7 @@ export class ExploreService {
       await this.projects.cellTx(tenantId, async (tx) => {
         const el = await tx.selectFrom('data_element').select('id').where('project_id', '=', a.project.id).where('key', '=', input.element).executeTakeFirst();
         if (!el) throw badRequest(`Unknown data element "${input.element}"`);
+        await this.projects.assertGroup(tx, a.project.id, input.permissionGroup);
         if (input.level) {
           const t = await tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.level).executeTakeFirst();
           if (!t) throw badRequest(`Unknown entity type "${input.level}"`);
@@ -244,7 +245,7 @@ export class ExploreService {
   async overlay(actor: Actor, tenantId: string, project: string, key: string, entityId: string | null): Promise<OverlayResult> {
     const a = await this.projects.access(actor, tenantId, project);
     const o = await this.projects.cellTx(tenantId, async (tx) => (await this.overlayRows(tx, a.project.id)).find((x) => x.key === key));
-    if (!o) throw notFound('Overlay');
+    if (!o || !canSee(a, o.permissionGroup)) throw notFound('Overlay');
     return this.query.cached(tenantId, a.project.id, a.rootPath, { overlay: o, entityId }, () =>
       this.projects.cellTx(tenantId, (tx) => this.overlayIn(tx, a.project.id, a.rootPath, o, entityId)),
     );

@@ -9,6 +9,7 @@ import type { z } from 'zod';
 import { api } from '../../api';
 import { paletteSwatch } from '../../explorer/colors';
 import { useProject } from './context';
+import { GroupSelect, LockBadge } from './permissions';
 
 const WINDOWS: [number | null, string][] = [
   [null, 'Latest value per place'],
@@ -70,6 +71,7 @@ export function OverlaysTab() {
                         {AGG_LABEL[o.aggregation]} of {o.elementName.toLowerCase()} · {windowLabel(o.hours).toLowerCase()}
                       </p>
                     </div>
+                    <LockBadge group={o.permissionGroup} />
                     {o.isPublic && (
                       <span className="inline-flex items-center gap-1 border border-zinc-300 px-1.5 py-0.5 text-[11px] text-zinc-600">
                         <Globe className="size-3" /> Public
@@ -107,7 +109,7 @@ function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | 
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
   const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
   const [f, setF] = useState<z.input<typeof MapOverlayInput>>(
-    overlay ?? { key: '', name: '', group: groups[0] ?? 'General', element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '' },
+    overlay ?? { key: '', name: '', group: groups[0] ?? 'General', element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
   );
   const [breaks, setBreaks] = useState((overlay?.thresholds ?? []).join(', '));
   const parsedBreaks = breaks.trim() ? breaks.split(/[,\s]+/).filter(Boolean).map(Number) : [];
@@ -240,9 +242,12 @@ function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | 
             <SwitchField label="Public" description={project.visibility === 'public' ? 'Shown on the public explorer' : 'Needs a public project'} checked={!!f.isPublic} onChange={(v) => set({ isPublic: v })} />
           </div>
         </div>
-        <Field label="Description">
-          <Textarea value={f.description} onChange={(e) => set({ description: e.target.value })} rows={2} />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <GroupSelect value={f.permissionGroup} onChange={(g) => set({ permissionGroup: g })} />
+          <Field label="Description">
+            <Textarea value={f.description} onChange={(e) => set({ description: e.target.value })} rows={2} />
+          </Field>
+        </div>
       </div>
     </Dialog>
   );

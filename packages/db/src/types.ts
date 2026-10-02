@@ -329,6 +329,7 @@ export interface CellDB {
     user_id: string;
     role: 'manager' | 'editor' | 'viewer';
     root_entity_id: string | null;
+    permission_group: string | null;
     created_at: CreatedAt;
   };
   entity_type: {
@@ -475,6 +476,16 @@ export interface CellDB {
     dataset_id: string;
     data: Json<Record<string, unknown>>;
   };
+  permission_group: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    description: Generated<string>;
+    parent_key: string | null;
+    created_at: CreatedAt;
+  };
   map_overlay: {
     id: string;
     tenant_id: string;
@@ -511,6 +522,7 @@ export interface CellDB {
     widgets: JsonDefault<unknown[]>;
     is_public: Generated<boolean>;
     filters: JsonDefault<Record<string, unknown>>;
+    permission_group: string | null;
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;

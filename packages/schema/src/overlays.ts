@@ -32,6 +32,8 @@ export const MapOverlayInput = z.object({
   unit: z.string().trim().max(20).default(''),
   decimals: z.number().int().min(0).max(6).default(0),
   isPublic: z.boolean().default(false),
+  /** Only members of this permission group (or a group above it) see the overlay. */
+  permissionGroup: Key.nullable().default(null),
 });
 export type MapOverlayInput = z.input<typeof MapOverlayInput>;
 export type MapOverlay = z.output<typeof MapOverlayInput>;
