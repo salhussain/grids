@@ -154,6 +154,10 @@ describe('templates, queries and dashboards', () => {
     expect(series.freshness.status).toBe('fresh');
     const byDistrict = (await q({ kind: 'breakdown', element: 'ili_cases', by: 'parent', entityType: 'facility', range: { lastHours: 24 * 21 } })).body.rows;
     expect(byDistrict[0].label).toBe('Harbourside'); // the seeded ILI cluster
+    const grouped = (await q({ kind: 'breakdown', elements: ['ili_cases', 'malaria_cases'], by: 'parent', entityType: 'facility', range: { lastHours: 24 * 21 }, limit: 3 })).body.rows;
+    expect(grouped).toHaveLength(6); // 3 districts × 2 elements, element order kept
+    expect(grouped.slice(0, 2).map((r: { key: string }) => r.key)).toEqual(['ili_cases', 'malaria_cases']);
+    expect(grouped[0].label).toBe(grouped[1].label);
     const kpi = (await q({ kind: 'kpi', element: 'malaria_cases', range: { lastHours: 24 * 7 }, compare: true })).body.rows[0];
     expect(typeof kpi.value).toBe('number');
     expect(typeof kpi.previous).toBe('number');

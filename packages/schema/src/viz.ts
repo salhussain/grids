@@ -33,6 +33,8 @@ export const BreakdownQuery = Scope.extend({
   kind: z.literal('breakdown'),
   /** Data element to aggregate; omitted = count entities. */
   element: Key.optional(),
+  /** Several elements side by side (grouped/stacked bars, matrices); rows gain `key`. */
+  elements: z.array(Key).min(1).max(12).optional(),
   aggregation: Agg.default('sum'),
   by: z.enum(['parent', 'attribute', 'entity', 'type']),
   attribute: Key.optional(),
@@ -76,7 +78,7 @@ export type QuerySpecInput = z.input<typeof QuerySpec>;
 
 export const QueryResult = z.object({
   kind: z.string(),
-  /** series: [{t, key, value}] · breakdown: [{label, value}] · table: rows · kpi: [{value, previous}] */
+  /** series: [{t, key, value}] · breakdown: [{label, value}] (+ key with `elements`) · table: rows · kpi: [{value, previous}] */
   rows: z.array(z.record(z.string(), z.unknown())),
   /** geo only */
   features: z.any().optional(),
@@ -87,7 +89,7 @@ export type QueryResult = z.infer<typeof QueryResult>;
 
 // ---------------------------------------------------------------- dashboards
 
-export const WIDGET_TYPES = ['kpi', 'line', 'bar', 'pie', 'map', 'table', 'text'] as const;
+export const WIDGET_TYPES = ['kpi', 'line', 'area', 'bar', 'pie', 'gauge', 'matrix', 'map', 'table', 'text'] as const;
 export const Widget = z.object({
   id: z.string().max(40),
   type: z.enum(WIDGET_TYPES),
@@ -110,6 +112,8 @@ export const Widget = z.object({
       /** Lower is better (e.g. stock-outs) flips trend colours. */
       invert: z.boolean().optional(),
       stacked: z.boolean().optional(),
+      /** Gauge: the value at a full dial (target). */
+      max: z.number().optional(),
       horizontal: z.boolean().optional(),
       /** Map: auto-refresh seconds (live layers). */
       refreshSeconds: z.number().int().min(10).max(3600).optional(),

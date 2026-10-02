@@ -175,39 +175,51 @@ export class QueryService {
                 ? sql`t.name`
                 : sql`e.name`;
         const joins = sql`left join entity p on p.id = e.parent_id join entity_type t on t.id = e.type_id`;
+        const keys = spec.elements ?? (spec.element ? [spec.element] : null);
+        const multi = !!spec.elements;
         let rows;
-        if (!spec.element) {
-          rows = await sql<{ label: string; value: number }>`
-            select ${labelExpr} as label, count(*)::float8 as value
+        if (!keys) {
+          rows = await sql<{ label: string; key: string | null; value: number }>`
+            select ${labelExpr} as label, null as key, count(*)::float8 as value
             from entity e ${joins}
             where e.project_id = ${projectId} ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc, 1 limit ${spec.limit}
+            group by 1 order by 3 desc, 1 limit ${spec.limit}
           `.execute(tx);
         } else if (spec.latest) {
-          rows = await sql<{ label: string; value: number }>`
+          rows = await sql<{ label: string; key: string; value: number }>`
             with latest as (
-              select distinct on (o.entity_id) o.entity_id, o.value_num as v, o.at
+              select distinct on (o.entity_id, d.key) o.entity_id, d.key, o.value_num as v, o.at
               from observation o join data_element d on d.id = o.element_id
-              where o.project_id = ${projectId} and d.key = ${spec.element}
-              order by o.entity_id, o.at desc
+              where o.project_id = ${projectId} and d.key in (${sql.join(keys)})
+              order by o.entity_id, d.key, o.at desc
             )
-            select ${labelExpr} as label, ${sql.raw(LATEST_AGG[spec.aggregation]!)}::float8 as value
+            select ${labelExpr} as label, l.key, ${sql.raw(LATEST_AGG[spec.aggregation]!)}::float8 as value
             from latest l join entity e on e.id = l.entity_id ${joins}
             where true ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc nulls last, 1 limit ${spec.limit}
+            group by 1, 2
           `.execute(tx);
         } else {
           const { from, to } = this.range(spec.range);
-          rows = await sql<{ label: string; value: number }>`
-            select ${labelExpr} as label, ${sql.raw(AGG[spec.aggregation]!)}::float8 as value
+          rows = await sql<{ label: string; key: string; value: number }>`
+            select ${labelExpr} as label, d.key, ${sql.raw(AGG[spec.aggregation]!)}::float8 as value
             from observation o join data_element d on d.id = o.element_id
             join entity e on e.id = o.entity_id ${joins}
-            where o.project_id = ${projectId} and d.key = ${spec.element} and o.at >= ${from} and o.at < ${to}
+            where o.project_id = ${projectId} and d.key in (${sql.join(keys)}) and o.at >= ${from} and o.at < ${to}
               ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc nulls last, 1 limit ${spec.limit}
+            group by 1, 2
           `.execute(tx);
         }
-        return { kind: 'breakdown', rows: rows.rows.map((r) => ({ label: r.label, value: round(r.value) })), freshness: fresh };
+        // Top labels by their total across elements; rows keep element order.
+        const totals = new Map<string, number>();
+        for (const r of rows.rows) totals.set(r.label, (totals.get(r.label) ?? 0) + (Number(r.value) || 0));
+        const top = [...totals.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, spec.limit).map(([l]) => l);
+        const rank = new Map(top.map((l, i) => [l, i]));
+        const order = keys ? new Map(keys.map((k, i) => [k, i])) : new Map<string, number>();
+        const kept = rows.rows
+          .filter((r) => rank.has(r.label))
+          .sort((x, y) => rank.get(x.label)! - rank.get(y.label)! || (order.get(x.key ?? '') ?? 0) - (order.get(y.key ?? '') ?? 0));
+        if (multi) return { kind: 'breakdown', rows: kept.map((r) => ({ label: r.label, key: r.key, value: round(r.value) })), freshness: fresh };
+        return { kind: 'breakdown', rows: kept.map((r) => ({ label: r.label, value: round(r.value) })), freshness: fresh };
       }
       case 'kpi': {
         const one = async (from: Date | null, to: Date | null): Promise<number | null> => {
