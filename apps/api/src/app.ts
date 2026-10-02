@@ -11,6 +11,7 @@ import type { Problem } from '@grids/schema';
 import type { AuthDeps } from './auth/plugin.js';
 import { HttpError } from './errors.js';
 import { adminRoutes } from './routes/admin.js';
+import { closeAllStreams } from './routes/sse.js';
 import { projectRoutes, publicProjectRoutes } from './routes/projects.js';
 import { publicRoutes } from './routes/public.js';
 import { tenantRoutes } from './routes/tenant.js';
@@ -100,6 +101,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   if (deps.platform) {
     app.decorateRequest('actor', null);
+    const services = deps.platform.services;
+    app.addHook('preClose', async () => closeAllStreams());
+    app.addHook('onClose', async () => services.events.close());
     await app.register(publicRoutes, deps.platform);
     await app.register(tenantRoutes, deps.platform);
     await app.register(adminRoutes, deps.platform);

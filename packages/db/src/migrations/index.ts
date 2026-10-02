@@ -15,6 +15,7 @@ import * as t0005 from './tenant/0005_projects.js';
 import * as t0006 from './tenant/0006_orchestration.js';
 import * as t0007 from './tenant/0007_dashboards_forms.js';
 import * as t0008 from './tenant/0008_files.js';
+import * as t0009 from './tenant/0009_change_events.js';
 
 // Explicit registries (not filesystem globbing) so migrations bundle and typecheck.
 const platform: Record<string, Migration> = {
@@ -35,6 +36,7 @@ const tenant: Record<string, Migration> = {
   '0006_orchestration': t0006,
   '0007_dashboards_forms': t0007,
   '0008_files': t0008,
+  '0009_change_events': t0009,
 };
 
 const provider = (m: Record<string, Migration>): MigrationProvider => ({

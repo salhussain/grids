@@ -3,6 +3,7 @@ import type { ServiceContext } from './context.js';
 import { DashboardService } from './dashboard.js';
 import { DomainService, type TxtResolver } from './domains.js';
 import { FormService } from './forms.js';
+import { EventBus } from './events.js';
 import { JobService } from './jobs.js';
 import { ProjectService } from './projects.js';
 import { QueryService } from './query.js';
@@ -42,7 +43,9 @@ export function createServices(
   const members = new MemberService(ctx, { identity, seatsUsed });
   const support = new SupportService(ctx);
   const logs = new LogService(ctx);
+  const events = new EventBus(ctx.cells);
   return {
+    events,
     identity,
     plans: new PlanService(ctx),
     staff: new StaffService(ctx),
@@ -56,7 +59,7 @@ export function createServices(
     workspace: new WorkspaceService(ctx, { logs }),
     projects,
     jobs: new JobService(ctx, projects),
-    query: new QueryService(ctx, projects),
+    query: new QueryService(ctx, projects, events),
     forms: new FormService(ctx, projects),
   };
 }

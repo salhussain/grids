@@ -41,6 +41,7 @@ import {
 } from '@grids/schema';
 import { actorOf, authenticate, type AuthDeps } from '../auth/plugin.js';
 import { HttpError } from '../errors.js';
+import { streamEvents } from './sse.js';
 
 const T = z.object({ tenantId: z.uuid() });
 const P = T.extend({ project: z.string().min(1).max(63) });
@@ -52,6 +53,14 @@ const FeatureCollection = z.object({ type: z.literal('FeatureCollection'), featu
 export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) => {
   const s = deps.services;
   app.addHook('preHandler', authenticate(deps));
+  // A successful write through this API drops the tenant's cached query results
+  // before the response goes out, so the writer's next read sees its change.
+  app.addHook('onSend', async (req, reply, payload) => {
+    const tenantId = (req.params as { tenantId?: string } | undefined)?.tenantId;
+    const readOnly = (req.routeOptions.config as { readOnly?: boolean }).readOnly;
+    if (tenantId && req.method !== 'GET' && !readOnly && reply.statusCode < 400) s.query.invalidate(tenantId);
+    return payload;
+  });
   // File uploads are sent as raw bytes; the original name and type travel in the query.
   app.addContentTypeParser(['application/octet-stream', 'text/csv', 'text/plain', 'application/x-ndjson'], { parseAs: 'buffer', bodyLimit: FILE_MAX_BYTES }, (_req, body, done) =>
     done(null, body),
@@ -77,6 +86,12 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
     { schema: { params: P, body: z.object({ archived: z.boolean() }), response: { 200: ProjectDto } } },
     (req) => s.projects.setArchived(actorOf(req), req.params.tenantId, req.params.project, req.body.archived),
   );
+
+  // Live change events for the project (SSE).
+  app.get('/tenants/:tenantId/projects/:project/events', { schema: { params: P } }, async (req, reply) => {
+    const a = await s.projects.access(actorOf(req), req.params.tenantId, req.params.project);
+    await streamEvents(req, reply, (fn) => s.events.subscribe(req.params.tenantId, a.project.id, fn));
+  });
 
   // ----- members -----
   const Members = { 200: z.array(ProjectMemberDto) };
@@ -247,7 +262,7 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
 
   // ----- query & dashboards -----
-  app.post('/tenants/:tenantId/projects/:project/query', { schema: { params: P, body: QuerySpec, response: { 200: QueryResult } } }, (req) =>
+  app.post('/tenants/:tenantId/projects/:project/query', { config: { readOnly: true }, schema: { params: P, body: QuerySpec, response: { 200: QueryResult } } }, (req) =>
     s.query.query(actorOf(req), req.params.tenantId, req.params.project, req.body),
   );
   const Dashboards = { 200: z.array(DashboardDto) };
@@ -303,6 +318,10 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
   app.get('/public/projects/:tenant/:project', { schema: { params: Params, response: { 200: PublicProjectDto } } }, async (req, reply) => {
     reply.header('cache-control', 'public, max-age=30');
     return s.query.publicView(req.params.tenant, req.params.project);
+  });
+  app.get('/public/projects/:tenant/:project/events', { schema: { params: Params } }, async (req, reply) => {
+    const t = await s.query.publicTarget(req.params.tenant, req.params.project);
+    await streamEvents(req, reply, (fn) => s.events.subscribe(t.tenantId, t.projectId, fn), 2_000);
   });
   app.get(
     '/public/projects/:tenant/:project/dashboards/:dashboard/widgets/:widget',

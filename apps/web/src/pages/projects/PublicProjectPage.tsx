@@ -4,6 +4,7 @@ import { applyColorMode, cx, ErrorNotice, Spinner, storedColorMode, type ColorMo
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { usePublicEvents } from '../../live';
 import { applyTheme } from '../../theme';
 import { WidgetView } from '../../viz/WidgetView';
 
@@ -11,6 +12,7 @@ import { WidgetView } from '../../viz/WidgetView';
 export function PublicProjectPage() {
   const { tenant, project } = useParams({ strict: false }) as { tenant: string; project: string };
   const view = useQuery({ queryKey: ['public', tenant, project], queryFn: () => api.publicProject(tenant, project), retry: false });
+  usePublicEvents(tenant, project);
   const [selected, setSelected] = useState<string | null>(null);
   const [mode, setMode] = useState<ColorMode>(storedColorMode);
   useEffect(() => applyColorMode(mode), [mode]);
