@@ -415,6 +415,12 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
       return s.explore.publicSearch(req.params.tenant, req.params.project, req.query.q);
     },
   );
+  // Inbound webhooks: the token (tenant + secret) is the credential.
+  app.post(
+    '/hooks/:token',
+    { bodyLimit: 5 * 1024 * 1024, schema: { params: z.object({ token: z.string().min(40).max(120) }), response: { 202: z.object({ runId: z.string() }) } } },
+    async (req, reply) => reply.status(202).send(await s.jobs.webhook(req.params.token, req.body)),
+  );
   app.get('/public/projects/:tenant/:project/events', { schema: { params: Params } }, async (req, reply) => {
     const t = await s.query.publicTarget(req.params.tenant, req.params.project);
     await streamEvents(req, reply, (fn) => s.events.subscribe(t.tenantId, t.projectId, fn), 2_000);

@@ -103,6 +103,8 @@ export async function job(tx: Tx, c: TemplateCtx, raw: JobIn) {
       timeout_seconds: j.timeoutSeconds,
       freshness_minutes: j.freshnessMinutes,
       run_on_upload: j.runOnUpload,
+      triggers: JSON.stringify(j.triggers),
+      sensor: j.sensor ? JSON.stringify(j.sensor) : null,
     })
     .execute();
   await syncSchedule(tx, { id, tenantId: c.tenantId, schedule: j.schedule, timezone: j.timezone, enabled: j.enabled });

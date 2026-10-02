@@ -450,6 +450,37 @@ describe('jobs and public projects', () => {
     await api(admin).post(`/${key}/runs/${again.body.id}/cancel`);
   });
 
+  it('runs jobs from webhooks, entity changes and sensors', async () => {
+    const cellDb = await h.cells.forTenant(tenantId);
+    await drainQueue(cellDb, { worker: 'test' });
+    const load = { id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' };
+    const saved = (await api(admin).post(`/${key}/jobs`, { key: 'inbound', name: 'Inbound countries', steps: [load], triggers: { webhook: true } })).body;
+    const inbound = saved.find((j: { key: string }) => j.key === 'inbound');
+    expect(inbound.webhookPath).toMatch(new RegExp(`^/hooks/${tenantId}\\.`));
+    // Viewers never see the secret URL.
+    expect((await api(vi).get(`/${key}/jobs`)).body.find((j: { key: string }) => j.key === 'inbound').webhookPath).toBeNull();
+
+    const hook = await h.call(null, 'POST', inbound.webhookPath, { rows: [{ iso: 'PG', name: 'Papua New Guinea' }] });
+    expect(hook.status).toBe(202);
+    expect((await h.call(null, 'POST', `/hooks/${tenantId}.not-the-secret-not-the-secret-not-the-secret`, [])).status).toBe(404);
+
+    // A job listening for country changes runs after the webhook's run writes one, and after a manual edit.
+    await api(admin).post(`/${key}/jobs`, { key: 'on_country', name: 'On country change', steps: [{ id: 'noop', type: 'filter', condition: 'true' }], triggers: { events: [{ event: 'entity.changed', ref: 'country' }] } });
+    await drainQueue(cellDb, { worker: 'test' });
+    expect((await api(admin).get(`/${key}/runs/${hook.body.runId}`)).body).toMatchObject({ status: 'succeeded', trigger: 'webhook', stats: { rows_received: 1, entities_created: 1 } });
+    const onCountry = async () => (await api(admin).get(`/${key}/runs?pageSize=100`)).body.items.filter((r: { jobName: string }) => r.jobName === 'On country change');
+    expect((await onCountry()).map((r: { trigger: string }) => r.trigger)).toEqual(['entity.changed']);
+    await api(admin).post(`/${key}/entities`, { typeKey: 'country', code: 'SB', name: 'Solomon Islands' });
+    expect((await onCountry()).length).toBe(2);
+
+    // Sensors are scheduled for the worker; turning the webhook off revokes its URL.
+    const withSensor = (await api(admin).put(`/${key}/jobs/inbound`, { ...inbound, triggers: { webhook: false }, sensor: { url: 'https://example.org/feed.json', everyMinutes: 15 } })).body;
+    const updated = withSensor.find((j: { key: string }) => j.key === 'inbound');
+    expect(updated).toMatchObject({ webhookPath: null, sensor: { everyMinutes: 15 }, sensorState: { cursor: null, lastError: null } });
+    expect((await h.call(null, 'POST', inbound.webhookPath, [])).status).toBe(404);
+    await drainQueue(cellDb, { worker: 'test' });
+  });
+
   it('stores uploaded files and runs the jobs that parse them on upload', async () => {
     const upload = (who: string, text: string, name = 'countries.csv') =>
       h.app.inject({

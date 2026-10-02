@@ -414,6 +414,9 @@ export interface CellDB {
     timeout_seconds: Generated<number>;
     freshness_minutes: number | null;
     run_on_upload: Generated<boolean>;
+    triggers: JsonDefault<Record<string, unknown>>;
+    sensor: Json<Record<string, unknown> | null>;
+    webhook_token: string | null;
     created_at: CreatedAt;
     updated_at: Timestamp;
   };
@@ -432,6 +435,7 @@ export interface CellDB {
     error: string | null;
     stats: JsonDefault<Record<string, number>>;
     worker: string | null;
+    context: JsonDefault<Record<string, unknown>>;
   };
   run_log: {
     id: Generated<string>;
@@ -448,6 +452,15 @@ export interface CellDB {
     available_at: Timestamp;
     locked_by: string | null;
     locked_until: Date | null;
+  };
+  job_sensor: {
+    job_id: string;
+    tenant_id: string;
+    every_minutes: number;
+    next_check_at: Timestamp;
+    last_checked_at: Date | null;
+    cursor: string | null;
+    last_error: string | null;
   };
   job_schedule: {
     job_id: string;

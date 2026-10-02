@@ -3,6 +3,7 @@ import { withTenant, type CellDB } from '@grids/db';
 import {
   DataError,
   entityType,
+  fireEvent,
   freshness,
   moveEntity,
   upsertEntities,
@@ -847,6 +848,7 @@ export class ProjectService {
         const type = await entityType(tx, a.project.id, input.typeKey);
         this.checkRequired(type.attributes, input.attributes);
         if (!input.parentId && type.parentTypes.length && a.rootPath) throw forbidden('Choose a parent within your part of the project.');
+        await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: input.typeKey, actorId: actor.id, detail: { change: 'created', code: input.code } });
         return upsertEntities(tx, {
           tenantId,
           projectId: a.project.id,
@@ -888,6 +890,7 @@ export class ProjectService {
           if (dupe) throw conflict('Code taken', `Another entity already has the code "${input.code}".`);
           await tx.updateTable('entity').set({ code: input.code }).where('id', '=', id).execute();
         }
+        await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: cur.type_key, actorId: actor.id, detail: { change: 'updated', entity: id } });
         await upsertEntities(tx, {
           tenantId,
           projectId: a.project.id,
@@ -933,11 +936,12 @@ export class ProjectService {
   async deleteEntity(actor: Actor, tenantId: string, project: string, id: string): Promise<void> {
     const a = await this.access(actor, tenantId, project, 'editor');
     await this.cellTx(tenantId, async (tx) => {
-      const cur = await this.entityBase(tx, a).select('e.id').where('e.id', '=', id).executeTakeFirst();
+      const cur = await this.entityBase(tx, a).select(['e.id', 'e.code', 't.key as type_key']).where('e.id', '=', id).executeTakeFirst();
       if (!cur) throw notFound('Entity');
       const child = await tx.selectFrom('entity').select('id').where('parent_id', '=', id).executeTakeFirst();
       if (child) throw conflict('Has children', 'Move or delete the entities under it first.');
       await tx.deleteFrom('entity').where('id', '=', id).execute();
+      await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: cur.type_key, actorId: actor.id, detail: { change: 'deleted', code: cur.code } });
     });
   }
 
@@ -1044,7 +1048,10 @@ export class ProjectService {
             ...(hasPoint && { geometry: { type: 'Point' as const, coordinates: [lon, lat] } }),
           };
         });
-        return upsertEntities(tx, { tenantId, projectId: a.project.id, typeKey: input.typeKey, rows, source: 'import', actorId: actor.id, scopePath: a.rootPath });
+        const res = await upsertEntities(tx, { tenantId, projectId: a.project.id, typeKey: input.typeKey, rows, source: 'import', actorId: actor.id, scopePath: a.rootPath });
+        if (res.created + res.updated)
+          await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: input.typeKey, actorId: actor.id, detail: { change: 'imported', created: res.created, updated: res.updated } });
+        return res;
       }),
     );
     await audit(this.ctx, actor.id, tenantId, 'project.imported', { project: a.project.key, type: input.typeKey, created: res.created, updated: res.updated });

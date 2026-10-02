@@ -1,5 +1,5 @@
 import { sql } from 'kysely';
-import { upsertEntities, writeObservations } from '@grids/data';
+import { fireEvent, upsertEntities, writeObservations } from '@grids/data';
 import { lintDefinition, periodStart, questionsOf, validate } from '@grids/forms';
 import { FormDefinition, uuidv7, type FormDto, type Page, type SubmissionDto } from '@grids/schema';
 import type { z } from 'zod';
@@ -206,6 +206,7 @@ export class FormService {
             location: input.location ? sql`ST_SetSRID(ST_MakePoint(${input.location.lon}, ${input.location.lat}), 4326)` : null,
           })
           .execute();
+        await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'submission.created', ref: key, actorId: actor.id, detail: { submission: input.id, entity: entity?.id ?? null } });
 
         if (entity) {
           const qs = questionsOf(def).filter((q) => q.key in result.clean);
