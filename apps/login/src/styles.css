@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '@grids/ui/theme.css';
+@source '../../../packages/ui/src';
+
+:root[dir='rtl'] {
+  --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Brand panel: a slow drift of grid cells in the organisation's colour. */
+@keyframes cell-pulse {
+  0%, 100% { opacity: 0.05; }
+  50% { opacity: 0.55; }
+}
+.grid-cell {
+  animation: cell-pulse 9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .grid-cell { animation: none; opacity: 0.25; }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@grids/data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Canonical-model writes (entities, observations, datasets), freshness, and the job engine shared by the API and the worker.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@grids/db": "workspace:^",
+    "@grids/schema": "workspace:^",
+    "cron-parser": "^5.4.0",
+    "jsonata": "^2.1.0",
+    "kysely": "^0.29.6"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.2.0"
+  }
+}

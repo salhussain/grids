@@ -1,0 +1,20 @@
+{
+  "name": "@grids/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs scheduled and queued jobs for every data cell (orchestration, ADR 0002).",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node --env-file=../../.env dist/server.js"
+  },
+  "dependencies": {
+    "@grids/data": "workspace:^",
+    "@grids/db": "workspace:^",
+    "kysely": "^0.29.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0"
+  }
+}

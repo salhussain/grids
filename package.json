@@ -1,0 +1,32 @@
+{
+  "name": "grids",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @grids/db migrate",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "e2e": "pnpm --filter @grids/e2e e2e",
+    "bootstrap:idp": "pnpm --filter @grids/api bootstrap:idp"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "turbo": "^2.11.6",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "type": "module"
+}

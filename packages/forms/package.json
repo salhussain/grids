@@ -1,0 +1,18 @@
+{
+  "name": "@grids/forms",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Form expression language and runtime (relevance, constraints, calculations, validation): shared by the web, mobile and server.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@grids/schema": "workspace:^"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@grids/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "dev": "node --env-file=../../.env --watch dist/server.js",
+    "start": "node --env-file=../../.env dist/server.js",
+    "bootstrap:idp": "node --env-file=../../.env dist/scripts/bootstrap-idp.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@grids/data": "workspace:^",
+    "@grids/db": "workspace:^",
+    "@grids/forms": "workspace:^",
+    "@grids/i18n": "workspace:^",
+    "@grids/schema": "workspace:^",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jose": "^6.2.12",
+    "kysely": "^0.29.6",
+    "nodemailer": "^10.0.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.2.0",
+    "@types/nodemailer": "^8.0.2"
+  }
+}

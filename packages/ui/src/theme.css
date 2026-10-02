@@ -1,0 +1,149 @@
+/*
+ * Grids design tokens. Sharp by design: every radius token is 0.
+ * Brand colours resolve at runtime from --brand-* variables (`@theme inline`), so
+ * a tenant theme can recolour the whole app by setting a few CSS variables.
+ * Apps import this after `@import 'tailwindcss'` and add `@source` for this package.
+ */
+:root {
+  /* A tenant theme sets only --brand-600 and --brand-contrast; the steps derive from it. */
+  --brand-600: #0f62fe;
+  --brand-contrast: #ffffff;
+  --brand-50: color-mix(in oklab, var(--brand-600) 8%, white);
+  --brand-100: color-mix(in oklab, var(--brand-600) 20%, white);
+  --brand-500: color-mix(in oklab, var(--brand-600) 82%, white);
+  --brand-700: color-mix(in oklab, var(--brand-600) 80%, black);
+  --brand-800: color-mix(in oklab, var(--brand-600) 62%, black);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-accent-50: var(--brand-50);
+  --color-accent-100: var(--brand-100);
+  --color-accent-500: var(--brand-500);
+  --color-accent-600: var(--brand-600);
+  --color-accent-700: var(--brand-700);
+  --color-accent-800: var(--brand-800);
+  --color-on-accent: var(--brand-contrast);
+}
+
+@theme {
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  --color-ink: #161616;
+  --color-canvas: #f4f4f4;
+  /* Raised surfaces (panels, inputs, tables). White in light mode. */
+  --color-snow: #ffffff;
+  /* App chrome (dark sidebars, sign-in backdrops): dark in both modes. */
+  --color-chrome: #161616;
+}
+
+/*
+ * Dark mode: remaps the neutral and status scales instead of adding dark: variants,
+ * so every existing utility (bg-snow, text-zinc-500, border-zinc-200, bg-red-50 …)
+ * flips without touching components. Chosen per person: light, dark or system.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-ink: #f2f2f3;
+  --color-canvas: #111214;
+  --color-snow: #1a1b1e;
+  --color-chrome: #0a0a0b;
+  --color-zinc-50: #202125;
+  --color-zinc-100: #26272b;
+  --color-zinc-200: #323338;
+  --color-zinc-300: #43444a;
+  --color-zinc-400: #696a72;
+  --color-zinc-500: #9b9ca4;
+  --color-zinc-600: #b5b6bd;
+  --color-zinc-700: #cecfd5;
+  --color-zinc-800: #e2e3e8;
+  --color-zinc-900: #f0f1f4;
+  --color-zinc-950: #fafafa;
+  --color-red-50: #2c1517;
+  --color-red-100: #3b1a1d;
+  --color-red-200: #5a2327;
+  --color-red-300: #7c2d33;
+  --color-red-500: #f05a5f;
+  --color-red-600: #e5484d;
+  --color-red-700: #ff8a8e;
+  --color-red-800: #ffabae;
+  --color-red-900: #ffd2d4;
+  --color-emerald-50: #10251c;
+  --color-emerald-100: #133020;
+  --color-emerald-200: #1b4a32;
+  --color-emerald-300: #23613f;
+  --color-emerald-400: #34c286;
+  --color-emerald-500: #3dd68c;
+  --color-emerald-600: #2fb47a;
+  --color-emerald-700: #63e0a5;
+  --color-emerald-800: #8eebc0;
+  --color-emerald-900: #c4f5dd;
+  --color-amber-50: #2a2110;
+  --color-amber-100: #392c12;
+  --color-amber-200: #594414;
+  --color-amber-300: #795c18;
+  --color-amber-500: #f5b324;
+  --color-amber-700: #ffc95e;
+  --color-amber-800: #ffda8c;
+  --color-amber-900: #ffebc4;
+  --color-sky-50: #10222f;
+  --color-sky-300: #1f5878;
+  --color-sky-700: #7cc8f5;
+  --color-sky-900: #c2e7ff;
+  --brand-50: color-mix(in oklab, var(--brand-600) 14%, #1a1b1e);
+  --brand-100: color-mix(in oklab, var(--brand-600) 28%, #1a1b1e);
+  --brand-500: color-mix(in oklab, var(--brand-600) 80%, white);
+  --brand-700: color-mix(in oklab, var(--brand-600) 62%, white);
+  --brand-800: color-mix(in oklab, var(--brand-600) 42%, white);
+}
+
+/* Inside always-dark chrome, keep the light-mode neutrals the chrome was designed with. */
+:root[data-theme='dark'] .chrome {
+  --color-ink: #161616;
+  --color-zinc-300: #d4d4d8;
+  --color-zinc-400: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --brand-500: color-mix(in oklab, var(--brand-600) 82%, white);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+::selection {
+  background: var(--brand-100);
+}
+dialog::backdrop {
+  background: rgb(22 22 22 / 0.55);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+/* Grid items default to min-width:auto, letting wide tables push columns past the
+   viewport; tables scroll inside their own container instead. */
+.grid > * {
+  min-width: 0;
+}
+/* Stat strips: an odd last tile spans the row instead of leaving a hole. */
+.stat-strip > :last-child:nth-child(odd) {
+  grid-column: span 2;
+}
+@media (min-width: 64rem) {
+  .stat-strip > :last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
