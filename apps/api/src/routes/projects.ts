@@ -13,6 +13,8 @@ import {
   EntityTypeDto,
   EntityTypeInput,
   EntityUpdate,
+  FILE_MAX_BYTES,
+  FileDto,
   FormDto,
   FormInput,
   GeoQuery,
@@ -34,9 +36,11 @@ import {
   RunQuery,
   SubmissionDto,
   SubmissionInput,
+  UploadResult,
   pageOf,
 } from '@grids/schema';
 import { actorOf, authenticate, type AuthDeps } from '../auth/plugin.js';
+import { HttpError } from '../errors.js';
 
 const T = z.object({ tenantId: z.uuid() });
 const P = T.extend({ project: z.string().min(1).max(63) });
@@ -48,6 +52,10 @@ const FeatureCollection = z.object({ type: z.literal('FeatureCollection'), featu
 export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) => {
   const s = deps.services;
   app.addHook('preHandler', authenticate(deps));
+  // File uploads are sent as raw bytes; the original name and type travel in the query.
+  app.addContentTypeParser(['application/octet-stream', 'text/csv', 'text/plain', 'application/x-ndjson'], { parseAs: 'buffer', bodyLimit: FILE_MAX_BYTES }, (_req, body, done) =>
+    done(null, body),
+  );
 
   // ----- projects -----
   app.get(
@@ -195,6 +203,33 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
   app.post('/tenants/:tenantId/projects/:project/runs/:id/rerun', { schema: { params: PId, response: { 202: RunDto } } }, async (req, reply) =>
     reply.status(202).send(await s.jobs.rerun(actorOf(req), req.params.tenantId, req.params.project, req.params.id)),
+  );
+  const Files = { 200: z.array(FileDto) };
+  app.get('/tenants/:tenantId/projects/:project/files', { schema: { params: P, response: Files } }, (req) =>
+    s.jobs.files(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.put(
+    '/tenants/:tenantId/projects/:project/files/:key',
+    {
+      bodyLimit: FILE_MAX_BYTES,
+      schema: {
+        params: PK,
+        querystring: z.object({ name: z.string().max(255).default(''), type: z.string().max(100).default('application/octet-stream') }),
+        response: { 201: UploadResult },
+      },
+    },
+    async (req, reply) => {
+      if (!Buffer.isBuffer(req.body)) throw new HttpError(415, 'Unsupported media type', 'Send the file body as application/octet-stream.');
+      const res = await s.jobs.upload(actorOf(req), req.params.tenantId, req.params.project, req.params.key, {
+        name: req.query.name || req.params.key,
+        contentType: req.query.type,
+        content: req.body,
+      });
+      return reply.status(201).send(res);
+    },
+  );
+  app.delete('/tenants/:tenantId/projects/:project/files/:key', { schema: { params: PK, response: Files } }, (req) =>
+    s.jobs.deleteFile(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
   );
   app.get('/tenants/:tenantId/projects/:project/datasets', { schema: { params: P, response: { 200: z.array(DatasetDto) } } }, (req) =>
     s.jobs.datasets(actorOf(req), req.params.tenantId, req.params.project),

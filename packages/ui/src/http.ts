@@ -19,13 +19,15 @@ export function createRequester(baseUrl: string, getToken: () => Promise<string 
     opts: { anonymous?: boolean } = {},
   ): Promise<T> {
     const token = opts.anonymous ? null : await getToken();
+    // Files (Blob) go as raw bytes; everything else as JSON.
+    const raw = typeof Blob !== 'undefined' && body instanceof Blob;
     const res = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
-        ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...(body !== undefined && { 'content-type': raw ? 'application/octet-stream' : 'application/json' }),
         ...(token && { authorization: `Bearer ${token}` }),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : raw ? (body as Blob) : JSON.stringify(body),
     });
     if (!res.ok) {
       const problem = (await res.json().catch(() => null)) as Problem | null;

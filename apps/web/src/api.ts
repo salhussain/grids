@@ -105,6 +105,10 @@ export const api = {
     request<Page<S.RunDto>>('GET', `${t(id)}/projects/${p}/runs${qs(query)}`),
   run: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
+  files: (id: string, p: string) => request<S.FileDto[]>('GET', `${t(id)}/projects/${p}/files`),
+  uploadFile: (id: string, p: string, key: string, file: File) =>
+    request<S.UploadResult>('PUT', `${t(id)}/projects/${p}/files/${key}${qs({ name: file.name, type: file.type || undefined })}`, file),
+  deleteFile: (id: string, p: string, key: string) => request<S.FileDto[]>('DELETE', `${t(id)}/projects/${p}/files/${key}`),
   rerun: (id: string, p: string, runId: string) => request<S.RunDto>('POST', `${t(id)}/projects/${p}/runs/${runId}/rerun`),
   cancelRun: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('POST', `${t(id)}/projects/${p}/runs/${runId}/cancel`),

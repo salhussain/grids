@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { JobInput, type JobDto, type RunDto, type RunStatus } from '@grids/schema';
+import { FILE_MAX_BYTES, JobInput, type JobDto, type RunDto, type RunStatus, type UploadResult } from '@grids/schema';
 import {
   Button,
   Dialog,
@@ -22,7 +22,7 @@ import {
   usePagination,
   useToast,
 } from '@grids/ui';
-import { CircleCheck, CircleX, Clock, Loader, Pencil, Play, Plus, RotateCcw, Workflow, XCircle } from 'lucide-react';
+import { CircleCheck, CircleX, Clock, Loader, FileUp, Pencil, Play, Plus, RotateCcw, Trash2, Upload, Workflow, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
 import { FreshnessBadge } from '../../viz/Freshness';
@@ -154,6 +154,7 @@ export function JobsTab() {
           ))}
         </ul>
       )}
+      <FilesPanel onRun={setOpenRun} />
       <Panel
         flush
         title="Runs"
@@ -190,6 +191,124 @@ export function JobsTab() {
       {openRun && <RunDialog runId={openRun} onClose={() => setOpenRun(null)} onOpen={setOpenRun} />}
       {editing && <JobEditor job={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+/** Uploaded files that `file.parse` steps read (latest version per key). */
+function FilesPanel({ onRun }: { onRun(id: string): void }) {
+  const { tenantId, project, can } = useProject();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const files = useQuery({ queryKey: ['files', tenantId, project.key], queryFn: () => api.files(tenantId, project.key) });
+  const [uploading, setUploading] = useState<string | 'new' | null>(null);
+  const remove = useMutation({
+    mutationFn: (key: string) => api.deleteFile(tenantId, project.key, key),
+    onSuccess: (data) => qc.setQueryData(['files', tenantId, project.key], data),
+  });
+  if (!files.data?.length && !can('editor')) return null;
+  return (
+    <Panel
+      flush
+      title="Files"
+      actions={
+        can('editor') && (
+          <Button size="sm" variant="secondary" icon={Upload} onClick={() => setUploading('new')}>
+            Upload file
+          </Button>
+        )
+      }
+    >
+      <ErrorNotice error={files.error ?? remove.error} />
+      <Table head={['Key', 'File', 'Size', 'Uploaded', 'Used by', '']} empty={<Empty icon={FileUp} title="No files yet">Upload CSV or JSON files for jobs to parse with a file.parse step.</Empty>}>
+        {files.data?.map((f) => (
+          <tr key={f.key} className="border-t border-zinc-100">
+            <Td className="font-mono text-xs">{f.key}</Td>
+            <Td>
+              {f.name}
+              {f.versions > 1 && <span className="text-xs text-zinc-500"> · {f.versions} versions</span>}
+            </Td>
+            <Td className="num">{bytes(f.size)}</Td>
+            <Td className="text-xs">
+              {dateTime(f.uploadedAt)}
+              {f.uploadedBy && <span className="text-zinc-500"> · {f.uploadedBy}</span>}
+            </Td>
+            <Td className="text-xs text-zinc-600">{f.jobs.map((j) => `${j.name}${j.runOnUpload ? ' (on upload)' : ''}`).join(', ') || '—'}</Td>
+            <Td className="text-end whitespace-nowrap">
+              {can('editor') && (
+                <Button size="sm" variant="ghost" icon={Upload} onClick={() => setUploading(f.key)}>
+                  Replace
+                </Button>
+              )}
+              {can('manager') && (
+                <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Delete ${f.key}`} onClick={() => confirm(`Delete ${f.key} and all its versions?`) && remove.mutate(f.key)} />
+              )}
+            </Td>
+          </tr>
+        ))}
+      </Table>
+      {uploading && (
+        <UploadDialog
+          fileKey={uploading === 'new' ? null : uploading}
+          onClose={() => setUploading(null)}
+          onDone={(r) => {
+            setUploading(null);
+            void qc.invalidateQueries({ queryKey: ['files', tenantId, project.key] });
+            void qc.invalidateQueries({ queryKey: ['runs', tenantId, project.key] });
+            void qc.invalidateQueries({ queryKey: ['jobs', tenantId, project.key] });
+            toast(r.runs.length ? `${r.file.name} uploaded · ${r.runs.length} job${r.runs.length > 1 ? 's' : ''} queued` : `${r.file.name} uploaded`);
+            if (r.runs.length === 1) onRun(r.runs[0]!.id);
+          }}
+        />
+      )}
+    </Panel>
+  );
+}
+
+function UploadDialog({ fileKey, onClose, onDone }: { fileKey: string | null; onClose(): void; onDone(r: UploadResult): void }) {
+  const { tenantId, project } = useProject();
+  const [key, setKey] = useState(fileKey ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const upload = useMutation({ mutationFn: () => api.uploadFile(tenantId, project.key, key, file!), onSuccess: onDone });
+  const tooBig = !!file && file.size > FILE_MAX_BYTES;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={fileKey ? `Replace ${fileKey}` : 'Upload file'}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => upload.mutate()} loading={upload.isPending} disabled={!file || !key || tooBig}>
+            Upload
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <ErrorNotice error={upload.error} />
+        {!fileKey && (
+          <Field label="Key" hint="Jobs refer to the file by this key, e.g. asset_register">
+            <Input value={key} onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]+/g, '_'))} className="font-mono" />
+          </Field>
+        )}
+        <Field label="File" hint="CSV (comma, semicolon, tab or pipe separated), JSON or NDJSON, up to 20 MB" error={tooBig ? 'This file is larger than 20 MB' : undefined}>
+          <input
+            type="file"
+            accept=".csv,.tsv,.txt,.json,.ndjson,.jsonl,text/csv,application/json"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              setFile(f);
+              if (f && !key) setKey(f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^[^a-z]+/, '') || 'file');
+            }}
+            className="block w-full text-sm file:me-3 file:border file:border-zinc-300 file:bg-zinc-50 file:px-3 file:py-1.5 file:text-sm"
+          />
+        </Field>
+      </div>
+    </Dialog>
   );
 }
 
@@ -296,6 +415,7 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
     maxRetries: job?.maxRetries ?? 2,
     timeoutSeconds: job?.timeoutSeconds ?? 300,
     freshnessMinutes: job?.freshnessMinutes ?? null,
+    runOnUpload: job?.runOnUpload ?? false,
   });
   const [steps, setSteps] = useState(JSON.stringify(job?.steps ?? STARTER, null, 2));
   const [local, setLocal] = useState<string | null>(null);
@@ -376,11 +496,19 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
           <div className="flex items-end pb-1">
             <SwitchField label="Enabled" checked={f.enabled} onChange={(v) => setF({ ...f, enabled: v })} />
           </div>
+          <div className="sm:col-span-3">
+            <SwitchField
+              label="Run when a file it parses is uploaded"
+              description="Needs a file.parse step"
+              checked={f.runOnUpload}
+              onChange={(v) => setF({ ...f, runOnUpload: v })}
+            />
+          </div>
         </div>
         <Field
           label="Steps (JSON)"
           error={local ?? undefined}
-          hint="Types: http.extract · transform · filter · entity.upsert · observation.write · dataset.write. Field mappings are JSONata expressions over each row."
+          hint="Types: http.extract · file.parse · transform · filter · entity.upsert · observation.write · dataset.write. Field mappings are JSONata expressions over each row."
         >
           <Textarea value={steps} onChange={(e) => check(e.target.value)} className="min-h-80 font-mono text-xs" spellCheck={false} />
         </Field>

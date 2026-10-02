@@ -309,4 +309,42 @@ describe('jobs and public projects', () => {
     expect((await api(admin).post(`/${key}/runs/${again.body.id}/rerun`)).status).toBe(409); // still queued
     await api(admin).post(`/${key}/runs/${again.body.id}/cancel`);
   });
+
+  it('stores uploaded files and runs the jobs that parse them on upload', async () => {
+    const upload = (who: string, text: string, name = 'countries.csv') =>
+      h.app.inject({
+        method: 'PUT',
+        url: `/tenants/${tenantId}/projects/${key}/files/countries?name=${name}&type=text/csv`,
+        headers: { authorization: `Bearer ${who}`, 'content-type': 'application/octet-stream' },
+        payload: Buffer.from(text),
+      });
+    const job = {
+      key: 'country_import',
+      name: 'Country import',
+      runOnUpload: true,
+      steps: [
+        { id: 'read', type: 'file.parse', file: 'countries' },
+        { id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' },
+      ],
+    };
+    expect((await api(admin).post(`/${key}/jobs`, { ...job, key: 'no_file', steps: [job.steps[1]] })).status).toBe(400);
+    expect((await api(admin).post(`/${key}/jobs`, job)).status).toBe(200);
+
+    expect((await upload(vi, 'iso,name\nFJ,Fiji\n')).statusCode).toBe(403);
+    const res = await upload(admin, 'iso;name\nFJ;Fiji\nWS;Samoa\n');
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.file).toMatchObject({ key: 'countries', name: 'countries.csv', size: 26, versions: 1, jobs: [{ key: 'country_import', runOnUpload: true }] });
+    expect(body.runs).toEqual([{ id: expect.any(String), job: 'country_import' }]);
+
+    await drainQueue(await h.cells.forTenant(tenantId), { worker: 'test' });
+    const run = (await api(admin).get(`/${key}/runs/${body.runs[0].id}`)).body;
+    expect(run).toMatchObject({ status: 'succeeded', trigger: 'upload', stats: { rows_parsed: 2, entities_created: 2 } });
+
+    await upload(admin, 'iso,name\nTO,Tonga\n', 'v2.csv');
+    const files = (await api(vi).get(`/${key}/files`)).body;
+    expect(files).toMatchObject([{ key: 'countries', name: 'v2.csv', versions: 2 }]);
+    expect((await api(admin).del(`/${key}/files/countries`)).body).toEqual([]);
+    await drainQueue(await h.cells.forTenant(tenantId), { worker: 'test' }); // the v2 run now fails: no file
+  });
 });

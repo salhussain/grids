@@ -252,7 +252,7 @@ export class FormService {
           .execute(),
         q.select((eb) => eb.fn.countAll<string>().as('n')).executeTakeFirstOrThrow(),
       ]);
-      const names = await this.names(items.map((i) => i.submitted_by));
+      const names = await this.projects.userNames(items.map((i) => i.submitted_by));
       return {
         items: items.map((s) => this.toSubmission(s, names)),
         total: Number(total.n),
@@ -275,16 +275,7 @@ export class FormService {
         .executeTakeFirst(),
     );
     if (!s) throw notFound('Submission');
-    return this.toSubmission(s, await this.names([s.submitted_by]));
-  }
-
-  private async names(ids: (string | null)[]) {
-    const list = [...new Set(ids.filter((x): x is string => !!x))];
-    return new Map(
-      list.length
-        ? (await this.ctx.db.selectFrom('user_identity').select(['id', 'display_name', 'email']).where('id', 'in', list).execute()).map((u) => [u.id, u.display_name ?? u.email])
-        : [],
-    );
+    return this.toSubmission(s, await this.projects.userNames([s.submitted_by]));
   }
 
   private toSubmission(
