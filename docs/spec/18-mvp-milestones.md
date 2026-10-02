@@ -15,10 +15,11 @@
 | **P2** ✅ | **Private project**         | e.g. "Facility asset & inspection management": Country→Region→Facility→Asset hierarchy, inspection survey updating asset condition attributes, CSV asset import job, scoped roles (regional manager sees own region), branded private dashboards |
 | Post-MVP  |                             | Stripe and usage billing, SSO federation UI, DHIS2 connector, Expo offline app plus sync, dedicated-database tier, custom code steps, XLSForm, FHIR, Kubernetes                                                                                  |
 
-**Status.** M3–M6, P1 and P2 are built and covered by integration tests. P2 ships as the health surveillance template (Province → District → Facility, weekly reporting form bound to indicators, province-filtered dashboard) rather than the asset-inspection example. Known gaps against the milestone text, to pick up next:
+**Status.** M3–M6, P1 and P2 are built and covered by integration tests. P2 ships as the health surveillance template (Province → District → Facility, weekly reporting form bound to indicators, map overlays and a province-scoped dashboard) rather than the asset-inspection example. Beyond the milestone text, projects now open in a Tupaia-style explorer (map overlays rolled up per place, a place-scoped dashboard sidebar, hierarchy browser), visuals can be restricted by project permission groups, and jobs run from events, webhooks and sensors as well as schedules (spec §7). Known gaps, to pick up next:
 
 - `file.parse` reads CSV, JSON and NDJSON uploads; Excel and Parquet (DuckDB) are not wired in yet, and uploads are stored in Postgres (20 MB cap) rather than the object store.
 - Freshness is computed and shown everywhere, but no sensor raises alerts or notifications when a dataset goes stale.
+- Permission groups gate visuals and their data endpoints; raw data browsing (Entities, Data tabs) is still governed by the project role alone.
 - Forms cover 12 question types; photo, file, signature, barcode, entity-picker, matrix and repeat groups are still to come.
 - The end-to-end scenarios of §19 (stale badge when the worker stops, a regional user seeing nothing of another region) are not yet Playwright tests.
 - The OpenAPI document generated from the Zod schemas is not published.

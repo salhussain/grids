@@ -128,12 +128,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
 export function BrandMark({ className = 'size-8' }: { className?: string }) {
   const ws = useWorkspace();
   if (ws.theme.logo)
-    return <img src={ws.theme.logo} alt="" className={cx(className, 'object-contain')} />;
+    return <img src={ws.theme.logo} alt="" className={cx(className, 'rounded-lg object-contain')} />;
   return (
     <span
       className={cx(
         className,
-        'flex shrink-0 items-center justify-center bg-accent-600 text-sm font-semibold text-on-accent',
+        'flex shrink-0 items-center justify-center rounded-lg bg-accent-600 text-sm font-semibold text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]',
       )}
     >
       {(ws.theme.appName || ws.tenant.name).slice(0, 1).toUpperCase()}
@@ -152,17 +152,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const variant = ws.theme.sidebar;
   const tone = {
     dark: {
-      root: 'chrome bg-chrome text-zinc-300',
+      root: 'chrome bg-chrome bg-[radial-gradient(120%_60%_at_0%_0%,rgb(255_255_255/0.06),transparent)] text-zinc-300',
       muted: 'text-zinc-500',
-      active: 'border-accent-500 bg-white/[0.08] text-white',
-      hover: 'hover:bg-white/[0.04] hover:text-white',
+      active: 'bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)] [&>svg]:text-accent-500',
+      hover: 'hover:bg-white/[0.05] hover:text-white',
       rule: 'border-white/10',
       title: 'text-white',
     },
     light: {
       root: 'bg-snow text-zinc-700 border-r border-zinc-200',
       muted: 'text-zinc-400',
-      active: 'border-accent-600 bg-accent-50 text-accent-800',
+      active: 'bg-accent-50 text-accent-800 ring-1 ring-accent-100',
       hover: 'hover:bg-zinc-100',
       rule: 'border-zinc-200',
       title: 'text-ink',
@@ -170,7 +170,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     brand: {
       root: 'bg-accent-700 text-on-accent',
       muted: 'opacity-60',
-      active: 'border-on-accent bg-black/20',
+      active: 'bg-black/20',
       hover: 'hover:bg-black/10',
       rule: 'border-black/15',
       title: 'text-on-accent',
@@ -200,7 +200,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <div key={group.section} className="mb-5">
               <div
                 className={cx(
-                  'px-5 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase',
+                  'px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase',
                   tone.muted,
                 )}
               >
@@ -218,8 +218,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     onClick={onNavigate}
                     aria-current={active ? 'page' : undefined}
                     className={cx(
-                      'flex items-center gap-3 border-s-[3px] px-5 py-2 text-sm transition-colors',
-                      active ? tone.active : cx('border-transparent', tone.hover),
+                      'mx-3 mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      active ? tone.active : tone.hover,
                     )}
                   >
                     <item.icon className="size-[18px] shrink-0" strokeWidth={1.75} />

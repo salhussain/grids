@@ -45,7 +45,7 @@ export function ProjectLayout() {
     <ProjectProvider value={ctx}>
       <div className="mb-6 border-b border-zinc-300">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-4">
-          <span className="flex size-11 shrink-0 items-center justify-center text-white" style={{ background: p.color }}>
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]" style={{ background: p.color }}>
             <Icon className="size-[22px]" />
           </span>
           <div className="min-w-0 flex-1">

@@ -118,6 +118,7 @@ function BarWidget({ result, names, scheme, horizontal, stacked, unit }: { resul
         type: 'bar',
         stack: stacked ? 'total' : undefined,
         barMaxWidth: 32,
+        itemStyle: { borderRadius: stacked && keys.length > 1 ? 0 : horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
         barGap: '12%',
         emphasis: { focus: 'series' },
         label: { show: keys.length === 1 && ordered.length <= 12, position: horizontal ? 'right' : 'top', color: ink.muted, fontSize: 11 },

@@ -135,12 +135,12 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
           />
 
           {/* Overlay panel */}
-          <section className="absolute top-4 left-4 z-10 w-[340px] max-w-[calc(100%-2rem)] shadow-2xl shadow-black/40" aria-label="Map overlays">
+          <section className="absolute top-4 left-4 z-10 w-[340px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl shadow-2xl shadow-black/40 ring-1 ring-white/10" aria-label="Map overlays">
             <button
               type="button"
               onClick={() => setListOpen((v) => !v)}
               aria-expanded={listOpen}
-              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start text-[13px] font-semibold tracking-wide text-on-accent uppercase"
+              className="flex w-full items-center justify-between gap-2 rounded-none px-4 py-3 text-start text-[13px] font-semibold tracking-wide text-on-accent uppercase"
               style={{ background: accent }}
             >
               <span className="flex items-center gap-2">
@@ -187,14 +187,14 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
           </section>
 
           {/* Basemap toggle */}
-          <div className="absolute bottom-6 left-4 z-10 flex border border-white/15 bg-[#26272b]/95 text-xs text-white/85 shadow-lg">
+          <div className="absolute bottom-6 left-4 z-10 flex overflow-hidden rounded-lg border border-white/15 bg-[#26272b]/95 text-xs text-white/85 shadow-lg">
             {(
               [
                 ['dark', MapIcon, 'Dark'],
                 ['satellite', Satellite, 'Satellite'],
               ] as const
             ).map(([b, Icon, label]) => (
-              <button key={b} type="button" onClick={() => setBasemap(b)} aria-pressed={basemap === b} className={cx('flex items-center gap-1.5 px-3 py-2', basemap === b ? 'bg-white/12 text-white' : 'hover:bg-white/5')}>
+              <button key={b} type="button" onClick={() => setBasemap(b)} aria-pressed={basemap === b} className={cx('flex items-center gap-1.5 rounded-none px-3 py-2', basemap === b ? 'bg-white/12 text-white' : 'hover:bg-white/5')}>
                 <Icon className="size-3.5" /> {label}
               </button>
             ))}
@@ -211,7 +211,7 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
           type="button"
           onClick={() => setPanelOpen((v) => !v)}
           aria-label={panelOpen ? 'Hide dashboards' : 'Show dashboards'}
-          className="absolute top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-[#26272b] text-white/75 shadow-lg hover:text-white"
+          className="absolute top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-none rounded-s-lg bg-[#26272b] text-white/75 shadow-lg hover:text-white"
           style={{ right: panelOpen ? 'min(520px, 100%)' : 0 }}
         >
           {panelOpen ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
