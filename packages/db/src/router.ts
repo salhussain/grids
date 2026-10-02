@@ -23,12 +23,18 @@ export class TenantRouter<DB = unknown> {
     private readonly connect: (url: string) => Kysely<DB> = (url) => createDb<DB>(url),
   ) {}
 
-  async forTenant(tenantId: string): Promise<Kysely<DB>> {
+  /** Where a tenant's data lives (cached). */
+  async placement(tenantId: string): Promise<TenantPlacement> {
     let placement = this.placements.get(tenantId);
     if (!placement) {
       placement = await this.resolve(tenantId);
       this.placements.set(tenantId, placement);
     }
+    return placement;
+  }
+
+  async forTenant(tenantId: string): Promise<Kysely<DB>> {
+    const placement = await this.placement(tenantId);
     let db = this.pools.get(placement.cellId);
     if (!db) {
       db = this.connect(placement.connectionString);

@@ -118,12 +118,48 @@ export const Widget = z.object({
 export type Widget = z.infer<typeof Widget>;
 export type WidgetInput = z.input<typeof Widget>;
 
+/**
+ * Dashboard parameters shown in its header (spec §9): an area (an entity of
+ * `areaType`; every widget is limited to its subtree) and a period (the window
+ * of time-based widgets).
+ */
+export const DashboardFilters = z.object({
+  areaType: Key.nullable().default(null),
+  period: z.boolean().default(false),
+});
+export type DashboardFilters = z.infer<typeof DashboardFilters>;
+/** Period choices, in hours. */
+export const PERIOD_HOURS = [24, 24 * 7, 24 * 30, 24 * 90, 24 * 365] as const;
+export const DashboardParams = z.object({
+  area: z.uuid().optional(),
+  hours: z.coerce
+    .number()
+    .int()
+    .refine((h) => (PERIOD_HOURS as readonly number[]).includes(h), 'Unsupported period')
+    .optional(),
+});
+export type DashboardParams = z.infer<typeof DashboardParams>;
+
+/**
+ * Binds parameter values into a widget's query: the area replaces the scope's
+ * ancestor, the period replaces the time range (not for latest-value queries).
+ * Entity type and other settings stay as the widget defines them.
+ */
+export function applyParams(spec: QuerySpec, params: DashboardParams, filters: DashboardFilters): QuerySpec {
+  let out: QuerySpec = spec;
+  if (params.area && filters.areaType) out = { ...out, ancestorId: params.area };
+  if (params.hours && filters.period && 'range' in out && !('latest' in out && out.latest))
+    out = { ...out, range: { lastHours: params.hours } } as QuerySpec;
+  return out;
+}
+
 export const DashboardInput = z.object({
   key: Key,
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).default(''),
   widgets: z.array(Widget).max(40).default([]),
   isPublic: z.boolean().default(false),
+  filters: DashboardFilters.default({ areaType: null, period: false }),
 });
 export type DashboardInput = z.input<typeof DashboardInput>;
 export const DashboardDto = z.object({
@@ -133,6 +169,7 @@ export const DashboardDto = z.object({
   description: z.string(),
   widgets: z.array(Widget),
   isPublic: z.boolean(),
+  filters: DashboardFilters,
   updatedAt: z.string(),
 });
 export type DashboardDto = z.infer<typeof DashboardDto>;

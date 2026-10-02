@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   DashboardDto,
   DashboardInput,
+  DashboardParams,
   DataElementDto,
   DataElementInput,
   DatasetDto,
@@ -13,6 +14,8 @@ import {
   EntityTypeDto,
   EntityTypeInput,
   EntityUpdate,
+  FILE_MAX_BYTES,
+  FileDto,
   FormDto,
   FormInput,
   GeoQuery,
@@ -34,9 +37,12 @@ import {
   RunQuery,
   SubmissionDto,
   SubmissionInput,
+  UploadResult,
   pageOf,
 } from '@grids/schema';
 import { actorOf, authenticate, type AuthDeps } from '../auth/plugin.js';
+import { HttpError } from '../errors.js';
+import { streamEvents } from './sse.js';
 
 const T = z.object({ tenantId: z.uuid() });
 const P = T.extend({ project: z.string().min(1).max(63) });
@@ -48,6 +54,18 @@ const FeatureCollection = z.object({ type: z.literal('FeatureCollection'), featu
 export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) => {
   const s = deps.services;
   app.addHook('preHandler', authenticate(deps));
+  // A successful write through this API drops the tenant's cached query results
+  // before the response goes out, so the writer's next read sees its change.
+  app.addHook('onSend', async (req, reply, payload) => {
+    const tenantId = (req.params as { tenantId?: string } | undefined)?.tenantId;
+    const readOnly = (req.routeOptions.config as { readOnly?: boolean }).readOnly;
+    if (tenantId && req.method !== 'GET' && !readOnly && reply.statusCode < 400) s.query.invalidate(tenantId);
+    return payload;
+  });
+  // File uploads are sent as raw bytes; the original name and type travel in the query.
+  app.addContentTypeParser(['application/octet-stream', 'text/csv', 'text/plain', 'application/x-ndjson'], { parseAs: 'buffer', bodyLimit: FILE_MAX_BYTES }, (_req, body, done) =>
+    done(null, body),
+  );
 
   // ----- projects -----
   app.get(
@@ -69,6 +87,12 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
     { schema: { params: P, body: z.object({ archived: z.boolean() }), response: { 200: ProjectDto } } },
     (req) => s.projects.setArchived(actorOf(req), req.params.tenantId, req.params.project, req.body.archived),
   );
+
+  // Live change events for the project (SSE).
+  app.get('/tenants/:tenantId/projects/:project/events', { schema: { params: P } }, async (req, reply) => {
+    const a = await s.projects.access(actorOf(req), req.params.tenantId, req.params.project);
+    await streamEvents(req, reply, (fn) => s.events.subscribe(req.params.tenantId, a.project.id, fn));
+  });
 
   // ----- members -----
   const Members = { 200: z.array(ProjectMemberDto) };
@@ -193,6 +217,36 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   app.post('/tenants/:tenantId/projects/:project/runs/:id/cancel', { schema: { params: PId, response: { 200: RunDetail } } }, (req) =>
     s.jobs.cancel(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
   );
+  app.post('/tenants/:tenantId/projects/:project/runs/:id/rerun', { schema: { params: PId, response: { 202: RunDto } } }, async (req, reply) =>
+    reply.status(202).send(await s.jobs.rerun(actorOf(req), req.params.tenantId, req.params.project, req.params.id)),
+  );
+  const Files = { 200: z.array(FileDto) };
+  app.get('/tenants/:tenantId/projects/:project/files', { schema: { params: P, response: Files } }, (req) =>
+    s.jobs.files(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.put(
+    '/tenants/:tenantId/projects/:project/files/:key',
+    {
+      bodyLimit: FILE_MAX_BYTES,
+      schema: {
+        params: PK,
+        querystring: z.object({ name: z.string().max(255).default(''), type: z.string().max(100).default('application/octet-stream') }),
+        response: { 201: UploadResult },
+      },
+    },
+    async (req, reply) => {
+      if (!Buffer.isBuffer(req.body)) throw new HttpError(415, 'Unsupported media type', 'Send the file body as application/octet-stream.');
+      const res = await s.jobs.upload(actorOf(req), req.params.tenantId, req.params.project, req.params.key, {
+        name: req.query.name || req.params.key,
+        contentType: req.query.type,
+        content: req.body,
+      });
+      return reply.status(201).send(res);
+    },
+  );
+  app.delete('/tenants/:tenantId/projects/:project/files/:key', { schema: { params: PK, response: Files } }, (req) =>
+    s.jobs.deleteFile(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
   app.get('/tenants/:tenantId/projects/:project/datasets', { schema: { params: P, response: { 200: z.array(DatasetDto) } } }, (req) =>
     s.jobs.datasets(actorOf(req), req.params.tenantId, req.params.project),
   );
@@ -209,7 +263,7 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
 
   // ----- query & dashboards -----
-  app.post('/tenants/:tenantId/projects/:project/query', { schema: { params: P, body: QuerySpec, response: { 200: QueryResult } } }, (req) =>
+  app.post('/tenants/:tenantId/projects/:project/query', { config: { readOnly: true }, schema: { params: P, body: QuerySpec, response: { 200: QueryResult } } }, (req) =>
     s.query.query(actorOf(req), req.params.tenantId, req.params.project, req.body),
   );
   const Dashboards = { 200: z.array(DashboardDto) };
@@ -266,12 +320,24 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
     reply.header('cache-control', 'public, max-age=30');
     return s.query.publicView(req.params.tenant, req.params.project);
   });
+  app.get('/public/projects/:tenant/:project/events', { schema: { params: Params } }, async (req, reply) => {
+    const t = await s.query.publicTarget(req.params.tenant, req.params.project);
+    await streamEvents(req, reply, (fn) => s.events.subscribe(t.tenantId, t.projectId, fn), 2_000);
+  });
   app.get(
     '/public/projects/:tenant/:project/dashboards/:dashboard/widgets/:widget',
-    { schema: { params: Params.extend({ dashboard: z.string().max(63), widget: z.string().max(40) }), response: { 200: QueryResult } } },
+    { schema: { params: Params.extend({ dashboard: z.string().max(63), widget: z.string().max(40) }), querystring: DashboardParams, response: { 200: QueryResult } } },
     async (req, reply) => {
       reply.header('cache-control', 'public, max-age=30');
-      return s.query.publicWidget(req.params.tenant, req.params.project, req.params.dashboard, req.params.widget);
+      return s.query.publicWidget(req.params.tenant, req.params.project, req.params.dashboard, req.params.widget, req.query);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/dashboards/:dashboard/areas',
+    { schema: { params: Params.extend({ dashboard: z.string().max(63) }), response: { 200: z.array(z.object({ id: z.string(), name: z.string() })) } } },
+    async (req, reply) => {
+      reply.header('cache-control', 'public, max-age=60');
+      return s.query.publicAreas(req.params.tenant, req.params.project, req.params.dashboard);
     },
   );
 };

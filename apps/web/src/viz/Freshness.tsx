@@ -30,3 +30,18 @@ export function FreshnessBadge({ value, compact }: { value: Freshness | undefine
     </span>
   );
 }
+
+/** Whether change events are streaming (pages refetch on change while live). */
+export function LiveIndicator({ status }: { status: 'connecting' | 'live' | 'offline' }) {
+  if (status === 'connecting') return null;
+  const live = status === 'live';
+  return (
+    <span
+      className={cx('inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-xs whitespace-nowrap', live ? 'border-zinc-300 text-zinc-700' : 'border-zinc-300 text-zinc-500')}
+      title={live ? 'Updates as data changes' : 'Live updates paused; reconnecting. Pages still refresh periodically.'}
+    >
+      <span className={cx('size-1.5', live ? 'bg-emerald-500' : 'bg-zinc-400')} aria-hidden />
+      {live ? 'Live' : 'Reconnecting'}
+    </span>
+  );
+}

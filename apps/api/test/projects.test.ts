@@ -171,10 +171,12 @@ describe('templates, queries and dashboards', () => {
 
   it('lists dashboards and validates their widgets', async () => {
     const ds = (await api(admin).get(`/${key}/dashboards`)).body;
-    expect(ds[0]).toMatchObject({ key: 'overview', isPublic: false });
+    expect(ds[0]).toMatchObject({ key: 'overview', isPublic: false, filters: { areaType: 'province', period: false } });
     expect(ds[0].widgets.length).toBeGreaterThan(5);
     const bad = await api(admin).post(`/${key}/dashboards`, { key: 'x', name: 'X', widgets: [{ id: 'a', type: 'kpi', query: { kind: 'kpi', aggregation: 'median' } }] });
     expect(bad.status).toBe(400);
+    const badFilter = await api(admin).put(`/${key}/dashboards/overview`, { ...ds[0], filters: { areaType: 'planet', period: true } });
+    expect(badFilter.status).toBe(400);
   });
 });
 
@@ -283,6 +285,26 @@ describe('jobs and public projects', () => {
     expect((await h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}/dashboards/live/widgets/nope`)).status).toBe(404);
   });
 
+  it('applies dashboard parameters to public widgets, only within the declared filters', async () => {
+    const tenant = (await h.admin('GET', `/platform/tenants/${tenantId}`)).body;
+    const pub = (path: string) => h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}/dashboards/live${path}`);
+    const live = (await api(admin).get(`/${key}/dashboards`)).body.find((d: { key: string }) => d.key === 'live');
+    expect((await pub('/areas')).body).toEqual([]); // no area filter yet
+    const ireland = (await api(admin).get(`/${key}/entities?type=country&q=Ireland`)).body.items[0];
+    expect((await pub(`/widgets/tracked?area=${ireland.id}`)).status).toBe(200); // ignored without a filter
+
+    await api(admin).put(`/${key}/dashboards/live`, { ...live, filters: { areaType: 'country', period: true } });
+    const areas = (await pub('/areas')).body;
+    expect(areas.map((a: { name: string }) => a.name)).toEqual(expect.arrayContaining(['Ireland', 'United Kingdom']));
+    // A year-long window keeps the fixture's fixed timestamps in range.
+    const all = (await pub('/widgets/tracked?hours=8760')).body.rows[0].value;
+    const ie = (await pub(`/widgets/tracked?area=${ireland.id}&hours=8760`)).body.rows[0].value;
+    expect(all).toBe(2);
+    expect(ie).toBe(1);
+    expect((await pub(`/widgets/tracked?area=${uuidv7()}`)).status).toBe(404); // not an area of this dashboard
+    expect((await pub('/widgets/tracked?hours=5')).status).toBe(400);
+  });
+
   it('keeps private projects private', async () => {
     const tenant = (await h.admin('GET', `/platform/tenants/${tenantId}`)).body;
     expect((await h.call(null, 'GET', `/public/projects/${tenant.slug}/water-points`)).status).toBe(404);
@@ -298,5 +320,53 @@ describe('jobs and public projects', () => {
     expect(bad.status).toBe(400);
     const runs = (await api(admin).get(`/${key}/runs?status=cancelled`)).body;
     expect(runs.total).toBe(1);
+  });
+
+  it('re-runs a finished run as a new run of the same job', async () => {
+    const first = (await api(admin).get(`/${key}/runs?status=cancelled`)).body.items[0];
+    expect((await api(vi).post(`/${key}/runs/${first.id}/rerun`)).status).toBe(403);
+    const again = await api(admin).post(`/${key}/runs/${first.id}/rerun`);
+    expect(again.status).toBe(202);
+    expect(again.body).toMatchObject({ status: 'queued', trigger: 'rerun', jobId: first.jobId });
+    expect((await api(admin).post(`/${key}/runs/${again.body.id}/rerun`)).status).toBe(409); // still queued
+    await api(admin).post(`/${key}/runs/${again.body.id}/cancel`);
+  });
+
+  it('stores uploaded files and runs the jobs that parse them on upload', async () => {
+    const upload = (who: string, text: string, name = 'countries.csv') =>
+      h.app.inject({
+        method: 'PUT',
+        url: `/tenants/${tenantId}/projects/${key}/files/countries?name=${name}&type=text/csv`,
+        headers: { authorization: `Bearer ${who}`, 'content-type': 'application/octet-stream' },
+        payload: Buffer.from(text),
+      });
+    const job = {
+      key: 'country_import',
+      name: 'Country import',
+      runOnUpload: true,
+      steps: [
+        { id: 'read', type: 'file.parse', file: 'countries' },
+        { id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' },
+      ],
+    };
+    expect((await api(admin).post(`/${key}/jobs`, { ...job, key: 'no_file', steps: [job.steps[1]] })).status).toBe(400);
+    expect((await api(admin).post(`/${key}/jobs`, job)).status).toBe(200);
+
+    expect((await upload(vi, 'iso,name\nFJ,Fiji\n')).statusCode).toBe(403);
+    const res = await upload(admin, 'iso;name\nFJ;Fiji\nWS;Samoa\n');
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.file).toMatchObject({ key: 'countries', name: 'countries.csv', size: 26, versions: 1, jobs: [{ key: 'country_import', runOnUpload: true }] });
+    expect(body.runs).toEqual([{ id: expect.any(String), job: 'country_import' }]);
+
+    await drainQueue(await h.cells.forTenant(tenantId), { worker: 'test' });
+    const run = (await api(admin).get(`/${key}/runs/${body.runs[0].id}`)).body;
+    expect(run).toMatchObject({ status: 'succeeded', trigger: 'upload', stats: { rows_parsed: 2, entities_created: 2 } });
+
+    await upload(admin, 'iso,name\nTO,Tonga\n', 'v2.csv');
+    const files = (await api(vi).get(`/${key}/files`)).body;
+    expect(files).toMatchObject([{ key: 'countries', name: 'v2.csv', versions: 2 }]);
+    expect((await api(admin).del(`/${key}/files/countries`)).body).toEqual([]);
+    await drainQueue(await h.cells.forTenant(tenantId), { worker: 'test' }); // the v2 run now fails: no file
   });
 });

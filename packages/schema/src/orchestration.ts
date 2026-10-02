@@ -19,6 +19,16 @@ export const HttpExtractStep = StepBase.extend({
   rows: Expr.optional(),
   timeoutSeconds: z.number().int().min(1).max(120).default(30),
 });
+export const FileParseStep = StepBase.extend({
+  type: z.literal('file.parse'),
+  /** Key of the project file; the latest upload is read. */
+  file: Key,
+  format: z.enum(['auto', 'csv', 'json', 'ndjson']).default('auto'),
+  /** CSV field separator (auto-detected from the header line when omitted). */
+  delimiter: z.enum([',', ';', '\t', '|']).optional(),
+  /** JSONata over the parsed content (CSV: the array of rows) producing the rows; default: the content itself. */
+  rows: Expr.optional(),
+});
 export const TransformStep = StepBase.extend({
   type: z.literal('transform'),
   /** JSONata over each row, returning the new row (objects are merged unless `replace`). */
@@ -58,6 +68,7 @@ export const DatasetWriteStep = StepBase.extend({
 });
 export const JobStep = z.discriminatedUnion('type', [
   HttpExtractStep,
+  FileParseStep,
   TransformStep,
   FilterStep,
   EntityUpsertStep,
@@ -66,7 +77,7 @@ export const JobStep = z.discriminatedUnion('type', [
 ]);
 export type JobStep = z.infer<typeof JobStep>;
 export type JobStepInput = z.input<typeof JobStep>;
-export const STEP_TYPES = ['http.extract', 'transform', 'filter', 'entity.upsert', 'observation.write', 'dataset.write'] as const;
+export const STEP_TYPES = ['http.extract', 'file.parse', 'transform', 'filter', 'entity.upsert', 'observation.write', 'dataset.write'] as const;
 
 /** Five-field cron, e.g. "*\/5 * * * *". */
 const Cron = z
@@ -85,6 +96,8 @@ export const JobInput = z.object({
   maxRetries: z.number().int().min(0).max(10).default(2),
   timeoutSeconds: z.number().int().min(10).max(3600).default(300),
   freshnessMinutes: z.number().int().min(1).max(525_600).nullable().default(null),
+  /** Queue a run whenever a file this job parses is uploaded. */
+  runOnUpload: z.boolean().default(false),
 });
 export type JobInput = z.input<typeof JobInput>;
 
@@ -129,6 +142,7 @@ export const JobDto = z.object({
   maxRetries: z.number().int(),
   timeoutSeconds: z.number().int(),
   freshnessMinutes: z.number().int().nullable(),
+  runOnUpload: z.boolean(),
   nextRunAt: z.string().nullable(),
   lastRun: RunDto.nullable(),
   freshness: Freshness,
@@ -154,3 +168,24 @@ export const DatasetDto = z.object({
   freshness: Freshness,
 });
 export type DatasetDto = z.infer<typeof DatasetDto>;
+
+// ---------------------------------------------------------------- files
+
+export const FILE_MAX_BYTES = 20 * 1024 * 1024;
+export const FileDto = z.object({
+  id: z.string(),
+  key: z.string(),
+  name: z.string(),
+  contentType: z.string(),
+  size: z.number().int(),
+  sha256: z.string(),
+  uploadedBy: z.string().nullable(),
+  uploadedAt: z.string(),
+  /** Earlier uploads under the same key. */
+  versions: z.number().int(),
+  /** Jobs that parse this file. */
+  jobs: z.array(z.object({ key: z.string(), name: z.string(), runOnUpload: z.boolean() })),
+});
+export type FileDto = z.infer<typeof FileDto>;
+export const UploadResult = z.object({ file: FileDto, runs: z.array(z.object({ id: z.string(), job: z.string() })) });
+export type UploadResult = z.infer<typeof UploadResult>;

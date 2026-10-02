@@ -1,17 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
+import { applyParams, type DashboardParams } from '@grids/schema';
 import { applyColorMode, cx, ErrorNotice, Spinner, storedColorMode, type ColorMode } from '@grids/ui';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { usePublicEvents } from '../../live';
 import { applyTheme } from '../../theme';
+import { DashboardFilterBar } from '../../viz/DashboardFilters';
 import { WidgetView } from '../../viz/WidgetView';
 
 /** Anonymous, read-only view of a public project's public dashboards (spec §13). */
 export function PublicProjectPage() {
   const { tenant, project } = useParams({ strict: false }) as { tenant: string; project: string };
   const view = useQuery({ queryKey: ['public', tenant, project], queryFn: () => api.publicProject(tenant, project), retry: false });
+  usePublicEvents(tenant, project);
   const [selected, setSelected] = useState<string | null>(null);
+  const [params, setParams] = useState<DashboardParams>({});
+  const dashKey = view.data ? (view.data.dashboards.find((d) => d.key === selected) ?? view.data.dashboards[0])?.key : undefined;
+  const hasArea = !!view.data?.dashboards.find((d) => d.key === dashKey)?.filters.areaType;
+  useEffect(() => setParams({}), [dashKey]);
+  const areas = useQuery({
+    queryKey: ['public-areas', tenant, project, dashKey],
+    queryFn: () => api.publicAreas(tenant, project, dashKey!),
+    enabled: hasArea,
+  });
   const [mode, setMode] = useState<ColorMode>(storedColorMode);
   useEffect(() => applyColorMode(mode), [mode]);
   useEffect(() => {
@@ -71,10 +84,18 @@ export function PublicProjectPage() {
         )}
         {current ? (
           <>
-            {current.description && <p className="text-sm text-zinc-600">{current.description}</p>}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-zinc-600">{current.description}</p>
+              <DashboardFilterBar filters={current.filters} params={params} onChange={setParams} areas={areas.data} areaLabel="All areas" />
+            </div>
             <div className="grid grid-cols-12 gap-4">
               {current.widgets.map((w) => (
-                <WidgetView key={w.id} widget={w} queryKey={['public-widget', tenant, project, current.key]} load={() => api.publicWidget(tenant, project, current.key, w.id)} />
+                <WidgetView
+                  key={w.id}
+                  widget={w.query ? { ...w, query: applyParams(w.query, params, current.filters) } : w}
+                  queryKey={['public-widget', tenant, project, current.key, params]}
+                  load={() => api.publicWidget(tenant, project, current.key, w.id, params)}
+                />
               ))}
             </div>
           </>

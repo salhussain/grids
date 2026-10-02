@@ -4,7 +4,8 @@ import { ErrorNotice, Loading, cx } from '@grids/ui';
 import { BarChart3, Boxes, ClipboardList, Database, Globe, Lock, Map as MapIcon, Settings, Users, Workflow } from 'lucide-react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
-import { FreshnessBadge } from '../../viz/Freshness';
+import { useProjectEvents } from '../../live';
+import { FreshnessBadge, LiveIndicator } from '../../viz/Freshness';
 import { iconOf, ProjectProvider, projectCtx } from './context';
 
 const TABS = [
@@ -23,6 +24,7 @@ export function ProjectLayout() {
   const { project: key } = useParams({ strict: false }) as { project: string };
   const path = useRouterState({ select: (s) => s.location.pathname });
   const q = useQuery({ queryKey: ['project', ws.tenant.id, key], queryFn: () => api.project(ws.tenant.id, key) });
+  const live = useProjectEvents(ws.tenant.id, key);
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorNotice error={q.error} />;
   const p = q.data;
@@ -48,6 +50,7 @@ export function ProjectLayout() {
             </span>
             {p.archived && <span className="border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-amber-800">Archived</span>}
             <FreshnessBadge value={p.freshness} />
+            <LiveIndicator status={live} />
           </div>
         </div>
         <nav aria-label="Project" className="-mb-px flex gap-1 overflow-x-auto">
