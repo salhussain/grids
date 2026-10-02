@@ -45,7 +45,7 @@ import { EntityPage } from './pages/projects/EntityPage';
 import { FormBuilder } from './pages/projects/FormBuilder';
 import { FormFillPage, FormsTab } from './pages/projects/FormsTab';
 import { JobsTab } from './pages/projects/JobsTab';
-import { MapTab } from './pages/projects/MapTab';
+import { OverlaysTab } from './pages/projects/OverlaysTab';
 import { ProjectLayout } from './pages/projects/ProjectLayout';
 import { ProjectsPage } from './pages/projects/ProjectsPage';
 import { PublicProjectPage } from './pages/projects/PublicProjectPage';
@@ -296,6 +296,7 @@ function WorkspaceShell() {
     queryFn: () => api.workspace(tenantId),
   });
   const [open, setOpen] = useState(false);
+  const bare = useRouterState({ select: (st) => /^\/o\/[^/]+\/p\/[^/]+\/?$/.test(st.location.pathname) });
   useEffect(() => {
     if (ws.data) {
       applyTheme(ws.data.theme);
@@ -315,6 +316,15 @@ function WorkspaceShell() {
       </div>
     );
 
+  // A project's explorer is full-screen, without the workspace chrome.
+  if (bare)
+    return (
+      <WorkspaceProvider value={ws.data}>
+        <WorkspaceI18n>
+          <Outlet />
+        </WorkspaceI18n>
+      </WorkspaceProvider>
+    );
   return (
     <WorkspaceProvider value={ws.data}>
       <WorkspaceI18n>
@@ -415,8 +425,9 @@ export const projectRoute = createRoute({
 });
 const pr = () => projectRoute;
 const projectTree = projectRoute.addChildren([
-  createRoute({ getParentRoute: pr, path: '/', component: DashboardsTab }),
-  createRoute({ getParentRoute: pr, path: '/map', component: MapTab }),
+  createRoute({ getParentRoute: pr, path: '/', component: () => null }),
+  createRoute({ getParentRoute: pr, path: '/dashboards', component: DashboardsTab }),
+  createRoute({ getParentRoute: pr, path: '/overlays', component: OverlaysTab }),
   createRoute({ getParentRoute: pr, path: '/entities', component: EntitiesTab }),
   createRoute({ getParentRoute: pr, path: '/entities/$entityId', component: EntityPage }),
   createRoute({ getParentRoute: pr, path: '/data', component: DataTab }),

@@ -105,6 +105,15 @@ export const api = {
     request<Page<S.RunDto>>('GET', `${t(id)}/projects/${p}/runs${qs(query)}`),
   run: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
+  explore: (id: string, p: string, entity?: string | null) =>
+    request<S.ExploreDto>('GET', `${t(id)}/projects/${p}/explore${qs({ entity })}`),
+  searchPlaces: (id: string, p: string, q: string) => request<S.SearchHit[]>('GET', `${t(id)}/projects/${p}/search${qs({ q })}`),
+  overlays: (id: string, p: string) => request<S.MapOverlayDto[]>('GET', `${t(id)}/projects/${p}/overlays`),
+  saveOverlay: (id: string, p: string, input: In<typeof S.MapOverlayInput>, key?: string) =>
+    request<S.MapOverlayDto[]>(key ? 'PUT' : 'POST', `${t(id)}/projects/${p}/overlays${key ? `/${key}` : ''}`, input),
+  deleteOverlay: (id: string, p: string, key: string) => request<S.MapOverlayDto[]>('DELETE', `${t(id)}/projects/${p}/overlays/${key}`),
+  overlayValues: (id: string, p: string, key: string, entity?: string | null) =>
+    request<S.OverlayResult>('GET', `${t(id)}/projects/${p}/overlays/${key}/values${qs({ entity })}`),
   files: (id: string, p: string) => request<S.FileDto[]>('GET', `${t(id)}/projects/${p}/files`),
   uploadFile: (id: string, p: string, key: string, file: File) =>
     request<S.UploadResult>('PUT', `${t(id)}/projects/${p}/files/${key}${qs({ name: file.name, type: file.type || undefined })}`, file),
@@ -140,6 +149,14 @@ export const api = {
       undefined,
       { anonymous: true },
     ),
+  publicExplore: (tenant: string, project: string, entity?: string | null) =>
+    request<S.ExploreDto>('GET', `/public/projects/${tenant}/${project}/explore${qs({ entity })}`, undefined, { anonymous: true }),
+  publicOverlays: (tenant: string, project: string) =>
+    request<S.MapOverlayDto[]>('GET', `/public/projects/${tenant}/${project}/overlays`, undefined, { anonymous: true }),
+  publicOverlay: (tenant: string, project: string, key: string, entity?: string | null) =>
+    request<S.OverlayResult>('GET', `/public/projects/${tenant}/${project}/overlays/${key}/values${qs({ entity })}`, undefined, { anonymous: true }),
+  publicSearch: (tenant: string, project: string, q: string) =>
+    request<S.SearchHit[]>('GET', `/public/projects/${tenant}/${project}/search${qs({ q })}`, undefined, { anonymous: true }),
   publicAreas: (tenant: string, project: string, dashboard: string) =>
     request<{ id: string; name: string }[]>('GET', `/public/projects/${tenant}/${project}/dashboards/${dashboard}/areas`, undefined, { anonymous: true }),
 

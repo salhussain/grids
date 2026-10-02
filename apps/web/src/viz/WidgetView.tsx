@@ -187,10 +187,12 @@ export interface WidgetViewProps {
   names?: Record<string, string>;
   onSelectEntity?: (id: string) => void;
   actions?: React.ReactNode;
+  /** `stack`: a narrow column (explorer sidebar): full width, KPIs two-up. */
+  layout?: 'grid' | 'stack';
 }
 
 /** One dashboard tile: fetches its query and renders by type. */
-export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity, actions }: WidgetViewProps) {
+export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity, actions, layout = 'grid' }: WidgetViewProps) {
   const scheme = useScheme();
   const live = widget.options.refreshSeconds;
   const q = useQuery({
@@ -229,8 +231,11 @@ export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity,
   const flush = widget.type === 'map';
   return (
     <section
-      className={cx('col-span-12 flex min-w-0 flex-col border border-zinc-200 bg-snow', SPAN[widget.w])}
-      style={{ minHeight: widget.h * ROW_HEIGHT }}
+      className={cx(
+        'flex min-w-0 flex-col border border-zinc-200 bg-snow',
+        layout === 'stack' ? (widget.type === 'kpi' ? 'col-span-6' : 'col-span-12') : cx('col-span-12', SPAN[widget.w]),
+      )}
+      style={{ minHeight: layout === 'stack' ? (widget.type === 'kpi' ? ROW_HEIGHT : Math.min(widget.h, 3) * ROW_HEIGHT) : widget.h * ROW_HEIGHT }}
       aria-label={widget.title || widget.type}
     >
       {(widget.title || actions) && (

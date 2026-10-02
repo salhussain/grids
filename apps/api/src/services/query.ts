@@ -400,13 +400,17 @@ export class QueryService {
 
   async publicView(tenantSlug: string, projectKey: string): Promise<PublicProjectDto> {
     const { tenant, project, theme } = await this.publicProject(tenantSlug, projectKey);
-    const dashboards = await this.projects.cellTx(tenant.id, (tx) =>
-      tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).orderBy('sort').execute(),
+    const [dashboards, elements] = await this.projects.cellTx(tenant.id, (tx) =>
+      Promise.all([
+        tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).orderBy('sort').execute(),
+        tx.selectFrom('data_element').select(['key', 'name', 'unit']).where('project_id', '=', project.id).orderBy('key').execute(),
+      ]),
     );
     return {
       tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor },
       project: { key: project.key, name: project.name, description: project.description, color: project.color },
       dashboards: dashboards.map((d) => this.toDashboard(d)),
+      elements,
     };
   }
 

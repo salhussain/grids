@@ -56,7 +56,7 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
     p.districts.map((d, di) => {
       const lon = p.lon + (di ? 0.35 : -0.3);
       const lat = p.lat + (di ? -0.2 : 0.15);
-      return { code: `${p.code}-${di + 1}`, name: d, parentCode: p.code, lon, lat, province: pi, outline: island(shape, lon, lat, 0.3, 0.2) };
+      return { code: `${p.code}-${di + 1}`, name: d, parentCode: p.code, lon, lat, province: pi, outline: island(shape, lon, lat, 0.22, 0.15) };
     }),
   );
   await entities(
@@ -94,7 +94,7 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
           catchment_population: r.int(3, 40) * 1000,
           in_charge: r.pick(['Sr. Mere Tuilagi', 'Dr. Ana Kaufusi', 'Mr. Joseph Narayan', 'Sr. Litia Waqa', 'Dr. Sione Taufa', 'Ms. Priya Lal']),
         },
-        geometry: { type: 'Point' as const, coordinates: [d.lon + (r.next() - 0.5) * 0.3, d.lat + (r.next() - 0.5) * 0.2] },
+        geometry: { type: 'Point' as const, coordinates: [d.lon + (r.next() - 0.5) * 0.24, d.lat + (r.next() - 0.5) * 0.16] },
       };
     }),
   );

@@ -183,5 +183,7 @@ export const PublicProjectDto = z.object({
   tenant: z.object({ name: z.string(), slug: z.string(), logo: z.string().nullable(), primaryColor: z.string() }),
   project: z.object({ key: z.string(), name: z.string(), description: z.string(), color: z.string() }),
   dashboards: z.array(DashboardDto),
+  /** Data element names, for chart legends. */
+  elements: z.array(z.object({ key: z.string(), name: z.string(), unit: z.string() })).default([]),
 });
 export type PublicProjectDto = z.infer<typeof PublicProjectDto>;
