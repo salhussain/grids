@@ -7,7 +7,9 @@ import {
   EntityTypeInput,
   FormDefinition,
   JobInput,
+  MapOverlayInput as MapOverlayInputSchema,
   uuidv7,
+  type MapOverlayInput,
   type DashboardInput as DashboardIn,
   type DataElementInput as ElementIn,
   type EntityTypeInput as TypeIn,
@@ -105,6 +107,28 @@ export async function job(tx: Tx, c: TemplateCtx, raw: JobIn) {
     .execute();
   await syncSchedule(tx, { id, tenantId: c.tenantId, schedule: j.schedule, timezone: j.timezone, enabled: j.enabled });
   return id;
+}
+
+export async function overlay(tx: Tx, c: TemplateCtx, raw: MapOverlayInput) {
+  const { key, isPublic, ...config } = MapOverlayInputSchema.parse(raw);
+  const n = await tx.selectFrom('map_overlay').select((eb) => eb.fn.countAll<string>().as('n')).where('project_id', '=', c.projectId).executeTakeFirstOrThrow();
+  await tx
+    .insertInto('map_overlay')
+    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key, is_public: isPublic, config: JSON.stringify(config), sort: Number(n.n) })
+    .execute();
+}
+
+/** An irregular island-like polygon around a centre (radii in degrees). */
+export function island(r: ReturnType<typeof rng>, lon: number, lat: number, rx: number, ry: number, points = 18) {
+  const ring: [number, number][] = [];
+  const phase = r.next() * Math.PI * 2;
+  for (let i = 0; i < points; i++) {
+    const a = (i / points) * Math.PI * 2;
+    const k = 0.72 + 0.18 * Math.sin(a * 3 + phase) + r.next() * 0.22;
+    ring.push([Math.round((lon + Math.cos(a) * rx * k) * 1e5) / 1e5, Math.round((lat + Math.sin(a) * ry * k) * 1e5) / 1e5]);
+  }
+  ring.push(ring[0]!);
+  return { type: 'Polygon' as const, coordinates: [ring] };
 }
 
 export async function dashboard(tx: Tx, c: TemplateCtx, raw: DashboardIn, sort = 0) {

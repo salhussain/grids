@@ -14,6 +14,7 @@ import {
   EntityTypeDto,
   EntityTypeInput,
   EntityUpdate,
+  ExploreDto,
   FILE_MAX_BYTES,
   FileDto,
   FormDto,
@@ -22,7 +23,10 @@ import {
   ImportRowsInput,
   JobDto,
   JobInput,
+  MapOverlayDto,
+  MapOverlayInput,
   ObservationBatch,
+  OverlayResult,
   PageQuery,
   ProjectDto,
   ProjectInput,
@@ -35,6 +39,7 @@ import {
   RunDetail,
   RunDto,
   RunQuery,
+  SearchHit,
   SubmissionDto,
   SubmissionInput,
   UploadResult,
@@ -280,6 +285,35 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
     s.query.deleteDashboard(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
   );
 
+  // ----- explorer & map overlays -----
+  const Overlays = { 200: z.array(MapOverlayDto) };
+  const At = z.object({ entity: z.uuid().optional() });
+  app.get('/tenants/:tenantId/projects/:project/explore', { schema: { params: P, querystring: At, response: { 200: ExploreDto } } }, (req) =>
+    s.explore.explore(actorOf(req), req.params.tenantId, req.params.project, req.query.entity ?? null),
+  );
+  app.get(
+    '/tenants/:tenantId/projects/:project/search',
+    { schema: { params: P, querystring: z.object({ q: z.string().max(100) }), response: { 200: z.array(SearchHit) } } },
+    (req) => s.explore.search(actorOf(req), req.params.tenantId, req.params.project, req.query.q),
+  );
+  app.get('/tenants/:tenantId/projects/:project/overlays', { schema: { params: P, response: Overlays } }, (req) =>
+    s.explore.overlays(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/overlays', { schema: { params: P, body: MapOverlayInput, response: Overlays } }, (req) =>
+    s.explore.saveOverlay(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/overlays/:key', { schema: { params: PK, body: MapOverlayInput, response: Overlays } }, (req) =>
+    s.explore.saveOverlay(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/overlays/:key', { schema: { params: PK, response: Overlays } }, (req) =>
+    s.explore.deleteOverlay(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
+  app.get(
+    '/tenants/:tenantId/projects/:project/overlays/:key/values',
+    { schema: { params: PK, querystring: At, response: { 200: OverlayResult } } },
+    (req) => s.explore.overlay(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.query.entity ?? null),
+  );
+
   // ----- forms & submissions -----
   const Forms = { 200: z.array(FormDto) };
   app.get('/tenants/:tenantId/projects/:project/forms', { schema: { params: P, response: Forms } }, (req) =>
@@ -320,6 +354,32 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
     reply.header('cache-control', 'public, max-age=30');
     return s.query.publicView(req.params.tenant, req.params.project);
   });
+  const At = z.object({ entity: z.uuid().optional() });
+  const cache = (reply: { header(k: string, v: string): unknown }) => reply.header('cache-control', 'public, max-age=30');
+  app.get('/public/projects/:tenant/:project/explore', { schema: { params: Params, querystring: At, response: { 200: ExploreDto } } }, async (req, reply) => {
+    cache(reply);
+    return s.explore.publicExplore(req.params.tenant, req.params.project, req.query.entity ?? null);
+  });
+  app.get('/public/projects/:tenant/:project/overlays', { schema: { params: Params, response: { 200: z.array(MapOverlayDto) } } }, async (req, reply) => {
+    cache(reply);
+    return s.explore.publicOverlays(req.params.tenant, req.params.project);
+  });
+  app.get(
+    '/public/projects/:tenant/:project/overlays/:key/values',
+    { schema: { params: Params.extend({ key: z.string().max(63) }), querystring: At, response: { 200: OverlayResult } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicOverlay(req.params.tenant, req.params.project, req.params.key, req.query.entity ?? null);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/search',
+    { schema: { params: Params, querystring: z.object({ q: z.string().max(100) }), response: { 200: z.array(SearchHit) } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicSearch(req.params.tenant, req.params.project, req.query.q);
+    },
+  );
   app.get('/public/projects/:tenant/:project/events', { schema: { params: Params } }, async (req, reply) => {
     const t = await s.query.publicTarget(req.params.tenant, req.params.project);
     await streamEvents(req, reply, (fn) => s.events.subscribe(t.tenantId, t.projectId, fn), 2_000);

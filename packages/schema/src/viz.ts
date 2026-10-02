@@ -131,6 +131,8 @@ export type DashboardFilters = z.infer<typeof DashboardFilters>;
 /** Period choices, in hours. */
 export const PERIOD_HOURS = [24, 24 * 7, 24 * 30, 24 * 90, 24 * 365] as const;
 export const DashboardParams = z.object({
+  /** The place selected on the explorer: always scopes every widget. */
+  entity: z.uuid().optional(),
   area: z.uuid().optional(),
   hours: z.coerce
     .number()
@@ -141,12 +143,14 @@ export const DashboardParams = z.object({
 export type DashboardParams = z.infer<typeof DashboardParams>;
 
 /**
- * Binds parameter values into a widget's query: the area replaces the scope's
+ * Binds parameter values into a widget's query: the explorer's selected place
+ * (`entity`), or the dashboard's area filter when chosen, replaces the scope's
  * ancestor, the period replaces the time range (not for latest-value queries).
  * Entity type and other settings stay as the widget defines them.
  */
 export function applyParams(spec: QuerySpec, params: DashboardParams, filters: DashboardFilters): QuerySpec {
   let out: QuerySpec = spec;
+  if (params.entity) out = { ...out, ancestorId: params.entity };
   if (params.area && filters.areaType) out = { ...out, ancestorId: params.area };
   if (params.hours && filters.period && 'range' in out && !('latest' in out && out.latest))
     out = { ...out, range: { lastHours: params.hours } } as QuerySpec;

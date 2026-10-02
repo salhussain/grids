@@ -52,7 +52,7 @@ const round = (v: unknown) => (v === null || v === undefined ? null : Math.round
  */
 export class QueryService {
   /** Result cache: tenant|project|scope|spec → result (insertion-ordered for LRU eviction). */
-  private readonly cache = new Map<string, { at: number; result: QueryResult }>();
+  private readonly cache = new Map<string, { at: number; result: unknown }>();
 
   constructor(
     private readonly ctx: ServiceContext,
@@ -78,13 +78,13 @@ export class QueryService {
    * cache is only used while change events are flowing for the tenant's cell, so
    * results never outlive a data change by more than the notification latency.
    */
-  private async cached(tenantId: string, projectId: string, rootPath: string | null, spec: QuerySpec, compute: () => Promise<QueryResult>): Promise<QueryResult> {
+  async cached<T>(tenantId: string, projectId: string, rootPath: string | null, spec: unknown, compute: () => Promise<T>): Promise<T> {
     const live = this.events ? await this.events.ensure(tenantId).catch(() => false) : false;
     if (!live) return compute();
     const key = `${tenantId}|${projectId}|${rootPath ?? '*'}|${JSON.stringify(spec)}`;
     const hit = this.cache.get(key);
     const now = Date.now();
-    if (hit && now - hit.at < this.cacheOpts.ttlMs) return hit.result;
+    if (hit && now - hit.at < this.cacheOpts.ttlMs) return hit.result as T;
     const result = await compute();
     this.cache.delete(key);
     this.cache.set(key, { at: now, result });
@@ -387,7 +387,7 @@ export class QueryService {
 
   // ---------- public projects (anonymous, read-only) ----------
 
-  private async publicProject(tenantSlug: string, projectKey: string) {
+  async publicProject(tenantSlug: string, projectKey: string) {
     const t = await this.ctx.db.selectFrom('tenant').select(['id', 'name', 'slug', 'status']).where('slug', '=', tenantSlug).executeTakeFirst();
     if (!t || t.status !== 'active') throw notFound('Project');
     return this.projects.cellTx(t.id, async (tx) => {
@@ -410,15 +410,10 @@ export class QueryService {
     };
   }
 
-  private async areaExists(tx: Tx, projectId: string, typeKey: string, id: string) {
-    return !!(await tx
-      .selectFrom('entity as e')
-      .innerJoin('entity_type as t', 't.id', 'e.type_id')
-      .select('e.id')
-      .where('e.project_id', '=', projectId)
-      .where('t.key', '=', typeKey)
-      .where('e.id', '=', id)
-      .executeTakeFirst());
+  private async areaExists(tx: Tx, projectId: string, typeKey: string | null, id: string) {
+    let q = tx.selectFrom('entity as e').innerJoin('entity_type as t', 't.id', 'e.type_id').select('e.id').where('e.project_id', '=', projectId).where('e.id', '=', id);
+    if (typeKey) q = q.where('t.key', '=', typeKey);
+    return !!(await q.executeTakeFirst());
   }
 
   /** Choices for a public dashboard's area filter. */
@@ -463,6 +458,7 @@ export class QueryService {
       const filters = DashboardFilters.parse(d.filters ?? {});
       // Anonymous viewers may only pick areas of the dashboard's area type in this project.
       if (params.area && filters.areaType && !(await this.areaExists(tx, project.id, filters.areaType, params.area))) throw notFound('Area');
+      if (params.entity && !(await this.areaExists(tx, project.id, null, params.entity))) throw notFound('Place');
       return applyParams(w.query, params, filters);
     });
     return this.cached(tenant.id, project.id, null, spec, () => this.projects.cellTx(tenant.id, (tx) => this.run(tx, project.id, null, spec)));

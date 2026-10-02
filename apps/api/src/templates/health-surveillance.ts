@@ -1,4 +1,4 @@
-import { dashboard, elements, entities, form, observations, rng, types, weekStart, type TemplateCtx, type Tx } from './kit.js';
+import { dashboard, elements, entities, form, island, observations, overlay, rng, types, weekStart, type TemplateCtx, type Tx } from './kit.js';
 
 // Fictional geography (Pacific island setting) for the demo; replace via CSV import.
 const PROVINCES = [
@@ -20,8 +20,8 @@ const TYPES = ['Hospital', 'Health centre', 'Aid post'] as const;
  */
 export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date()) {
   await types(tx, c, [
-    { key: 'province', name: 'Province', plural: 'Provinces', icon: 'map', color: '#005d5d', geometry: 'point', attributes: [{ key: 'population', label: 'Population', type: 'integer' }] },
-    { key: 'district', name: 'District', plural: 'Districts', icon: 'map-pin', color: '#007d79', geometry: 'point', parentTypes: ['province'], attributes: [{ key: 'population', label: 'Population', type: 'integer' }] },
+    { key: 'province', name: 'Province', plural: 'Provinces', icon: 'map', color: '#005d5d', geometry: 'polygon', attributes: [{ key: 'population', label: 'Population', type: 'integer' }] },
+    { key: 'district', name: 'District', plural: 'Districts', icon: 'map-pin', color: '#007d79', geometry: 'polygon', parentTypes: ['province'], attributes: [{ key: 'population', label: 'Population', type: 'integer' }] },
     {
       key: 'facility',
       name: 'Facility',
@@ -50,20 +50,31 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
   ]);
 
   const r = rng(20261002);
+  // Island-shaped outlines (a separate generator keeps the seeded figures stable).
+  const shape = rng(7);
+  const districts = PROVINCES.flatMap((p, pi) =>
+    p.districts.map((d, di) => {
+      const lon = p.lon + (di ? 0.35 : -0.3);
+      const lat = p.lat + (di ? -0.2 : 0.15);
+      return { code: `${p.code}-${di + 1}`, name: d, parentCode: p.code, lon, lat, province: pi, outline: island(shape, lon, lat, 0.3, 0.2) };
+    }),
+  );
   await entities(
     tx,
     c,
     'province',
-    PROVINCES.map((p) => ({ code: p.code, name: p.name, attributes: { population: r.int(60, 220) * 1000 }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })),
-  );
-  const districts = PROVINCES.flatMap((p, pi) =>
-    p.districts.map((d, di) => ({ code: `${p.code}-${di + 1}`, name: d, parentCode: p.code, lon: p.lon + (di ? 0.35 : -0.3), lat: p.lat + (di ? -0.2 : 0.15), province: pi })),
+    PROVINCES.map((p, pi) => ({
+      code: p.code,
+      name: p.name,
+      attributes: { population: r.int(60, 220) * 1000 },
+      geometry: { type: 'MultiPolygon', coordinates: districts.filter((d) => d.province === pi).map((d) => d.outline.coordinates) },
+    })),
   );
   await entities(
     tx,
     c,
     'district',
-    districts.map((d) => ({ code: d.code, name: d.name, parentCode: d.parentCode, attributes: { population: r.int(20, 90) * 1000 }, geometry: { type: 'Point', coordinates: [d.lon, d.lat] } })),
+    districts.map((d) => ({ code: d.code, name: d.name, parentCode: d.parentCode, attributes: { population: r.int(20, 90) * 1000 }, geometry: d.outline })),
   );
   let place = 0;
   const facilities = districts.flatMap((d) =>
@@ -83,7 +94,7 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
           catchment_population: r.int(3, 40) * 1000,
           in_charge: r.pick(['Sr. Mere Tuilagi', 'Dr. Ana Kaufusi', 'Mr. Joseph Narayan', 'Sr. Litia Waqa', 'Dr. Sione Taufa', 'Ms. Priya Lal']),
         },
-        geometry: { type: 'Point' as const, coordinates: [d.lon + (r.next() - 0.5) * 0.4, d.lat + (r.next() - 0.5) * 0.3] },
+        geometry: { type: 'Point' as const, coordinates: [d.lon + (r.next() - 0.5) * 0.3, d.lat + (r.next() - 0.5) * 0.2] },
       };
     }),
   );
@@ -185,4 +196,13 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
       { id: 'facilities', type: 'table', title: 'Facilities', w: 6, h: 3, query: { kind: 'table', entityType: 'facility', columns: ['name', 'parent', 'facility_type', 'beds', 'in_charge'], limit: 50 } },
     ],
   });
+
+  const month = 24 * 28;
+  await overlay(tx, c, { key: 'ili_4w', name: 'Influenza-like illness (4 weeks)', group: 'Disease surveillance', element: 'ili_cases', hours: month, palette: 'heat' });
+  await overlay(tx, c, { key: 'malaria_4w', name: 'Malaria cases (4 weeks)', group: 'Disease surveillance', element: 'malaria_cases', hours: month, palette: 'purples' });
+  await overlay(tx, c, { key: 'diarrhoea_4w', name: 'Acute diarrhoea (4 weeks)', group: 'Disease surveillance', element: 'diarrhoea_cases', hours: month, palette: 'blues' });
+  await overlay(tx, c, { key: 'measles_12w', name: 'Suspected measles (12 weeks)', group: 'Disease surveillance', element: 'measles_suspected', hours: week * 12, palette: 'reds', thresholds: [1, 3, 6] });
+  await overlay(tx, c, { key: 'ili_facilities', name: 'ILI by facility (latest report)', group: 'Disease surveillance', element: 'ili_cases', hours: null, level: 'facility', palette: 'heat', thresholds: [5, 12, 25] });
+  await overlay(tx, c, { key: 'stockouts_4w', name: 'Stock-out days (4 weeks)', group: 'Health system', element: 'stockout_days', hours: month, palette: 'performance', thresholds: [1, 5, 10], unit: 'days' });
+  await overlay(tx, c, { key: 'deaths_12w', name: 'Deaths, all causes (12 weeks)', group: 'Health system', element: 'deaths', hours: week * 12, palette: 'greens' });
 }

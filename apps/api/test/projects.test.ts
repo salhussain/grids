@@ -178,6 +178,60 @@ describe('templates, queries and dashboards', () => {
     const badFilter = await api(admin).put(`/${key}/dashboards/overview`, { ...ds[0], filters: { areaType: 'planet', period: true } });
     expect(badFilter.status).toBe(400);
   });
+
+  it('explores the hierarchy with overlays that roll up each place', async () => {
+    const p = api(admin);
+    const top = (await p.get(`/${key}/explore`)).body;
+    expect(top).toMatchObject({ entity: null, ancestors: [], childLevel: 'Provinces', self: null });
+    expect(top.children.features).toHaveLength(4);
+    expect(top.children.features[0].geometry.type).toBe('MultiPolygon');
+    expect(top.bounds).toHaveLength(4);
+
+    const overlays = (await p.get(`/${key}/overlays`)).body;
+    expect(overlays.map((o: { key: string }) => o.key)).toContain('ili_4w');
+    expect(overlays.find((o: { key: string }) => o.key === 'ili_4w')).toMatchObject({ group: 'Disease surveillance', elementName: 'Influenza-like illness', palette: 'heat' });
+
+    // Province values roll up their facilities' reports; the sum over provinces is the whole project.
+    const provinces = (await p.get(`/${key}/overlays/ili_4w/values`)).body;
+    const total = provinces.features.features.reduce((s: number, f: { properties: { value: number } }) => s + f.properties.value, 0);
+    const kpi = (await p.post(`/${key}/query`, { kind: 'kpi', element: 'ili_cases', range: { lastHours: 24 * 28 } })).body.rows[0].value;
+    expect(total).toBe(kpi);
+    expect(provinces.max).toBeGreaterThanOrEqual(provinces.min);
+
+    const central = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Central');
+    const inCentral = (await p.get(`/${key}/explore?entity=${central.id}`)).body;
+    expect(inCentral).toMatchObject({ entity: { name: 'Central', type: { key: 'province' } }, childLevel: 'Districts' });
+    expect(inCentral.children.features.map((f: { properties: { name: string } }) => f.properties.name)).toEqual(['Harbourside', 'Highlands']);
+    expect(inCentral.self.geometry.type).toBe('MultiPolygon');
+    const harbour = inCentral.children.features[0];
+    expect((await p.get(`/${key}/explore?entity=${harbour.id}`)).body.ancestors.map((a: { name: string }) => a.name)).toEqual(['Central']);
+
+    // Overlays with a level show those places under the selection.
+    const facilities = (await p.get(`/${key}/overlays/ili_facilities/values?entity=${central.id}`)).body.features.features;
+    expect(facilities).toHaveLength(6);
+    expect(facilities[0].geometry.type).toBe('Point');
+
+    const hits = (await p.get(`/${key}/search?q=harbour`)).body;
+    expect(hits[0]).toMatchObject({ name: 'Harbourside', path: 'Central' });
+
+    // Scoped members start at their own place and can't leave it.
+    await p.put(`/${key}/members`, { userId: await h.userId(tenantId, 'ed@ih.org'), role: 'viewer', rootEntityId: central.id });
+    expect((await api(ed).get(`/${key}/explore`)).body.entity.name).toBe('Central');
+    const other = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Northern');
+    expect((await api(ed).get(`/${key}/explore?entity=${other.id}`)).status).toBe(404);
+    expect((await api(ed).get(`/${key}/search?q=waimoana`)).body).toEqual([]);
+    expect((await api(ed).post(`/${key}/overlays`, { key: 'x', name: 'X', element: 'ili_cases' })).status).toBe(403);
+  });
+
+  it('validates overlays', async () => {
+    const p = api(admin);
+    expect((await p.post(`/${key}/overlays`, { key: 'bad', name: 'Bad', element: 'nope' })).status).toBe(400);
+    expect((await p.post(`/${key}/overlays`, { key: 'bad', name: 'Bad', element: 'deaths', level: 'planet' })).status).toBe(400);
+    const saved = (await p.post(`/${key}/overlays`, { key: 'deaths_x', name: 'Deaths', element: 'deaths', thresholds: [5, 1] })).body;
+    expect(saved.find((o: { key: string }) => o.key === 'deaths_x').thresholds).toEqual([1, 5]);
+    expect((await p.post(`/${key}/overlays`, { key: 'deaths_x', name: 'Again', element: 'deaths' })).status).toBe(409);
+    expect((await p.del(`/${key}/overlays/deaths_x`)).body.some((o: { key: string }) => o.key === 'deaths_x')).toBe(false);
+  });
 });
 
 describe('forms', () => {
@@ -303,6 +357,23 @@ describe('jobs and public projects', () => {
     expect(ie).toBe(1);
     expect((await pub(`/widgets/tracked?area=${uuidv7()}`)).status).toBe(404); // not an area of this dashboard
     expect((await pub('/widgets/tracked?hours=5')).status).toBe(400);
+    // The explorer's selected place scopes any widget (it must be a place in this project).
+    expect((await pub(`/widgets/tracked?entity=${ireland.id}&hours=8760`)).body.rows[0].value).toBe(1);
+    expect((await pub(`/widgets/tracked?entity=${uuidv7()}`)).status).toBe(404);
+  });
+
+  it('serves the explorer anonymously with public overlays only', async () => {
+    const tenant = (await h.admin('GET', `/platform/tenants/${tenantId}`)).body;
+    const pub = (path: string) => h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}${path}`);
+    await api(admin).post(`/${key}/overlays`, { key: 'altitude', name: 'Altitude', element: 'altitude_m', aggregation: 'avg', level: 'aircraft', hours: 8760, isPublic: true });
+    await api(admin).post(`/${key}/overlays`, { key: 'internal', name: 'Internal', element: 'altitude_m' });
+    expect((await pub('/overlays')).body.map((o: { key: string }) => o.key)).toEqual(['altitude']);
+    expect((await pub('/overlays/internal/values')).status).toBe(404);
+    const values = (await pub('/overlays/altitude/values')).body;
+    expect(values.features.features.length).toBeGreaterThan(0);
+    expect((await pub('/explore')).status).toBe(200);
+    expect((await pub('/search?q=ireland')).body[0]).toMatchObject({ name: 'Ireland' });
+    expect((await h.call(null, 'GET', `/public/projects/${tenant.slug}/water-points/explore`)).status).toBe(404);
   });
 
   it('keeps private projects private', async () => {

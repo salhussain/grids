@@ -475,6 +475,17 @@ export interface CellDB {
     dataset_id: string;
     data: Json<Record<string, unknown>>;
   };
+  map_overlay: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    config: Json<Record<string, unknown>>;
+    is_public: Generated<boolean>;
+    sort: Generated<number>;
+    created_at: CreatedAt;
+    updated_at: Timestamp;
+  };
   project_file: {
     id: string;
     tenant_id: string;
