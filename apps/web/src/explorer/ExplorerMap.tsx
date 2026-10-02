@@ -2,7 +2,8 @@ import maplibregl, { type GeoJSONSource, type Map as MlMap, type StyleSpecificat
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef, useState } from 'react';
 
-export type Basemap = 'dark' | 'satellite';
+export type Basemap = 'map' | 'satellite';
+export type MapScheme = 'light' | 'dark';
 export interface PlaceFeature {
   type: 'Feature';
   id: string;
@@ -14,10 +15,13 @@ export interface PlaceCollection {
   features: PlaceFeature[];
 }
 
-const OCEAN = '#0b1626';
+export const OCEAN: Record<MapScheme, string> = { light: '#dfe6ee', dark: '#0c1420' };
 // Shown when the basemap can't be fetched (offline, blocked): the data still draws.
-const BLANK: StyleSpecification = { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': OCEAN } }] };
-const DARK_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const blank = (scheme: MapScheme): StyleSpecification => ({ version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': OCEAN[scheme] } }] });
+const STYLE_URL: Record<MapScheme, string> = {
+  light: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+  dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+};
 const SATELLITE: StyleSpecification = {
   version: 8,
   sources: {
@@ -29,18 +33,22 @@ const SATELLITE: StyleSpecification = {
     },
   },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': OCEAN } },
+    { id: 'bg', type: 'background', paint: { 'background-color': OCEAN.dark } },
     { id: 'imagery', type: 'raster', source: 'imagery' },
   ],
 };
 
-let darkStyle: Promise<StyleSpecification | string> | null = null;
-/** The dark basemap if reachable within a few seconds, else a plain ocean. */
-function resolveDark() {
-  darkStyle ??= fetch(DARK_URL, { signal: AbortSignal.timeout(3500) })
-    .then((r) => (r.ok ? DARK_URL : BLANK))
-    .catch(() => BLANK);
-  return darkStyle;
+const resolved = new Map<MapScheme, Promise<StyleSpecification | string>>();
+/** The vector basemap for the scheme if reachable within a few seconds, else a plain backdrop. */
+function resolveStyle(scheme: MapScheme) {
+  let p = resolved.get(scheme);
+  if (!p) {
+    p = fetch(STYLE_URL[scheme], { signal: AbortSignal.timeout(3500) })
+      .then((r) => (r.ok ? STYLE_URL[scheme] : blank(scheme)))
+      .catch(() => blank(scheme));
+    resolved.set(scheme, p);
+  }
+  return p;
 }
 
 const POLY = ['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false] as maplibregl.ExpressionSpecification;
@@ -75,13 +83,14 @@ export interface ExplorerMapProps {
   detailOf?: (p: PlaceFeature['properties']) => string | null;
   onSelect(p: PlaceFeature['properties']): void;
   basemap: Basemap;
+  scheme: MapScheme;
   accent: string;
   /** Map padding so places aren't hidden under floating panels. */
   padding: { top: number; right: number; bottom: number; left: number };
 }
 
 /** The explorer's map: outlined places with labels, coloured by the active overlay. */
-export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect, basemap, accent, padding }: ExplorerMapProps) {
+export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect, basemap, scheme, accent, padding }: ExplorerMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
@@ -89,18 +98,18 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
   // True between setStyle() and its style.load (sources and layers are being replaced).
   const swapping = useRef(false);
   const [ready, setReady] = useState(0);
-  const latest = useRef({ places, self, colorOf, detailOf, onSelect, accent });
-  latest.current = { places, self, colorOf, detailOf, onSelect, accent };
+  const latest = useRef({ places, self, colorOf, detailOf, onSelect, accent, scheme });
+  latest.current = { places, self, colorOf, detailOf, onSelect, accent, scheme };
 
   // Create the map once; swap styles when the basemap changes.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const style = basemap === 'satellite' ? SATELLITE : await resolveDark();
+      const style = basemap === 'satellite' ? SATELLITE : await resolveStyle(scheme);
       if (cancelled || !el.current) return;
       if (map.current) {
         swapping.current = true;
-        map.current.setStyle(style as StyleSpecification);
+        map.current.setStyle(style as StyleSpecification, { diff: false });
         map.current.once('style.load', () => {
           swapping.current = false;
           setReady((n) => n + 1);
@@ -109,7 +118,7 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
       }
       const m = new maplibregl.Map({ container: el.current, style: style as StyleSpecification, center: [160, -5], zoom: 2, attributionControl: { compact: true } });
       map.current = m;
-      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
       m.on('load', () => setReady((n) => n + 1));
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, className: 'explorer-popup' });
       const hover = (id: string | null) => {
@@ -147,7 +156,7 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
     return () => {
       cancelled = true;
     };
-  }, [basemap]);
+  }, [basemap, scheme]);
 
   useEffect(
     () => () => {
@@ -163,7 +172,8 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
     // Not isStyleLoaded(): it is briefly false while a GeoJSON source re-parses.
     const m = map.current;
     if (!m || !ready || swapping.current) return;
-    const { places: pl, self: sf, colorOf: col, accent: ac } = latest.current;
+    const { places: pl, self: sf, colorOf: col, accent: ac, scheme: sc } = latest.current;
+    const edge = sc === 'dark' ? '#ffffff' : '#1f2937';
     const data = {
       type: 'FeatureCollection' as const,
       features: (pl?.features ?? []).map((f) => ({ ...f, properties: { ...f.properties, fill: col ? col(f.properties) : null } })),
@@ -177,7 +187,7 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
       m.addSource('self', { type: 'geojson', data: selfData as never });
       m.addSource('places', { type: 'geojson', data: data as never, promoteId: 'id' });
       m.addLayer({ id: 'self-fill', type: 'fill', source: 'self', filter: POLY, paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.03 } });
-      m.addLayer({ id: 'self-line', type: 'line', source: 'self', filter: POLY, paint: { 'line-color': '#ffffff', 'line-opacity': 0.55, 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+      m.addLayer({ id: 'self-line', type: 'line', source: 'self', filter: POLY, paint: { 'line-color': edge, 'line-opacity': 0.5, 'line-width': 1.5, 'line-dasharray': [2, 2] } });
       m.addLayer({
         id: 'places-fill',
         type: 'fill',
@@ -194,8 +204,8 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
         source: 'places',
         filter: POLY,
         paint: {
-          'line-color': ['case', ['!=', ['get', 'fill'], null], '#ffffff', ac],
-          'line-opacity': ['case', ['!=', ['get', 'fill'], null], 0.7, 1],
+          'line-color': ['case', ['!=', ['get', 'fill'], null], edge, ac],
+          'line-opacity': ['case', ['!=', ['get', 'fill'], null], 0.55, 1],
           'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 3.5, 2],
         },
       });
@@ -208,14 +218,16 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 5, 8, 8, 12, 11],
           'circle-color': ['coalesce', ['get', 'fill'], ac],
           'circle-stroke-width': ['case', ['boolean', ['feature-state', 'hover'], false], 3, 1.5],
-          'circle-stroke-color': '#ffffff',
+          'circle-stroke-color': sc === 'dark' ? '#0c1420' : '#ffffff',
         },
       });
     }
     if (m.getLayer('places-line')) {
       m.setPaintProperty('places-fill', 'fill-color', ['coalesce', ['get', 'fill'], ac]);
       m.setPaintProperty('places-point', 'circle-color', ['coalesce', ['get', 'fill'], ac]);
-      m.setPaintProperty('places-line', 'line-color', ['case', ['!=', ['get', 'fill'], null], '#ffffff', ac]);
+      m.setPaintProperty('places-line', 'line-color', ['case', ['!=', ['get', 'fill'], null], edge, ac]);
+      m.setPaintProperty('self-line', 'line-color', edge);
+      m.setPaintProperty('places-point', 'circle-stroke-color', sc === 'dark' ? '#0c1420' : '#ffffff');
     }
 
     // Label chips (HTML, so they look the same on any basemap).
@@ -232,14 +244,16 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
         chip.type = 'button';
         chip.className = 'explorer-label';
         const detail = latest.current.detailOf?.(f.properties);
-        chip.innerHTML = `<span>${escapeHtml(f.properties.name)}</span>${detail ? `<em>${escapeHtml(detail)}</em>` : ''}`;
+        // A pill: a dot in the place's colour, its name, and the overlay value.
+        const dot = (col ? col(f.properties) : null) ?? ac;
+        chip.innerHTML = `<i style="background:${dot}"></i><span>${escapeHtml(f.properties.name)}</span>${detail ? `<em>${escapeHtml(detail)}</em>` : ''}`;
         chip.onclick = (e) => {
           e.stopPropagation();
           latest.current.onSelect(f.properties);
         };
         markers.current.push(new maplibregl.Marker({ element: chip, anchor: f.geometry.type === 'Point' ? 'top' : 'center', offset: f.geometry.type === 'Point' ? [0, 10] : [0, 0] }).setLngLat(at).addTo(m));
       }
-  }, [ready, places, self, colorOf, detailOf, accent]);
+  }, [ready, places, self, colorOf, detailOf, accent, scheme]);
 
   // Fly to the selected place.
   const key = bounds?.join(',');
@@ -254,7 +268,7 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
   // MapLibre makes its container position: relative, so it sits inside the absolute box.
   return (
     <div className="absolute inset-0">
-      <div ref={el} className="explorer-map h-full w-full" style={{ background: OCEAN }} role="region" aria-label="Map" />
+      <div ref={el} className="explorer-map h-full w-full" style={{ background: OCEAN[scheme] }} role="region" aria-label="Map" />
     </div>
   );
 }

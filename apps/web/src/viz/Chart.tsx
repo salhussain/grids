@@ -1,11 +1,11 @@
 import { BarChart, GaugeChart, LineChart, PieChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, LegendScrollComponent, TooltipComponent } from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { LegacyGridContainLabel } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useEffect, useRef } from 'react';
 
-echarts.use([LineChart, BarChart, PieChart, GaugeChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer, LegacyGridContainLabel]);
+echarts.use([LineChart, BarChart, PieChart, GaugeChart, GridComponent, TooltipComponent, LegendComponent, LegendScrollComponent, CanvasRenderer, LegacyGridContainLabel]);
 
 export type ChartOption = echarts.EChartsCoreOption;
 

@@ -42,13 +42,13 @@ export function PublicProjectPage() {
       subtitle={v.tenant.name}
       logo={
         v.tenant.logo ? (
-          <img src={v.tenant.logo} alt="" className="size-9 object-contain" />
+          <img src={v.tenant.logo} alt="" className="size-9 rounded-xl object-contain" />
         ) : (
-          <span className="flex size-9 items-center justify-center bg-accent-600 font-semibold text-on-accent">{v.tenant.name[0]}</span>
+          <span className="flex size-9 items-center justify-center rounded-xl bg-accent-600 font-semibold text-on-accent">{v.tenant.name[0]}</span>
         )
       }
       live={<LiveIndicator status={live} />}
-      actions={<span className="hidden text-xs text-white/45 lg:inline">Powered by Grids</span>}
+      actions={<span className="hidden px-2 text-xs text-zinc-500 lg:inline">Powered by Grids</span>}
     />
   );
 }
