@@ -79,3 +79,7 @@ export type OverlayResult = z.infer<typeof OverlayResult>;
 
 export const SearchHit = ExplorePlace.extend({ path: z.string() });
 export type SearchHit = z.infer<typeof SearchHit>;
+
+/** A node in the place hierarchy browser. */
+export const PlaceNode = ExplorePlace.extend({ hasChildren: z.boolean(), childCount: z.number().int() });
+export type PlaceNode = z.infer<typeof PlaceNode>;

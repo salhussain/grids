@@ -8,6 +8,7 @@ import {
   type MapOverlay,
   type MapOverlayDto,
   type OverlayResult,
+  type PlaceNode,
   type SearchHit,
 } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
@@ -249,6 +250,35 @@ export class ExploreService {
     return this.query.cached(tenantId, a.project.id, a.rootPath, { overlay: o, entityId }, () =>
       this.projects.cellTx(tenantId, (tx) => this.overlayIn(tx, a.project.id, a.rootPath, o, entityId)),
     );
+  }
+
+  // ---------- hierarchy browser ----------
+
+  /** Places directly inside `parentId` (the top level, or a scoped member's own root). */
+  async childrenIn(tx: Tx, projectId: string, rootPath: string | null, parentId: string | null): Promise<PlaceNode[]> {
+    const where = parentId
+      ? sql`e.parent_id = ${parentId} ${rootPath ? sql`and e.path <@ ${rootPath}::ltree` : sql``}`
+      : rootPath
+        ? sql`e.path = ${rootPath}::ltree`
+        : sql`e.parent_id is null`;
+    const rows = await sql<PlaceRow & { n: number }>`
+      select ${placeSelect}, (select count(*)::int from entity c where c.parent_id = e.id) as n
+      from entity e join entity_type t on t.id = e.type_id
+      where e.project_id = ${projectId} and ${where}
+      order by t.sort, e.name
+      limit 1000
+    `.execute(tx);
+    return rows.rows.map((r) => ({ ...toPlace(r), hasChildren: r.n > 0, childCount: r.n }));
+  }
+
+  async children(actor: Actor, tenantId: string, project: string, parentId: string | null): Promise<PlaceNode[]> {
+    const a = await this.projects.access(actor, tenantId, project);
+    return this.projects.cellTx(tenantId, (tx) => this.childrenIn(tx, a.project.id, a.rootPath, parentId));
+  }
+
+  async publicChildren(tenantSlug: string, projectKey: string, parentId: string | null) {
+    const t = await this.publicIds(tenantSlug, projectKey);
+    return this.projects.cellTx(t.tenantId, (tx) => this.childrenIn(tx, t.projectId, null, parentId));
   }
 
   // ---------- search ----------

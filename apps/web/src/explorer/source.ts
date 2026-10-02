@@ -1,4 +1,4 @@
-import { type DashboardDto, type ExploreDto, type MapOverlayDto, type OverlayResult, type QueryResult, type SearchHit, type Widget } from '@grids/schema';
+import { type DashboardDto, type DashboardParams, type ExploreDto, type MapOverlayDto, type OverlayResult, type PlaceNode, type QueryResult, type SearchHit, type Widget } from '@grids/schema';
 import { api } from '../api';
 
 /** Where the explorer reads from: a member's project, or a public project anonymously. */
@@ -9,10 +9,12 @@ export interface ExplorerSource {
   overlays(): Promise<MapOverlayDto[]>;
   overlay(key: string, entity: string | null): Promise<OverlayResult>;
   search(q: string): Promise<SearchHit[]>;
+  /** Places directly inside a place (null = the top). */
+  places(parent: string | null): Promise<PlaceNode[]>;
   dashboards(): Promise<DashboardDto[]>;
   /** Data element key → name (chart legends). */
   names(): Promise<Record<string, string>>;
-  widget(d: DashboardDto, w: Widget, params: { entity?: string; hours?: number }): Promise<QueryResult>;
+  widget(d: DashboardDto, w: Widget, params: DashboardParams): Promise<QueryResult>;
 }
 
 export function memberSource(tenantId: string, project: string): ExplorerSource {
@@ -29,6 +31,7 @@ export function memberSource(tenantId: string, project: string): ExplorerSource 
     overlays: () => api.overlays(tenantId, project),
     overlay: (key, entity) => api.overlayValues(tenantId, project, key, entity),
     search: (q) => api.searchPlaces(tenantId, project, q),
+    places: (parent) => api.places(tenantId, project, parent),
     dashboards: () => api.dashboards(tenantId, project),
     names: async () => Object.fromEntries((await api.elements(tenantId, project)).map((e) => [e.key, e.name])),
     widget: (d, w, params) => api.widget(tenantId, project, d.key, w.id, params),
@@ -49,6 +52,7 @@ export function publicSource(tenant: string, project: string, dashboards: Dashbo
     overlays: () => api.publicOverlays(tenant, project),
     overlay: (key, entity) => api.publicOverlay(tenant, project, key, entity),
     search: (q) => api.publicSearch(tenant, project, q),
+    places: (parent) => api.publicPlaces(tenant, project, parent),
     dashboards: async () => dashboards,
     names: async () => Object.fromEntries(elements.map((e) => [e.key, e.name])),
     widget: (d, w, params) => api.publicWidget(tenant, project, d.key, w.id, params),

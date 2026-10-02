@@ -200,7 +200,9 @@ export function DashboardsTab() {
             names={names}
             queryKey={['widget', tenantId, project.key, shown.key]}
             // Saved widgets load by reference (permission-checked); drafts run their query.
-            load={() => (editing ? api.query(tenantId, project.key, w.query as QuerySpecInput) : api.widget(tenantId, project.key, shown.key, w.id, params))}
+            load={(p = {}) =>
+              editing ? api.query(tenantId, project.key, applyParams(w.query!, p, shown.filters) as QuerySpecInput) : api.widget(tenantId, project.key, shown.key, w.id, { ...params, ...p })
+            }
             onSelectEntity={(id) => void navigate({ to: `${base}/entities/${id}` })}
             actions={
               editing ? (

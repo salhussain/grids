@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import type { QueryResult, Widget } from '@grids/schema';
+import type { DashboardParams, QueryResult, Widget } from '@grids/schema';
 import { cx, ErrorNotice, Spinner } from '@grids/ui';
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowDownRight, ArrowUpRight, Maximize2, Minus } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Chart, type ChartOption } from './Chart';
 import { FreshnessBadge } from './Freshness';
 import { MapView, type FeatureCollection } from './MapView';
+import { WidgetModal } from './WidgetModal';
 import { brandColor, CATEGORICAL, INK, STATUS, thresholdColor, useScheme, type Scheme } from './scheme';
 
 export const ROW_HEIGHT = 128;
@@ -182,22 +183,54 @@ function TableWidget({ result }: { result: QueryResult }) {
 export interface WidgetViewProps {
   widget: Widget;
   queryKey: unknown[];
-  load: () => Promise<QueryResult>;
+  /** Loads the widget's data; the pop-up passes its own parameters. */
+  load: (params?: DashboardParams) => Promise<QueryResult>;
   /** Data element key → display name, for legends. */
   names?: Record<string, string>;
   onSelectEntity?: (id: string) => void;
   actions?: React.ReactNode;
   /** `stack`: a narrow column (explorer sidebar): full width, KPIs two-up. */
   layout?: 'grid' | 'stack';
+  /** Offer the enlarged pop-up with its own filters (default: yes for charts). */
+  expandable?: boolean;
 }
 
-/** One dashboard tile: fetches its query and renders by type. */
-export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity, actions, layout = 'grid' }: WidgetViewProps) {
+/** Renders a loaded result by widget type (tile and pop-up). */
+export function WidgetBody({ widget, result, names = {}, onSelectEntity }: { widget: Widget; result: QueryResult; names?: Record<string, string>; onSelectEntity?: (id: string) => void }) {
   const scheme = useScheme();
+  const r = result;
+  switch (widget.type) {
+    case 'text':
+      return <p className="text-sm whitespace-pre-line text-zinc-700">{widget.text}</p>;
+    case 'kpi':
+      return <KpiWidget result={r} widget={widget} scheme={scheme} />;
+    case 'line':
+      return r.rows.length ? <LineWidget result={r} names={names} scheme={scheme} unit={widget.options.unit} /> : <NoData />;
+    case 'bar':
+      return r.rows.length ? <BarWidget result={r} scheme={scheme} horizontal={widget.options.horizontal} unit={widget.options.unit} /> : <NoData />;
+    case 'pie':
+      return r.rows.length ? <PieWidget result={r} scheme={scheme} /> : <NoData />;
+    case 'map':
+      return (
+        <MapView
+          data={r.features as FeatureCollection}
+          label={widget.title || 'Map'}
+          options={{ warn: widget.options.warn, alert: widget.options.alert, labelAttribute: widget.options.labelAttribute, unit: widget.options.unit, onSelect: onSelectEntity ? (p) => onSelectEntity(String(p.id)) : undefined }}
+        />
+      );
+    case 'table':
+      return <TableWidget result={r} />;
+  }
+}
+
+/** One dashboard tile: fetches its query and renders by type; opens enlarged on click. */
+export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity, actions, layout = 'grid', expandable }: WidgetViewProps) {
   const live = widget.options.refreshSeconds;
+  const [open, setOpen] = useState(false);
+  const canExpand = (expandable ?? true) && !!widget.query && widget.type !== 'map' && widget.type !== 'text';
   const q = useQuery({
     queryKey: [...queryKey, widget.id, widget.query],
-    queryFn: load,
+    queryFn: () => load(),
     enabled: !!widget.query,
     refetchInterval: (live ?? 300) * 1000,
     placeholderData: (prev) => prev,
@@ -206,49 +239,49 @@ export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity,
     if (widget.type === 'text') return <p className="text-sm whitespace-pre-line text-zinc-700">{widget.text}</p>;
     if (q.isPending) return <div className="flex h-full items-center justify-center"><Spinner className="size-5 text-zinc-400" /></div>;
     if (q.isError) return <ErrorNotice error={q.error} />;
-    const r = q.data;
-    switch (widget.type) {
-      case 'kpi':
-        return <KpiWidget result={r} widget={widget} scheme={scheme} />;
-      case 'line':
-        return r.rows.length ? <LineWidget result={r} names={names} scheme={scheme} unit={widget.options.unit} /> : <NoData />;
-      case 'bar':
-        return r.rows.length ? <BarWidget result={r} scheme={scheme} horizontal={widget.options.horizontal} unit={widget.options.unit} /> : <NoData />;
-      case 'pie':
-        return r.rows.length ? <PieWidget result={r} scheme={scheme} /> : <NoData />;
-      case 'map':
-        return (
-          <MapView
-            data={r.features as FeatureCollection}
-            label={widget.title || 'Map'}
-            options={{ warn: widget.options.warn, alert: widget.options.alert, labelAttribute: widget.options.labelAttribute, unit: widget.options.unit, onSelect: onSelectEntity ? (p) => onSelectEntity(String(p.id)) : undefined }}
-          />
-        );
-      case 'table':
-        return <TableWidget result={r} />;
-    }
+    return <WidgetBody widget={widget} result={q.data} names={names} onSelectEntity={onSelectEntity} />;
   };
   const flush = widget.type === 'map';
   return (
     <section
       className={cx(
-        'flex min-w-0 flex-col border border-zinc-200 bg-snow',
+        'group/w flex min-w-0 flex-col border border-zinc-200 bg-snow transition-colors',
+        canExpand && 'hover:border-zinc-300',
         layout === 'stack' ? (widget.type === 'kpi' ? 'col-span-6' : 'col-span-12') : cx('col-span-12', SPAN[widget.w]),
       )}
       style={{ minHeight: layout === 'stack' ? (widget.type === 'kpi' ? ROW_HEIGHT : Math.min(widget.h, 3) * ROW_HEIGHT) : widget.h * ROW_HEIGHT }}
       aria-label={widget.title || widget.type}
     >
-      {(widget.title || actions) && (
+      {(widget.title || actions || canExpand) && (
         <header className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
-          <h3 className="truncate text-[13px] font-medium text-zinc-600">{widget.title}</h3>
+          {canExpand ? (
+            <button type="button" onClick={() => setOpen(true)} className="min-w-0 truncate text-start text-[13px] font-medium text-zinc-600 hover:text-ink" title="Open with filters">
+              {widget.title}
+            </button>
+          ) : (
+            <h3 className="truncate text-[13px] font-medium text-zinc-600">{widget.title}</h3>
+          )}
           <div className="flex shrink-0 items-center gap-1.5">
             {q.isFetching && !q.isPending && <Spinner className="size-3 text-zinc-400" />}
             {widget.type === 'map' && widget.query && q.data && <FreshnessBadge value={q.data.freshness} compact />}
             {actions}
+            {canExpand && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                aria-label={`Open ${widget.title || 'chart'}`}
+                className="p-1 text-zinc-400 opacity-0 transition-opacity group-hover/w:opacity-100 focus:opacity-100 hover:text-ink"
+              >
+                <Maximize2 className="size-3.5" />
+              </button>
+            )}
           </div>
         </header>
       )}
-      <div className={cx('min-h-0 flex-1', flush ? 'mt-2' : 'px-4 pt-1 pb-3')}>{body()}</div>
+      <div className={cx('min-h-0 flex-1', flush ? 'mt-2' : 'px-4 pt-1 pb-3', canExpand && widget.type !== 'table' && 'cursor-zoom-in')} onClick={canExpand && widget.type !== 'table' ? () => setOpen(true) : undefined}>
+        {body()}
+      </div>
+      {open && <WidgetModal widget={widget} queryKey={queryKey} load={load} names={names} onSelectEntity={onSelectEntity} onClose={() => setOpen(false)} />}
     </section>
   );
 }

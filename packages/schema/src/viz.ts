@@ -141,21 +141,32 @@ export const DashboardParams = z.object({
     .int()
     .refine((h) => (PERIOD_HOURS as readonly number[]).includes(h), 'Unsupported period')
     .optional(),
+  /** A custom date range (inclusive days, UTC); overrides `hours`. */
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  /** Time series bucket. */
+  interval: z.enum(['minute', 'hour', 'day', 'week', 'month']).optional(),
 });
 export type DashboardParams = z.infer<typeof DashboardParams>;
 
 /**
- * Binds parameter values into a widget's query: the explorer's selected place
- * (`entity`), or the dashboard's area filter when chosen, replaces the scope's
- * ancestor, the period replaces the time range (not for latest-value queries).
+ * Binds parameter values into a widget's query. The explorer's selected place
+ * (`entity`), or the dashboard's area filter when it offers one, replaces the
+ * scope's ancestor. A period (`hours`, or `from`–`to`) replaces the time range of
+ * time-based queries (not latest-value ones); `interval` re-buckets a series.
  * Entity type and other settings stay as the widget defines them.
  */
 export function applyParams(spec: QuerySpec, params: DashboardParams, filters: DashboardFilters): QuerySpec {
   let out: QuerySpec = spec;
   if (params.entity) out = { ...out, ancestorId: params.entity };
   if (params.area && filters.areaType) out = { ...out, ancestorId: params.area };
-  if (params.hours && filters.period && 'range' in out && !('latest' in out && out.latest))
-    out = { ...out, range: { lastHours: params.hours } } as QuerySpec;
+  const timed = 'range' in out && !('latest' in out && out.latest);
+  if (timed && (params.from || params.to)) {
+    const to = params.to ? new Date(`${params.to}T00:00:00Z`) : null;
+    if (to) to.setUTCDate(to.getUTCDate() + 1);
+    out = { ...out, range: { ...(params.from && { from: `${params.from}T00:00:00Z` }), ...(to && { to: to.toISOString() }), ...(!params.from && { lastHours: 24 * 365 }) } } as QuerySpec;
+  } else if (timed && params.hours) out = { ...out, range: { lastHours: params.hours } } as QuerySpec;
+  if (params.interval && out.kind === 'series') out = { ...out, interval: params.interval };
   return out;
 }
 

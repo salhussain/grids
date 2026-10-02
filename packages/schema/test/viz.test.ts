@@ -7,9 +7,19 @@ describe('dashboard parameters', () => {
   const latest = QuerySpec.parse({ kind: 'breakdown', element: 'cases', by: 'parent', latest: true });
   const table = QuerySpec.parse({ kind: 'table', entityType: 'facility' });
 
-  it('binds the area and period only when the dashboard offers them', () => {
+  it('binds the area only when the dashboard offers it; periods always apply', () => {
     expect(applyParams(kpi, { area, hours: 720 }, { areaType: 'province', period: true })).toMatchObject({ ancestorId: area, range: { lastHours: 720 } });
-    expect(applyParams(kpi, { area, hours: 720 }, { areaType: null, period: false })).toEqual(kpi);
+    expect(applyParams(kpi, { area }, { areaType: null, period: false })).toEqual(kpi);
+    expect(applyParams(kpi, { entity: area }, { areaType: null, period: false })).toMatchObject({ ancestorId: area });
+  });
+
+  it('binds custom date ranges and series intervals', () => {
+    expect(applyParams(kpi, { from: '2026-01-01', to: '2026-01-31', hours: 24 }, { areaType: null, period: false })).toMatchObject({
+      range: { from: '2026-01-01T00:00:00Z', to: '2026-02-01T00:00:00.000Z' },
+    });
+    const series = QuerySpec.parse({ kind: 'series', elements: ['cases'], interval: 'day' });
+    expect(applyParams(series, { interval: 'month' }, { areaType: null, period: false })).toMatchObject({ interval: 'month' });
+    expect(applyParams(kpi, { interval: 'month' }, { areaType: null, period: false })).toEqual(kpi);
   });
 
   it('leaves latest-value and range-less queries’ windows alone', () => {

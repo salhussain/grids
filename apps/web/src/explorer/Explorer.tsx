@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import type { DashboardDto, MapOverlayDto, SearchHit } from '@grids/schema';
+import type { DashboardDto, MapOverlayDto, PlaceNode, SearchHit } from '@grids/schema';
 import { cx, Spinner } from '@grids/ui';
 import { ChevronDown, ChevronLeft, ChevronRight, Globe2, Layers, Map as MapIcon, Satellite, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -329,6 +329,20 @@ function PlaceSearch({ source, onPick }: { source: ExplorerSource; onPick(h: Sea
           <X className="size-4" />
         </button>
       )}
+      {open && !debounced && (
+        <div className="absolute top-12 right-0 left-0 z-40 max-h-[70vh] overflow-y-auto border border-white/10 bg-[#26272b] py-2 shadow-2xl">
+          <div className="px-4 pb-1 text-[11px] font-semibold tracking-[0.12em] text-white/45 uppercase">Browse places</div>
+          <PlaceTree
+            source={source}
+            parent={null}
+            depth={0}
+            onPick={(n) => {
+              onPick({ ...n, path: '' });
+              setOpen(false);
+            }}
+          />
+        </div>
+      )}
       {open && debounced && (
         <ul className="absolute top-12 right-0 left-0 z-40 max-h-80 overflow-y-auto border border-white/10 bg-[#26272b] py-1 shadow-2xl" role="listbox">
           {hits.data?.length === 0 && <li className="px-4 py-3 text-sm text-white/55">No places match “{debounced}”</li>}
@@ -354,6 +368,48 @@ function PlaceSearch({ source, onPick }: { source: ExplorerSource; onPick(h: Sea
         </ul>
       )}
     </div>
+  );
+}
+
+/** The place hierarchy, expanded lazily level by level. */
+function PlaceTree({ source, parent, depth, onPick }: { source: ExplorerSource; parent: string | null; depth: number; onPick(n: PlaceNode): void }) {
+  const nodes = useQuery({ queryKey: [...source.keys.search, 'tree', parent], queryFn: () => source.places(parent) });
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  if (nodes.isPending)
+    return (
+      <div className="py-1.5" style={{ paddingInlineStart: 16 + depth * 18 }}>
+        <Spinner className="size-3.5 text-white/55" />
+      </div>
+    );
+  return (
+    <ul role={depth === 0 ? 'tree' : 'group'} aria-label={depth === 0 ? 'Places' : undefined}>
+      {nodes.data?.map((n) => {
+        const expanded = openIds.has(n.id);
+        return (
+          <li key={n.id} role="treeitem" aria-expanded={n.hasChildren ? expanded : undefined}>
+            <div className="group flex items-center gap-1 pe-3 hover:bg-white/5" style={{ paddingInlineStart: 8 + depth * 18 }}>
+              <button
+                type="button"
+                aria-label={expanded ? `Collapse ${n.name}` : `Expand ${n.name}`}
+                disabled={!n.hasChildren}
+                onClick={() => setOpenIds((s) => { const x = new Set(s); if (x.has(n.id)) x.delete(n.id); else x.add(n.id); return x; })}
+                className="flex size-6 shrink-0 items-center justify-center text-white/55 hover:text-white disabled:invisible"
+              >
+                <ChevronRight className={cx('size-3.5 transition-transform', expanded && 'rotate-90')} />
+              </button>
+              <button type="button" onClick={() => onPick(n)} className="flex min-w-0 flex-1 items-baseline justify-between gap-3 py-1.5 text-start">
+                <span className="truncate text-sm text-white">{n.name}</span>
+                <span className="shrink-0 text-xs text-white/45">
+                  {n.type.name}
+                  {n.childCount > 0 && ` · ${n.childCount}`}
+                </span>
+              </button>
+            </div>
+            {expanded && <PlaceTree source={source} parent={n.id} depth={depth + 1} onPick={onPick} />}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -441,7 +497,7 @@ function DashboardPanel({
                 widget={w}
                 names={names.data}
                 queryKey={[...source.keys.widget, d.key, params]}
-                load={() => source.widget(d, w, params)}
+                load={(p = {}) => source.widget(d, w, { ...params, ...p })}
                 onSelectEntity={(id) => onNavigate(id)}
               />
             ))}

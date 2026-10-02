@@ -213,10 +213,17 @@ describe('templates, queries and dashboards', () => {
 
     const hits = (await p.get(`/${key}/search?q=harbour`)).body;
     expect(hits[0]).toMatchObject({ name: 'Harbourside', path: 'Central' });
+    const tops = (await p.get(`/${key}/places`)).body;
+    expect(tops.map((n: { name: string }) => n.name)).toEqual(['Central', 'Eastern Islands', 'Northern', 'Western']);
+    expect((await p.get(`/${key}/places?parent=${central.id}`)).body).toEqual([
+      expect.objectContaining({ name: 'Harbourside', childCount: 3, hasChildren: true }),
+      expect.objectContaining({ name: 'Highlands', childCount: 3 }),
+    ]);
 
     // Scoped members start at their own place and can't leave it.
     await p.put(`/${key}/members`, { userId: await h.userId(tenantId, 'ed@ih.org'), role: 'viewer', rootEntityId: central.id });
     expect((await api(ed).get(`/${key}/explore`)).body.entity.name).toBe('Central');
+    expect((await api(ed).get(`/${key}/places`)).body.map((n: { name: string }) => n.name)).toEqual(['Central']);
     const other = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Northern');
     expect((await api(ed).get(`/${key}/explore?entity=${other.id}`)).status).toBe(404);
     expect((await api(ed).get(`/${key}/search?q=waimoana`)).body).toEqual([]);

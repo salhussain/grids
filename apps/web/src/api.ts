@@ -107,6 +107,7 @@ export const api = {
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
   explore: (id: string, p: string, entity?: string | null) =>
     request<S.ExploreDto>('GET', `${t(id)}/projects/${p}/explore${qs({ entity })}`),
+  places: (id: string, p: string, parent?: string | null) => request<S.PlaceNode[]>('GET', `${t(id)}/projects/${p}/places${qs({ parent })}`),
   searchPlaces: (id: string, p: string, q: string) => request<S.SearchHit[]>('GET', `${t(id)}/projects/${p}/search${qs({ q })}`),
   overlays: (id: string, p: string) => request<S.MapOverlayDto[]>('GET', `${t(id)}/projects/${p}/overlays`),
   saveOverlay: (id: string, p: string, input: In<typeof S.MapOverlayInput>, key?: string) =>
@@ -161,6 +162,8 @@ export const api = {
     request<S.MapOverlayDto[]>('GET', `/public/projects/${tenant}/${project}/overlays`, undefined, { anonymous: true }),
   publicOverlay: (tenant: string, project: string, key: string, entity?: string | null) =>
     request<S.OverlayResult>('GET', `/public/projects/${tenant}/${project}/overlays/${key}/values${qs({ entity })}`, undefined, { anonymous: true }),
+  publicPlaces: (tenant: string, project: string, parent?: string | null) =>
+    request<S.PlaceNode[]>('GET', `/public/projects/${tenant}/${project}/places${qs({ parent })}`, undefined, { anonymous: true }),
   publicSearch: (tenant: string, project: string, q: string) =>
     request<S.SearchHit[]>('GET', `/public/projects/${tenant}/${project}/search${qs({ q })}`, undefined, { anonymous: true }),
   publicAreas: (tenant: string, project: string, dashboard: string) =>

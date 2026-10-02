@@ -86,6 +86,8 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
   const map = useRef<MlMap | null>(null);
   const markers = useRef<maplibregl.Marker[]>([]);
   const hovered = useRef<string | null>(null);
+  // True between setStyle() and its style.load (sources and layers are being replaced).
+  const swapping = useRef(false);
   const [ready, setReady] = useState(0);
   const latest = useRef({ places, self, colorOf, detailOf, onSelect, accent });
   latest.current = { places, self, colorOf, detailOf, onSelect, accent };
@@ -97,8 +99,12 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
       const style = basemap === 'satellite' ? SATELLITE : await resolveDark();
       if (cancelled || !el.current) return;
       if (map.current) {
+        swapping.current = true;
         map.current.setStyle(style as StyleSpecification);
-        map.current.once('style.load', () => setReady((n) => n + 1));
+        map.current.once('style.load', () => {
+          swapping.current = false;
+          setReady((n) => n + 1);
+        });
         return;
       }
       const m = new maplibregl.Map({ container: el.current, style: style as StyleSpecification, center: [160, -5], zoom: 2, attributionControl: { compact: true } });
@@ -154,8 +160,9 @@ export function ExplorerMap({ places, self, bounds, colorOf, detailOf, onSelect,
 
   // Data: (re)add sources and layers after any style load, then update them.
   useEffect(() => {
+    // Not isStyleLoaded(): it is briefly false while a GeoJSON source re-parses.
     const m = map.current;
-    if (!m || !ready || !m.isStyleLoaded()) return;
+    if (!m || !ready || swapping.current) return;
     const { places: pl, self: sf, colorOf: col, accent: ac } = latest.current;
     const data = {
       type: 'FeatureCollection' as const,

@@ -28,6 +28,7 @@ import {
   ObservationBatch,
   OverlayResult,
   PageQuery,
+  PlaceNode,
   PermissionGroupDto,
   PermissionGroupInput,
   ProjectDto,
@@ -313,6 +314,10 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   app.get('/tenants/:tenantId/projects/:project/explore', { schema: { params: P, querystring: At, response: { 200: ExploreDto } } }, (req) =>
     s.explore.explore(actorOf(req), req.params.tenantId, req.params.project, req.query.entity ?? null),
   );
+  const Parent = z.object({ parent: z.uuid().optional() });
+  app.get('/tenants/:tenantId/projects/:project/places', { schema: { params: P, querystring: Parent, response: { 200: z.array(PlaceNode) } } }, (req) =>
+    s.explore.children(actorOf(req), req.params.tenantId, req.params.project, req.query.parent ?? null),
+  );
   app.get(
     '/tenants/:tenantId/projects/:project/search',
     { schema: { params: P, querystring: z.object({ q: z.string().max(100) }), response: { 200: z.array(SearchHit) } } },
@@ -392,6 +397,14 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
     async (req, reply) => {
       cache(reply);
       return s.explore.publicOverlay(req.params.tenant, req.params.project, req.params.key, req.query.entity ?? null);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/places',
+    { schema: { params: Params, querystring: z.object({ parent: z.uuid().optional() }), response: { 200: z.array(PlaceNode) } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicChildren(req.params.tenant, req.params.project, req.query.parent ?? null);
     },
   );
   app.get(
