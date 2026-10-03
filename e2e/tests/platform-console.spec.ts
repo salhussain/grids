@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   PLATFORM_ADMIN,
-  WEB,
   expectNoHorizontalScroll,
   latestEmail,
   gridsLogin,

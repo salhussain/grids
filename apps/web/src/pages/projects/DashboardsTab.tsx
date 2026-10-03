@@ -44,7 +44,7 @@ export function DashboardsTab() {
     queryFn: async () => (await api.entities(tenantId, project.key, { type: areaType!, pageSize: 200 })).items.map((e) => ({ id: e.id, name: e.name })),
     enabled: !!areaType,
   });
-  useEffect(() => setDraft(current && editing ? structuredClone(current) : null), [current?.key, editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setDraft(current && editing ? structuredClone(current) : null), [current?.key, editing]);
 
   const save = useMutation({
     mutationFn: (d: DashboardDto) =>

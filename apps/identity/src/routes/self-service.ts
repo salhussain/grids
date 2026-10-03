@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ServerResponse } from 'node:http';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { AuthError, type Accounts } from '../accounts.js';
@@ -32,7 +33,7 @@ export function selfServiceRoutes(app: FastifyInstance, deps: { provider: GridsP
     return { ok: true, kind: row.kind, appUrl: await appUrl(row.account_id) };
   });
 
-  async function sessionAccount(req: FastifyRequest, reply: { raw: import('node:http').ServerResponse }) {
+  async function sessionAccount(req: FastifyRequest, reply: { raw: ServerResponse }) {
     const ctx = provider.createContext(req.raw, reply.raw);
     const session = await provider.Session.get(ctx);
     if (!session.accountId) throw new AuthError('session_expired', 401);
