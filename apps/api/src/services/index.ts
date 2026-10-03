@@ -49,6 +49,7 @@ export function createServices(
   return {
     events,
     identity,
+    email: ctx.email,
     plans: new PlanService(ctx),
     staff: new StaffService(ctx),
     tenants,

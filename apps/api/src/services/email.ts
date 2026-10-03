@@ -28,12 +28,38 @@ export class SmtpMailer implements Mailer {
   }
 }
 
+/**
+ * No external delivery: messages are only recorded in the platform email log and
+ * read in the console (Email log). The default for development and demos.
+ */
+export class LogOnlyMailer implements Mailer {
+  async send() {
+    return { messageId: `local-${uuidv7()}` };
+  }
+}
+
+/** `SMTP_URL=log` (or empty) keeps mail inside the platform; anything else is an SMTP URL. */
+export const mailerFor = (url: string | undefined, from: string): Mailer =>
+  !url || url === 'log' ? new LogOnlyMailer() : new SmtpMailer(url, from);
+
 /** Sends transactional email and records every attempt in the email log. */
 export class EmailService {
   constructor(
     private readonly db: Kysely<PlatformDB>,
     private readonly mailer: Mailer,
   ) {}
+
+  /** Recent messages to one address (development mailbox; never exposed in production). */
+  async recent(to: string, since: Date, limit = 20) {
+    return this.db
+      .selectFrom('email_log')
+      .select(['id', 'template', 'to_address', 'subject', 'body_text', 'status', 'created_at'])
+      .where('to_address', '=', to)
+      .where('created_at', '>=', since)
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .execute();
+  }
 
   /** Never throws: delivery failures are logged and reported as `false`. */
   async send(template: string, tenantId: string | null, mail: OutgoingEmail): Promise<boolean> {

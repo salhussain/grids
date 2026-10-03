@@ -3,7 +3,6 @@ import { expect, type Browser, type Page } from '@playwright/test';
 export const PLATFORM_ADMIN = { login: 'admin@grids.local', password: 'Password1!' };
 /** Passes the identity service's password policy (10+ characters, not common). */
 export const NEW_PASSWORD = 'Lagoon-sunrise-2026';
-const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8025';
 export const IDP = process.env.IDP_URL ?? 'http://localhost:4100';
 
 /** Signs in on the Grids sign-in page and waits until the app has finished its callback. */
@@ -38,18 +37,17 @@ export async function gridsRegister(
   await page.getByLabel('Verification code').fill(code); // submits when complete
 }
 
-/** Polls the dev mail catcher for the newest message to `to` and returns its text. */
+const API = process.env.API_URL ?? 'http://localhost:4000';
+const SERVICE_TOKEN = process.env.IDENTITY_SERVICE_TOKEN ?? 'dev-service-token-change-me';
+
+/** Polls the platform's development mailbox for the newest message to `to` and returns its text. */
 export async function latestEmail(to: string, since: Date): Promise<string> {
   for (let i = 0; i < 30; i++) {
-    const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`);
-    const { messages } = (await res.json()) as { messages: { ID: string; Created: string }[] };
-    const fresh = messages.find((m) => new Date(m.Created) >= since);
-    if (fresh) {
-      const msg = (await (await fetch(`${MAILPIT}/api/v1/message/${fresh.ID}`)).json()) as {
-        Text: string;
-      };
-      return msg.Text;
-    }
+    const res = await fetch(`${API}/internal/mail?to=${encodeURIComponent(to)}&since=${since.toISOString()}`, {
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
+    });
+    const messages = (await res.json()) as { text: string }[];
+    if (messages[0]) return messages[0].text;
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error(`No email to ${to}`);

@@ -12,7 +12,9 @@ const Env = z.object({
   IDENTITY_SERVICE_TOKEN: z.string().min(16),
   /** Resource indicator the identity service puts in access-token `aud`. */
   API_AUDIENCE: z.string().default('urn:grids:api'),
-  SMTP_URL: z.string().default('smtp://localhost:1025'),
+  /** `log` = record only (read in the console's Email log); otherwise an SMTP URL. */
+  SMTP_URL: z.string().default('log'),
+  NODE_ENV: z.string().default('development'),
   MAIL_FROM: z.string().default('Grids <no-reply@grids.local>'),
   SUPPORT_EMAIL: z.string().default('support@grids.local'),
   /** Tenants get `{slug}.{BASE_DOMAIN}`; custom domains CNAME to `edge.{BASE_DOMAIN}`. */

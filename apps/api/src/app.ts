@@ -13,6 +13,7 @@ import { HttpError } from './errors.js';
 import { adminRoutes } from './routes/admin.js';
 import { closeAllStreams } from './routes/sse.js';
 import { projectRoutes, publicProjectRoutes } from './routes/projects.js';
+import { internalRoutes } from './routes/internal.js';
 import { publicRoutes } from './routes/public.js';
 import { tenantRoutes } from './routes/tenant.js';
 
@@ -23,6 +24,8 @@ export interface AppDeps {
   /** Control-plane routes; omitted in tests that only exercise infrastructure. */
   platform?: AuthDeps;
   corsOrigins?: string[];
+  /** Service-to-service endpoints (mail relay); omitted when not configured. */
+  internal?: { serviceToken: string; devMailbox: boolean };
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -109,6 +112,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(adminRoutes, deps.platform);
     await app.register(projectRoutes, deps.platform);
     await app.register(publicProjectRoutes, deps.platform);
+    if (deps.internal) await app.register(internalRoutes, { email: deps.platform.services.email, ...deps.internal });
   }
 
   return app;

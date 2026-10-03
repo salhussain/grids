@@ -26,7 +26,7 @@ test('preferences, languages, right-to-left and billing', async ({ browser }) =>
 
   // Billing: trial subscription, the upcoming first charge, usage
   await nav.getByRole('link', { name: 'Billing' }).click();
-  await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Billing', level: 1 })).toBeVisible();
   await expect(page.getByText('Trial', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/^Trial ends /)).toBeVisible();
   await expect(page.getByText('Upcoming charge').first()).toBeVisible();

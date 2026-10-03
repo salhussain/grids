@@ -27,7 +27,9 @@ services:
       - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
 
   mail:
-    # Dev mail catcher: SMTP on :1025, inbox UI + API on http://localhost:8025
+    # Optional SMTP catcher (docker compose --profile mailpit up -d; set SMTP_URL=smtp://localhost:1025).
+    # Not needed by default: mail stays in the platform's Email log (SMTP_URL=log).
+    profiles: ['mailpit']
     image: axllent/mailpit:v1.27
     environment:
       # Accept any credentials over plain SMTP in dev.

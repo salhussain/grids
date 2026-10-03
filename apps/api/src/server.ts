@@ -5,7 +5,7 @@ import { JwtTokenVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { GridsIdpClient } from './idp/grids.js';
 import { cellResolver } from './services/cells.js';
-import { EmailService, SmtpMailer } from './services/email.js';
+import { EmailService, mailerFor } from './services/email.js';
 import { createServices } from './services/index.js';
 
 const config = loadConfig();
@@ -17,7 +17,7 @@ const services = createServices(
     db: platformDb,
     cells,
     idp,
-    email: new EmailService(platformDb, new SmtpMailer(config.SMTP_URL, config.MAIL_FROM)),
+    email: new EmailService(platformDb, mailerFor(config.SMTP_URL, config.MAIL_FROM)),
     consoleUrl: config.CONSOLE_URL,
     workspaceUrl: config.WEB_URL,
     baseDomain: config.BASE_DOMAIN,
@@ -37,6 +37,7 @@ const app = await buildApp({
       if (!res.ok) throw new Error(String(res.status));
     },
   },
+  internal: { serviceToken: config.IDENTITY_SERVICE_TOKEN, devMailbox: config.NODE_ENV !== 'production' },
   platform: {
     services,
     idp,
