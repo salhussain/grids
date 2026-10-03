@@ -1,5 +1,9 @@
+@import '@fontsource-variable/inter';
+
 /*
- * Grids design tokens. Sharp by design: every radius token is 0.
+ * Grids design tokens: Inter, soft radii, quiet borders and a little depth.
+ * Surfaces (`border` + `bg-snow`) and form controls pick up radius and shadow
+ * from these tokens in the base layer below; components can still override.
  * Brand colours resolve at runtime from --brand-* variables (`@theme inline`), so
  * a tenant theme can recolour the whole app by setting a few CSS variables.
  * Apps import this after `@import 'tailwindcss'` and add `@source` for this package.
@@ -27,22 +31,29 @@
 }
 
 @theme {
-  --radius-xs: 0;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
-  --radius-3xl: 0;
-  --radius-4xl: 0;
-  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 24px;
+  --radius-4xl: 32px;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
-  --color-ink: #161616;
-  --color-canvas: #f4f4f4;
+  --color-ink: #0f1117;
+  --color-canvas: #f5f6f8;
   /* Raised surfaces (panels, inputs, tables). White in light mode. */
   --color-snow: #ffffff;
   /* App chrome (dark sidebars, sign-in backdrops): dark in both modes. */
-  --color-chrome: #161616;
+  --color-chrome: #0d0e12;
+  /* Cooler, quieter neutrals for borders and fills. */
+  --color-zinc-50: #f8f9fb;
+  --color-zinc-100: #f1f2f5;
+  --color-zinc-200: #e6e8ec;
+  --color-zinc-300: #d7dae0;
+  --shadow-surface: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.05);
+  --shadow-raised: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 4px 10px -4px rgb(16 24 40 / 0.1);
 }
 
 /*
@@ -53,9 +64,11 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
   --color-ink: #f2f2f3;
-  --color-canvas: #111214;
-  --color-snow: #1a1b1e;
-  --color-chrome: #0a0a0b;
+  --color-canvas: #0d0e11;
+  --color-snow: #17181c;
+  --color-chrome: #08090b;
+  --shadow-surface: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 16px 40px -8px rgb(0 0 0 / 0.6);
   --color-zinc-50: #202125;
   --color-zinc-100: #26272b;
   --color-zinc-200: #323338;
@@ -123,12 +136,37 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+@layer base {
+  /* Controls: rounded; checkboxes a little less. */
+  button,
+  input,
+  select,
+  textarea,
+  ::file-selector-button {
+    border-radius: var(--radius-md);
+  }
+  input[type='checkbox'] {
+    border-radius: var(--radius-xs);
+  }
+  /* Surfaces: any bordered snow box (cards, panels, tiles) is a soft card. Zero
+     specificity, so a component's own rounded or shadow utility wins. */
+  :where(.border.bg-snow) {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-surface);
+  }
+  :where(input, select, textarea).border {
+    box-shadow: 0 1px 2px rgb(16 24 40 / 0.04);
+  }
 }
 ::selection {
   background: var(--brand-100);
 }
 dialog::backdrop {
-  background: rgb(22 22 22 / 0.55);
+  background: rgb(10 12 16 / 0.5);
+  backdrop-filter: blur(3px);
 }
 .num {
   font-variant-numeric: tabular-nums;

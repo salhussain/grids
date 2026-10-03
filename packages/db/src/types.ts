@@ -329,6 +329,7 @@ export interface CellDB {
     user_id: string;
     role: 'manager' | 'editor' | 'viewer';
     root_entity_id: string | null;
+    permission_group: string | null;
     created_at: CreatedAt;
   };
   entity_type: {
@@ -413,6 +414,9 @@ export interface CellDB {
     timeout_seconds: Generated<number>;
     freshness_minutes: number | null;
     run_on_upload: Generated<boolean>;
+    triggers: JsonDefault<Record<string, unknown>>;
+    sensor: Json<Record<string, unknown> | null>;
+    webhook_token: string | null;
     created_at: CreatedAt;
     updated_at: Timestamp;
   };
@@ -431,6 +435,7 @@ export interface CellDB {
     error: string | null;
     stats: JsonDefault<Record<string, number>>;
     worker: string | null;
+    context: JsonDefault<Record<string, unknown>>;
   };
   run_log: {
     id: Generated<string>;
@@ -447,6 +452,15 @@ export interface CellDB {
     available_at: Timestamp;
     locked_by: string | null;
     locked_until: Date | null;
+  };
+  job_sensor: {
+    job_id: string;
+    tenant_id: string;
+    every_minutes: number;
+    next_check_at: Timestamp;
+    last_checked_at: Date | null;
+    cursor: string | null;
+    last_error: string | null;
   };
   job_schedule: {
     job_id: string;
@@ -475,6 +489,27 @@ export interface CellDB {
     dataset_id: string;
     data: Json<Record<string, unknown>>;
   };
+  permission_group: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    description: Generated<string>;
+    parent_key: string | null;
+    created_at: CreatedAt;
+  };
+  map_overlay: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    config: Json<Record<string, unknown>>;
+    is_public: Generated<boolean>;
+    sort: Generated<number>;
+    created_at: CreatedAt;
+    updated_at: Timestamp;
+  };
   project_file: {
     id: string;
     tenant_id: string;
@@ -500,6 +535,7 @@ export interface CellDB {
     widgets: JsonDefault<unknown[]>;
     is_public: Generated<boolean>;
     filters: JsonDefault<Record<string, unknown>>;
+    permission_group: string | null;
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;
@@ -514,9 +550,20 @@ export interface CellDB {
     subject_type_id: string | null;
     draft: Json<Record<string, unknown>>;
     current_version: number | null;
+    group_id: string | null;
+    settings: JsonDefault<Record<string, unknown>>;
     created_at: CreatedAt;
     updated_at: Timestamp;
     archived_at: Date | null;
+  };
+  form_group: {
+    id: string;
+    tenant_id: string;
+    parent_id: string | null;
+    name: string;
+    icon: Generated<string>;
+    sort: Generated<number>;
+    created_at: CreatedAt;
   };
   form_version: {
     form_id: string;
@@ -538,6 +585,20 @@ export interface CellDB {
     collected_at: Timestamp;
     submitted_at: Timestamp;
     location: unknown;
+    status: Generated<'complete' | 'in_review' | 'approved' | 'rejected' | 'returned'>;
+    stage: number | null;
+    decided_at: Date | null;
+  };
+  submission_review: {
+    id: Generated<string>;
+    tenant_id: string;
+    submission_id: string;
+    stage: number | null;
+    stage_name: string | null;
+    decision: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'returned';
+    comment: Generated<string>;
+    actor_id: string | null;
+    at: Timestamp;
   };
 }
 

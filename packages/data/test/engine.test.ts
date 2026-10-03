@@ -3,7 +3,7 @@ import { startTestDatabases, type TestDatabases } from '@grids/db/testing';
 import { JobInput, uuidv7 } from '@grids/schema';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { drainQueue, enqueueRun, freshness, nextRun, parseCsv, parseFile, scheduleDue, syncSchedule, upsertEntities } from '../src/index.js';
+import { checkSensors, drainQueue, enqueueRun, freshness, nextRun, parseCsv, parseFile, scheduleDue, syncSchedule, syncSensor, upsertEntities } from '../src/index.js';
 
 let dbs: TestDatabases;
 let cell: Kysely<CellDB>;
@@ -232,5 +232,62 @@ describe('model', () => {
     await new Promise((r) => setTimeout(r, 5));
     await file('new.csv', 'iso\tname\nFJ\tFiji\nTO\tTonga\n');
     expect(await run()).toMatchObject({ status: 'succeeded', stats: { rows_parsed: 2, entities_created: 2 } });
+  });
+});
+
+describe('triggers and sensors', () => {
+  const job = (key: string, steps: unknown[], extra: Record<string, unknown> = {}) => {
+    const id = uuidv7();
+    const j = JobInput.parse({ key, name: key, steps, ...extra });
+    return tx((t) =>
+      t
+        .insertInto('job')
+        .values({ id, tenant_id: tenantId, project_id: projectId, key, name: key, max_retries: 0, steps: JSON.stringify(j.steps), triggers: JSON.stringify(j.triggers), sensor: j.sensor ? JSON.stringify(j.sensor) : null })
+        .execute()
+        .then(() => id),
+    );
+  };
+  const runsOf = (jobId: string) => tx((t) => t.selectFrom('run').select(['status', 'trigger', 'context', 'stats']).where('job_id', '=', jobId).orderBy('queued_at').execute());
+
+  it('chains jobs on dataset.materialised and job.succeeded, with $event bound', async () => {
+    const upstream = await job('upstream', [{ id: 'save', type: 'dataset.write', dataset: 'snapshot' }], {});
+    const onDataset = await job('on_dataset', [{ id: 'noop', type: 'filter', condition: '$event.ref = "snapshot"' }], { triggers: { events: [{ event: 'dataset.materialised', ref: 'snapshot' }] } });
+    const onOther = await job('on_other', [{ id: 'noop', type: 'filter', condition: 'true' }], { triggers: { events: [{ event: 'dataset.materialised', ref: 'elsewhere' }] } });
+    const onJob = await job('on_job', [{ id: 'noop', type: 'filter', condition: 'true' }], { triggers: { events: [{ event: 'job.succeeded', ref: 'upstream' }] } });
+    await tx((t) => enqueueRun(t, { tenantId, projectId, jobId: upstream, trigger: 'manual' }));
+    await drainQueue(cell, { worker: 'test' });
+    expect(await runsOf(onDataset)).toMatchObject([{ status: 'succeeded', trigger: 'dataset.materialised', context: { event: { name: 'dataset.materialised', ref: 'snapshot', job: 'upstream' } } }]);
+    expect(await runsOf(onJob)).toMatchObject([{ status: 'succeeded', trigger: 'job.succeeded' }]);
+    expect(await runsOf(onOther)).toEqual([]);
+  });
+
+  it('starts a webhook run from the posted rows', async () => {
+    const id = await job('hook', [{ id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' }], { triggers: { webhook: true } });
+    await tx((t) => enqueueRun(t, { tenantId, projectId, jobId: id, trigger: 'webhook', context: { rows: [{ iso: 'NZ', name: 'New Zealand' }, { iso: 'AU', name: 'Australia' }] } }));
+    await drainQueue(cell, { worker: 'test' });
+    expect((await runsOf(id))[0]).toMatchObject({ status: 'succeeded', stats: { rows_received: 2, entities_created: 2 } });
+  });
+
+  it('polls sensors and runs the job when the cursor changes', async () => {
+    const id = await job('watch', [{ id: 'noop', type: 'filter', condition: '$sensor.cursor = "2"' }], { sensor: { url: 'https://example.org/feed.json', cursor: 'version', everyMinutes: 10 } });
+    await tx((t) => syncSensor(t, { id, tenantId, sensor: { url: 'https://example.org/feed.json', cursor: 'version', everyMinutes: 10 }, enabled: true }));
+    let body = '{"version": 1}';
+    const fetch = (async () => new Response(body)) as unknown as typeof globalThis.fetch;
+    const t0 = new Date(Date.now() + 1000);
+    expect(await checkSensors(cell, { fetch, now: t0 })).toBe(1); // first sight
+    expect(await checkSensors(cell, { fetch, now: new Date(t0.getTime() + 60_000) })).toBe(0); // not due yet
+    await drainQueue(cell, { worker: 'test' });
+    expect(await checkSensors(cell, { fetch, now: new Date(t0.getTime() + 11 * 60_000) })).toBe(0); // unchanged
+    body = '{"version": 2}';
+    expect(await checkSensors(cell, { fetch, now: new Date(t0.getTime() + 22 * 60_000) })).toBe(1);
+    await drainQueue(cell, { worker: 'test' });
+    expect((await runsOf(id)).map((r) => [r.trigger, (r.context as { sensor: { cursor: string } }).sensor.cursor])).toEqual([
+      ['sensor', '1'],
+      ['sensor', '2'],
+    ]);
+    body = 'not json';
+    expect(await checkSensors(cell, { fetch, now: new Date(t0.getTime() + 33 * 60_000) })).toBe(0);
+    const state = await cell.selectFrom('job_sensor').select(['last_error', 'cursor']).where('job_id', '=', id).executeTakeFirstOrThrow();
+    expect(state).toMatchObject({ cursor: '2', last_error: expect.stringContaining('not JSON') });
   });
 });

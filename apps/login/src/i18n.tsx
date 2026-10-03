@@ -53,7 +53,7 @@ export function I18nProvider({
   const [locale, setState] = useState<LocaleCode>(initial);
   const key = allowed.join(',');
   // Branding arrives after the first render: re-resolve within the organisation's languages.
-  useEffect(() => setState(initial()), [key, fallback, hint]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setState(initial()), [key, fallback, hint]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -77,7 +77,7 @@ export function I18nProvider({
       t: (k, vars) =>
         interpolate(overrides?.[locale]?.[k] ?? lookup(catalogs[locale], k) ?? lookup(catalogs.en, k) ?? k, vars),
     }),
-    [locale, key, setLocale, overrides], // eslint-disable-line react-hooks/exhaustive-deps
+    [locale, key, setLocale, overrides],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

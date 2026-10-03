@@ -33,6 +33,8 @@ export const BreakdownQuery = Scope.extend({
   kind: z.literal('breakdown'),
   /** Data element to aggregate; omitted = count entities. */
   element: Key.optional(),
+  /** Several elements side by side (grouped/stacked bars, matrices); rows gain `key`. */
+  elements: z.array(Key).min(1).max(12).optional(),
   aggregation: Agg.default('sum'),
   by: z.enum(['parent', 'attribute', 'entity', 'type']),
   attribute: Key.optional(),
@@ -76,7 +78,7 @@ export type QuerySpecInput = z.input<typeof QuerySpec>;
 
 export const QueryResult = z.object({
   kind: z.string(),
-  /** series: [{t, key, value}] · breakdown: [{label, value}] · table: rows · kpi: [{value, previous}] */
+  /** series: [{t, key, value}] · breakdown: [{label, value}] (+ key with `elements`) · table: rows · kpi: [{value, previous}] */
   rows: z.array(z.record(z.string(), z.unknown())),
   /** geo only */
   features: z.any().optional(),
@@ -87,7 +89,7 @@ export type QueryResult = z.infer<typeof QueryResult>;
 
 // ---------------------------------------------------------------- dashboards
 
-export const WIDGET_TYPES = ['kpi', 'line', 'bar', 'pie', 'map', 'table', 'text'] as const;
+export const WIDGET_TYPES = ['kpi', 'line', 'area', 'bar', 'pie', 'gauge', 'matrix', 'map', 'table', 'text'] as const;
 export const Widget = z.object({
   id: z.string().max(40),
   type: z.enum(WIDGET_TYPES),
@@ -98,6 +100,8 @@ export const Widget = z.object({
   query: QuerySpec.optional(),
   /** Markdown-ish text for `text` widgets. */
   text: z.string().max(4000).optional(),
+  /** Only members of this permission group (or a group above it) see the widget. */
+  permissionGroup: Key.optional(),
   options: z
     .object({
       unit: z.string().max(20).optional(),
@@ -108,6 +112,8 @@ export const Widget = z.object({
       /** Lower is better (e.g. stock-outs) flips trend colours. */
       invert: z.boolean().optional(),
       stacked: z.boolean().optional(),
+      /** Gauge: the value at a full dial (target). */
+      max: z.number().optional(),
       horizontal: z.boolean().optional(),
       /** Map: auto-refresh seconds (live layers). */
       refreshSeconds: z.number().int().min(10).max(3600).optional(),
@@ -131,25 +137,40 @@ export type DashboardFilters = z.infer<typeof DashboardFilters>;
 /** Period choices, in hours. */
 export const PERIOD_HOURS = [24, 24 * 7, 24 * 30, 24 * 90, 24 * 365] as const;
 export const DashboardParams = z.object({
+  /** The place selected on the explorer: always scopes every widget. */
+  entity: z.uuid().optional(),
   area: z.uuid().optional(),
   hours: z.coerce
     .number()
     .int()
     .refine((h) => (PERIOD_HOURS as readonly number[]).includes(h), 'Unsupported period')
     .optional(),
+  /** A custom date range (inclusive days, UTC); overrides `hours`. */
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  /** Time series bucket. */
+  interval: z.enum(['minute', 'hour', 'day', 'week', 'month']).optional(),
 });
 export type DashboardParams = z.infer<typeof DashboardParams>;
 
 /**
- * Binds parameter values into a widget's query: the area replaces the scope's
- * ancestor, the period replaces the time range (not for latest-value queries).
+ * Binds parameter values into a widget's query. The explorer's selected place
+ * (`entity`), or the dashboard's area filter when it offers one, replaces the
+ * scope's ancestor. A period (`hours`, or `from`–`to`) replaces the time range of
+ * time-based queries (not latest-value ones); `interval` re-buckets a series.
  * Entity type and other settings stay as the widget defines them.
  */
 export function applyParams(spec: QuerySpec, params: DashboardParams, filters: DashboardFilters): QuerySpec {
   let out: QuerySpec = spec;
+  if (params.entity) out = { ...out, ancestorId: params.entity };
   if (params.area && filters.areaType) out = { ...out, ancestorId: params.area };
-  if (params.hours && filters.period && 'range' in out && !('latest' in out && out.latest))
-    out = { ...out, range: { lastHours: params.hours } } as QuerySpec;
+  const timed = 'range' in out && !('latest' in out && out.latest);
+  if (timed && (params.from || params.to)) {
+    const to = params.to ? new Date(`${params.to}T00:00:00Z`) : null;
+    if (to) to.setUTCDate(to.getUTCDate() + 1);
+    out = { ...out, range: { ...(params.from && { from: `${params.from}T00:00:00Z` }), ...(to && { to: to.toISOString() }), ...(!params.from && { lastHours: 24 * 365 }) } } as QuerySpec;
+  } else if (timed && params.hours) out = { ...out, range: { lastHours: params.hours } } as QuerySpec;
+  if (params.interval && out.kind === 'series') out = { ...out, interval: params.interval };
   return out;
 }
 
@@ -160,6 +181,8 @@ export const DashboardInput = z.object({
   widgets: z.array(Widget).max(40).default([]),
   isPublic: z.boolean().default(false),
   filters: DashboardFilters.default({ areaType: null, period: false }),
+  /** Only members of this permission group (or a group above it) see the dashboard. */
+  permissionGroup: Key.nullable().default(null),
 });
 export type DashboardInput = z.input<typeof DashboardInput>;
 export const DashboardDto = z.object({
@@ -170,14 +193,23 @@ export const DashboardDto = z.object({
   widgets: z.array(Widget),
   isPublic: z.boolean(),
   filters: DashboardFilters,
+  permissionGroup: z.string().nullable(),
   updatedAt: z.string(),
 });
 export type DashboardDto = z.infer<typeof DashboardDto>;
 
 /** Anonymous view of a public project. */
 export const PublicProjectDto = z.object({
-  tenant: z.object({ name: z.string(), slug: z.string(), logo: z.string().nullable(), primaryColor: z.string() }),
+  tenant: z.object({
+    name: z.string(),
+    slug: z.string(),
+    logo: z.string().nullable(),
+    primaryColor: z.string(),
+    mapStyles: z.object({ light: z.string().nullable(), dark: z.string().nullable() }).default({ light: null, dark: null }),
+  }),
   project: z.object({ key: z.string(), name: z.string(), description: z.string(), color: z.string() }),
   dashboards: z.array(DashboardDto),
+  /** Data element names, for chart legends. */
+  elements: z.array(z.object({ key: z.string(), name: z.string(), unit: z.string() })).default([]),
 });
 export type PublicProjectDto = z.infer<typeof PublicProjectDto>;

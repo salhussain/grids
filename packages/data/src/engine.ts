@@ -15,6 +15,12 @@ export interface EngineContext {
   log: LogFn;
   /** Aborts long HTTP calls when the run times out or is cancelled. */
   signal?: AbortSignal;
+  /** What started the run: `rows` (webhook) seed the pipeline; `event`/`sensor` are bound in expressions. */
+  context?: Record<string, unknown>;
+  /** Called for each dataset a step writes (dataset.materialised triggers). */
+  onMaterialised?: (dataset: string) => void;
+  /** Called for each entity type a step changes (entity.changed triggers). */
+  onEntitiesChanged?: (typeKey: string) => void;
 }
 
 export class StepError extends Error {
@@ -39,7 +45,7 @@ function compile(expr: string, step: string) {
 }
 
 async function evalOn(expr: ReturnType<typeof jsonata>, input: unknown, ctx: EngineContext): Promise<unknown> {
-  const v = await expr.evaluate(input, { runTime: ctx.now.toISOString(), runId: ctx.runId });
+  const v = await expr.evaluate(input, { runTime: ctx.now.toISOString(), runId: ctx.runId, event: ctx.context?.event ?? null, sensor: ctx.context?.sensor ?? null });
   return v;
 }
 
@@ -125,7 +131,9 @@ export function parseFile(text: string, format: 'auto' | 'csv' | 'json' | 'ndjso
 export async function executeSteps(tx: CellTx, steps: JobStep[], ctx: EngineContext): Promise<Record<string, number>> {
   const stats: Record<string, number> = {};
   const add = (k: string, n: number) => (stats[k] = (stats[k] ?? 0) + n);
-  let rows: Row[] = [];
+  // A webhook's payload is the pipeline's starting rows.
+  let rows: Row[] = ctx.context?.rows ? asRows(ctx.context.rows) : [];
+  if (rows.length) add('rows_received', rows.length);
 
   for (const step of steps) {
     const sid = step.id;
@@ -240,6 +248,7 @@ export async function executeSteps(tx: CellTx, steps: JobStep[], ctx: EngineCont
         add('entities_created', res.created);
         add('entities_updated', res.updated);
         add('entities_unchanged', res.unchanged);
+        if (res.created + res.updated) ctx.onEntitiesChanged?.(step.entityType);
         await ctx.log('info', sid, `${step.entityType}: ${res.created} created, ${res.updated} updated, ${res.unchanged} unchanged${noLocation ? `, ${noLocation} without a location` : ''}`);
         break;
       }
@@ -300,6 +309,7 @@ export async function executeSteps(tx: CellTx, steps: JobStep[], ctx: EngineCont
           .where('id', '=', ds.id)
           .execute();
         add('dataset_rows', out.length);
+        ctx.onMaterialised?.(step.dataset);
         await ctx.log('info', sid, `${step.mode === 'replace' ? 'Replaced' : 'Appended'} ${out.length} rows in dataset ${step.dataset}`);
         break;
       }

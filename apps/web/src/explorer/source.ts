@@ -1,0 +1,60 @@
+import { type DashboardDto, type DashboardParams, type ExploreDto, type MapOverlayDto, type OverlayResult, type PlaceNode, type QueryResult, type SearchHit, type Widget } from '@grids/schema';
+import { api } from '../api';
+
+/** Where the explorer reads from: a member's project, or a public project anonymously. */
+export interface ExplorerSource {
+  /** Query-key prefix: [kind, scopeA, scopeB] so live events can invalidate it. */
+  keys: { explore: unknown[]; overlays: unknown[]; dashboards: unknown[]; widget: unknown[]; search: unknown[]; names: unknown[] };
+  explore(entity: string | null): Promise<ExploreDto>;
+  overlays(): Promise<MapOverlayDto[]>;
+  overlay(key: string, entity: string | null): Promise<OverlayResult>;
+  search(q: string): Promise<SearchHit[]>;
+  /** Places directly inside a place (null = the top). */
+  places(parent: string | null): Promise<PlaceNode[]>;
+  dashboards(): Promise<DashboardDto[]>;
+  /** Data element key → name (chart legends). */
+  names(): Promise<Record<string, string>>;
+  widget(d: DashboardDto, w: Widget, params: DashboardParams): Promise<QueryResult>;
+}
+
+export function memberSource(tenantId: string, project: string): ExplorerSource {
+  return {
+    keys: {
+      explore: ['explore', tenantId, project],
+      overlays: ['overlays', tenantId, project],
+      dashboards: ['dashboards', tenantId, project],
+      widget: ['widget', tenantId, project],
+      search: ['place-search', tenantId, project],
+      names: ['element-names', tenantId, project],
+    },
+    explore: (entity) => api.explore(tenantId, project, entity),
+    overlays: () => api.overlays(tenantId, project),
+    overlay: (key, entity) => api.overlayValues(tenantId, project, key, entity),
+    search: (q) => api.searchPlaces(tenantId, project, q),
+    places: (parent) => api.places(tenantId, project, parent),
+    dashboards: () => api.dashboards(tenantId, project),
+    names: async () => Object.fromEntries((await api.elements(tenantId, project)).map((e) => [e.key, e.name])),
+    widget: (d, w, params) => api.widget(tenantId, project, d.key, w.id, params),
+  };
+}
+
+export function publicSource(tenant: string, project: string, dashboards: DashboardDto[], elements: { key: string; name: string }[]): ExplorerSource {
+  return {
+    keys: {
+      explore: ['public-explore', tenant, project],
+      overlays: ['public-overlays', tenant, project],
+      dashboards: ['public-dashboards', tenant, project],
+      widget: ['public-widget', tenant, project],
+      search: ['public-search', tenant, project],
+      names: ['public-elements', tenant, project],
+    },
+    explore: (entity) => api.publicExplore(tenant, project, entity),
+    overlays: () => api.publicOverlays(tenant, project),
+    overlay: (key, entity) => api.publicOverlay(tenant, project, key, entity),
+    search: (q) => api.publicSearch(tenant, project, q),
+    places: (parent) => api.publicPlaces(tenant, project, parent),
+    dashboards: async () => dashboards,
+    names: async () => Object.fromEntries(elements.map((e) => [e.key, e.name])),
+    widget: (d, w, params) => api.publicWidget(tenant, project, d.key, w.id, params),
+  };
+}

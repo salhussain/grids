@@ -14,16 +14,30 @@ import {
   EntityTypeDto,
   EntityTypeInput,
   EntityUpdate,
+  ExploreDto,
   FILE_MAX_BYTES,
   FileDto,
   FormDto,
+  FormGroupDto,
+  FormGroupInput,
   FormInput,
+  FormsMenuDto,
+  InboxDto,
+  ResubmitInput,
+  ReviewInput,
+  SUBMISSION_STATUSES,
   GeoQuery,
   ImportRowsInput,
   JobDto,
   JobInput,
+  MapOverlayDto,
+  MapOverlayInput,
   ObservationBatch,
+  OverlayResult,
   PageQuery,
+  PlaceNode,
+  PermissionGroupDto,
+  PermissionGroupInput,
   ProjectDto,
   ProjectInput,
   ProjectMemberDto,
@@ -35,6 +49,7 @@ import {
   RunDetail,
   RunDto,
   RunQuery,
+  SearchHit,
   SubmissionDto,
   SubmissionInput,
   UploadResult,
@@ -106,6 +121,21 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
     '/tenants/:tenantId/projects/:project/members/:userId',
     { schema: { params: P.extend({ userId: z.uuid() }), response: Members } },
     (req) => s.projects.removeMember(actorOf(req), req.params.tenantId, req.params.project, req.params.userId),
+  );
+
+  // ----- permission groups -----
+  const Groups = { 200: z.array(PermissionGroupDto) };
+  app.get('/tenants/:tenantId/projects/:project/permission-groups', { schema: { params: P, response: Groups } }, (req) =>
+    s.projects.permissionGroups(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/permission-groups', { schema: { params: P, body: PermissionGroupInput, response: Groups } }, (req) =>
+    s.projects.savePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/permission-groups/:key', { schema: { params: PK, body: PermissionGroupInput, response: Groups } }, (req) =>
+    s.projects.savePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/permission-groups/:key', { schema: { params: PK, response: Groups } }, (req) =>
+    s.projects.deletePermissionGroup(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
   );
 
   // ----- entity types -----
@@ -273,11 +303,49 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   app.post('/tenants/:tenantId/projects/:project/dashboards', { schema: { params: P, body: DashboardInput, response: Dashboards } }, (req) =>
     s.query.saveDashboard(actorOf(req), req.params.tenantId, req.params.project, req.body),
   );
+  app.get(
+    '/tenants/:tenantId/projects/:project/dashboards/:key/widgets/:widget',
+    { schema: { params: PK.extend({ widget: z.string().max(40) }), querystring: DashboardParams, response: { 200: QueryResult } } },
+    (req) => s.query.widget(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.params.widget, req.query),
+  );
   app.put('/tenants/:tenantId/projects/:project/dashboards/:key', { schema: { params: PK, body: DashboardInput, response: Dashboards } }, (req) =>
     s.query.saveDashboard(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
   );
   app.delete('/tenants/:tenantId/projects/:project/dashboards/:key', { schema: { params: PK, response: Dashboards } }, (req) =>
     s.query.deleteDashboard(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
+
+  // ----- explorer & map overlays -----
+  const Overlays = { 200: z.array(MapOverlayDto) };
+  const At = z.object({ entity: z.uuid().optional() });
+  app.get('/tenants/:tenantId/projects/:project/explore', { schema: { params: P, querystring: At, response: { 200: ExploreDto } } }, (req) =>
+    s.explore.explore(actorOf(req), req.params.tenantId, req.params.project, req.query.entity ?? null),
+  );
+  const Parent = z.object({ parent: z.uuid().optional() });
+  app.get('/tenants/:tenantId/projects/:project/places', { schema: { params: P, querystring: Parent, response: { 200: z.array(PlaceNode) } } }, (req) =>
+    s.explore.children(actorOf(req), req.params.tenantId, req.params.project, req.query.parent ?? null),
+  );
+  app.get(
+    '/tenants/:tenantId/projects/:project/search',
+    { schema: { params: P, querystring: z.object({ q: z.string().max(100) }), response: { 200: z.array(SearchHit) } } },
+    (req) => s.explore.search(actorOf(req), req.params.tenantId, req.params.project, req.query.q),
+  );
+  app.get('/tenants/:tenantId/projects/:project/overlays', { schema: { params: P, response: Overlays } }, (req) =>
+    s.explore.overlays(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/overlays', { schema: { params: P, body: MapOverlayInput, response: Overlays } }, (req) =>
+    s.explore.saveOverlay(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/overlays/:key', { schema: { params: PK, body: MapOverlayInput, response: Overlays } }, (req) =>
+    s.explore.saveOverlay(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/overlays/:key', { schema: { params: PK, response: Overlays } }, (req) =>
+    s.explore.deleteOverlay(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
+  app.get(
+    '/tenants/:tenantId/projects/:project/overlays/:key/values',
+    { schema: { params: PK, querystring: At, response: { 200: OverlayResult } } },
+    (req) => s.explore.overlay(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.query.entity ?? null),
   );
 
   // ----- forms & submissions -----
@@ -304,11 +372,32 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
   app.get(
     '/tenants/:tenantId/projects/:project/forms/:key/submissions',
-    { schema: { params: PK, querystring: PageQuery.extend({ entityId: z.uuid().optional() }), response: { 200: pageOf(SubmissionDto) } } },
+    { schema: { params: PK, querystring: PageQuery.extend({ entityId: z.uuid().optional(), status: z.enum(SUBMISSION_STATUSES).optional() }), response: { 200: pageOf(SubmissionDto) } } },
     (req) => s.forms.submissions(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.query),
   );
   app.get('/tenants/:tenantId/projects/:project/submissions/:id', { schema: { params: PId, response: { 200: SubmissionDto } } }, (req) =>
     s.forms.submission(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
+  );
+  app.post('/tenants/:tenantId/projects/:project/submissions/:id/review', { schema: { params: PId, body: ReviewInput, response: { 200: SubmissionDto } } }, (req) =>
+    s.forms.review(actorOf(req), req.params.tenantId, req.params.project, req.params.id, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/submissions/:id', { schema: { params: PId, body: ResubmitInput, response: { 200: SubmissionDto } } }, (req) =>
+    s.forms.resubmit(actorOf(req), req.params.tenantId, req.params.project, req.params.id, req.body),
+  );
+
+  // ----- the organisation's Forms menu and review inbox -----
+  const FormGroups = { 200: z.array(FormGroupDto) };
+  app.get('/tenants/:tenantId/forms/menu', { schema: { params: T, response: { 200: FormsMenuDto } } }, (req) => s.forms.menu(actorOf(req), req.params.tenantId));
+  app.get('/tenants/:tenantId/forms/inbox', { schema: { params: T, response: { 200: InboxDto } } }, (req) => s.forms.inbox(actorOf(req), req.params.tenantId));
+  app.get('/tenants/:tenantId/form-groups', { schema: { params: T, response: FormGroups } }, (req) => s.forms.groups(actorOf(req), req.params.tenantId));
+  app.post('/tenants/:tenantId/form-groups', { schema: { params: T, body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveGroup(actorOf(req), req.params.tenantId, req.body),
+  );
+  app.put('/tenants/:tenantId/form-groups/:id', { schema: { params: T.extend({ id: z.uuid() }), body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveGroup(actorOf(req), req.params.tenantId, req.body, req.params.id),
+  );
+  app.delete('/tenants/:tenantId/form-groups/:id', { schema: { params: T.extend({ id: z.uuid() }), response: FormGroups } }, (req) =>
+    s.forms.deleteGroup(actorOf(req), req.params.tenantId, req.params.id),
   );
 };
 
@@ -320,6 +409,46 @@ export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, 
     reply.header('cache-control', 'public, max-age=30');
     return s.query.publicView(req.params.tenant, req.params.project);
   });
+  const At = z.object({ entity: z.uuid().optional() });
+  const cache = (reply: { header(k: string, v: string): unknown }) => reply.header('cache-control', 'public, max-age=30');
+  app.get('/public/projects/:tenant/:project/explore', { schema: { params: Params, querystring: At, response: { 200: ExploreDto } } }, async (req, reply) => {
+    cache(reply);
+    return s.explore.publicExplore(req.params.tenant, req.params.project, req.query.entity ?? null);
+  });
+  app.get('/public/projects/:tenant/:project/overlays', { schema: { params: Params, response: { 200: z.array(MapOverlayDto) } } }, async (req, reply) => {
+    cache(reply);
+    return s.explore.publicOverlays(req.params.tenant, req.params.project);
+  });
+  app.get(
+    '/public/projects/:tenant/:project/overlays/:key/values',
+    { schema: { params: Params.extend({ key: z.string().max(63) }), querystring: At, response: { 200: OverlayResult } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicOverlay(req.params.tenant, req.params.project, req.params.key, req.query.entity ?? null);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/places',
+    { schema: { params: Params, querystring: z.object({ parent: z.uuid().optional() }), response: { 200: z.array(PlaceNode) } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicChildren(req.params.tenant, req.params.project, req.query.parent ?? null);
+    },
+  );
+  app.get(
+    '/public/projects/:tenant/:project/search',
+    { schema: { params: Params, querystring: z.object({ q: z.string().max(100) }), response: { 200: z.array(SearchHit) } } },
+    async (req, reply) => {
+      cache(reply);
+      return s.explore.publicSearch(req.params.tenant, req.params.project, req.query.q);
+    },
+  );
+  // Inbound webhooks: the token (tenant + secret) is the credential.
+  app.post(
+    '/hooks/:token',
+    { bodyLimit: 5 * 1024 * 1024, schema: { params: z.object({ token: z.string().min(40).max(120) }), response: { 202: z.object({ runId: z.string() }) } } },
+    async (req, reply) => reply.status(202).send(await s.jobs.webhook(req.params.token, req.body)),
+  );
   app.get('/public/projects/:tenant/:project/events', { schema: { params: Params } }, async (req, reply) => {
     const t = await s.query.publicTarget(req.params.tenant, req.params.project);
     await streamEvents(req, reply, (fn) => s.events.subscribe(t.tenantId, t.projectId, fn), 2_000);

@@ -1,71 +1,18 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { validate } from '@grids/forms';
-import { uuidv7, type FormDto } from '@grids/schema';
-import { ApiError, Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Pagination, Panel, Select, Table, Tag, Td, dateTime, relTime, usePagination, useToast } from '@grids/ui';
-import { ClipboardList, CloudOff, Pencil, Plus, Send } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { FORM_LAYOUT_INFO, SUBMISSION_STATUSES, type FormDto, type SubmissionStatus } from '@grids/schema';
+import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Pagination, Select, Table, Tag, Td, dateTime, relTime, usePagination } from '@grids/ui';
+import { ClipboardList, CloudOff, GitBranch, Lock, Pencil, Plus, Send } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../../api';
+import { FillForm } from '../forms/FillForm';
+import { useOutbox } from '../forms/outbox';
+import { SubmissionSheet } from '../forms/SubmissionSheet';
+import { STATUS_INFO, SubmissionStatusPill, fmtAnswer } from '../forms/status';
 import { useProject } from './context';
-import { FormRenderer, type Answers } from './FormRenderer';
 import { useTypes } from './EntitiesTab';
 
-// ---------------------------------------------------------------- offline outbox
-
-interface Pending {
-  tenantId: string;
-  project: string;
-  form: string;
-  formName: string;
-  input: Parameters<typeof api.submit>[3];
-}
-const OUTBOX = 'grids.outbox';
-const readOutbox = (): Pending[] => {
-  try {
-    return JSON.parse(localStorage.getItem(OUTBOX) ?? '[]') as Pending[];
-  } catch {
-    return [];
-  }
-};
-const writeOutbox = (items: Pending[]) => {
-  try {
-    localStorage.setItem(OUTBOX, JSON.stringify(items));
-  } catch {
-    /* storage full or unavailable */
-  }
-};
-
-/**
- * Submissions that couldn't reach the server (offline) wait here and are sent when
- * the connection returns. Ids are client-generated, so a retry never duplicates.
- */
-export function useOutbox() {
-  const [items, setItems] = useState<Pending[]>(readOutbox);
-  const flush = useCallback(async () => {
-    const remaining: Pending[] = [];
-    for (const p of readOutbox()) {
-      try {
-        await api.submit(p.tenantId, p.project, p.form, p.input);
-      } catch (e) {
-        // Keep it only if it is still a connectivity problem; server rejections are dropped.
-        if (!(e instanceof ApiError)) remaining.push(p);
-      }
-    }
-    writeOutbox(remaining);
-    setItems(remaining);
-  }, []);
-  useEffect(() => {
-    if (navigator.onLine) void flush();
-    window.addEventListener('online', flush);
-    return () => window.removeEventListener('online', flush);
-  }, [flush]);
-  const add = (p: Pending) => {
-    const next = [...readOutbox(), p];
-    writeOutbox(next);
-    setItems(next);
-  };
-  return { items, add, flush };
-}
+export { useOutbox };
 
 // ---------------------------------------------------------------- list
 
@@ -75,6 +22,7 @@ export function FormsTab() {
   const outbox = useOutbox();
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<FormDto | null>(null);
+  const [sheet, setSheet] = useState<string | null>(null);
   const mine = outbox.items.filter((p) => p.tenantId === tenantId && p.project === project.key);
   return (
     <div className="space-y-6">
@@ -112,7 +60,14 @@ export function FormsTab() {
                   <p className="mt-0.5 text-sm text-zinc-500">{f.description || (f.subjectType ? `About a ${f.subjectType.name.toLowerCase()}` : 'Standalone form')}</p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  {f.currentVersion ? <Tag>v{f.currentVersion}</Tag> : <Tag>Draft</Tag>}
+                  <span className="flex gap-1">
+                    {f.settings.workflow.enabled && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-800 ring-1 ring-sky-200" title={f.settings.workflow.stages.map((x) => x.name).join(' → ')}>
+                        <GitBranch className="size-3" /> {f.settings.workflow.stages.length}-stage approval
+                      </span>
+                    )}
+                    {f.currentVersion ? <Tag>v{f.currentVersion}</Tag> : <Tag>Draft</Tag>}
+                  </span>
                   {f.currentVersion && f.hasUnpublishedChanges && <span className="text-xs text-amber-700">Unpublished changes</span>}
                 </div>
               </div>
@@ -129,18 +84,28 @@ export function FormsTab() {
                   <dt className="text-xs text-zinc-500">Questions</dt>
                   <dd className="num">{f.draft.sections.reduce((n, s) => n + s.questions.length, 0)}</dd>
                 </div>
+                <div>
+                  <dt className="text-xs text-zinc-500">Layout</dt>
+                  <dd>{FORM_LAYOUT_INFO[f.draft.layout].label}</dd>
+                </div>
               </dl>
               <div className="mt-auto flex flex-wrap gap-2 border-t border-zinc-100 pt-4">
-                {can('editor') && f.currentVersion && (
-                  <Link to={`${base}/forms/${f.key}/fill`} className="inline-flex h-7 items-center gap-1.5 bg-accent-600 px-2.5 text-xs font-medium text-white hover:bg-accent-700">
+                {f.canFill && f.currentVersion ? (
+                  <Link to={`${base}/forms/${f.key}/fill`} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent-600 px-2.5 text-xs font-medium text-white hover:bg-accent-700">
                     <Send className="size-3.5" /> Fill in
                   </Link>
+                ) : (
+                  !f.canFill && (
+                    <span className="inline-flex h-7 items-center gap-1.5 px-1 text-xs text-zinc-500">
+                      <Lock className="size-3.5" /> Not for your role
+                    </span>
+                  )
                 )}
                 <Button size="sm" variant="secondary" onClick={() => setViewing(f)}>
                   Submissions
                 </Button>
                 {can('manager') && (
-                  <Link to={`${base}/forms/${f.key}/edit`} className="inline-flex h-7 items-center gap-1.5 border border-zinc-300 bg-snow px-2.5 text-xs font-medium hover:border-zinc-900">
+                  <Link to={`${base}/forms/${f.key}/edit`} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-300 bg-snow px-2.5 text-xs font-medium hover:border-zinc-900">
                     <Pencil className="size-3.5" /> Build
                   </Link>
                 )}
@@ -150,7 +115,8 @@ export function FormsTab() {
         </ul>
       )}
       {creating && <NewForm onClose={() => setCreating(false)} />}
-      {viewing && <Submissions form={viewing} onClose={() => setViewing(null)} />}
+      {viewing && !sheet && <Submissions form={viewing} onClose={() => setViewing(null)} onOpen={setSheet} />}
+      {sheet && <SubmissionSheet tenantId={tenantId} project={project.key} id={sheet} onClose={() => setSheet(null)} />}
     </div>
   );
 }
@@ -212,24 +178,50 @@ function NewForm({ onClose }: { onClose(): void }) {
   );
 }
 
-function Submissions({ form, onClose }: { form: FormDto; onClose(): void }) {
+function Submissions({ form, onClose, onOpen }: { form: FormDto; onClose(): void; onOpen(id: string): void }) {
   const { tenantId, project } = useProject();
-  const [pg, setPg] = usePagination([], 25);
+  const [status, setStatus] = useState<SubmissionStatus | ''>('');
+  const [pg, setPg] = usePagination([status], 25);
   const subs = useQuery({
-    queryKey: ['submissions', tenantId, project.key, form.key, pg],
-    queryFn: () => api.submissions(tenantId, project.key, form.key, pg),
+    queryKey: ['submissions', tenantId, project.key, form.key, pg, status],
+    queryFn: () => api.submissions(tenantId, project.key, form.key, { ...pg, status: status || undefined }),
     placeholderData: keepPreviousData,
   });
   const def = form.published ?? form.draft;
-  const cols = def.sections.flatMap((s) => s.questions).filter((q) => q.type !== 'note').slice(0, 6);
+  const cols = def.sections.flatMap((s) => s.questions).filter((q) => q.type !== 'note').slice(0, 5);
+  const wf = form.settings.workflow.enabled;
   return (
     <Dialog open wide onClose={onClose} title={`${form.name}: submissions`}>
       <ErrorNotice error={subs.error} />
+      {wf && (
+        <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
+          {(['', ...SUBMISSION_STATUSES.filter((x) => x !== 'complete')] as const).map((x) => (
+            <button
+              key={x || 'all'}
+              type="button"
+              aria-pressed={status === x}
+              onClick={() => setStatus(x)}
+              className={`rounded-full px-2.5 py-1 text-xs ring-1 ${status === x ? 'bg-ink text-canvas ring-ink' : 'bg-snow text-zinc-600 ring-zinc-200 hover:ring-zinc-400'}`}
+            >
+              {x ? STATUS_INFO[x].label : 'All'}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="max-h-[60vh] overflow-auto">
-        <Table head={['Submitted', ...(form.subjectType ? [form.subjectType.name] : []), 'By', ...cols.map((q) => q.label)]} empty={<Empty icon={ClipboardList} title="No submissions yet" />}>
+        <Table
+          head={['Submitted', ...(wf ? ['Status'] : []), ...(form.subjectType ? [form.subjectType.name] : []), 'By', ...cols.map((q) => q.label)]}
+          empty={<Empty icon={ClipboardList} title="No submissions yet" />}
+        >
           {subs.data?.items.map((s) => (
-            <tr key={s.id} className="border-t border-zinc-100">
+            <tr key={s.id} className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50" onClick={() => onOpen(s.id)}>
               <Td className="text-xs whitespace-nowrap">{dateTime(s.submittedAt)}</Td>
+              {wf && (
+                <Td>
+                  <SubmissionStatusPill s={s} />
+                  {s.stageName && s.status === 'in_review' && <div className="mt-0.5 text-[11px] text-zinc-500">{s.stageName}</div>}
+                </Td>
+              )}
               {form.subjectType && <Td>{s.entity?.name ?? '—'}</Td>}
               <Td className="text-xs">{s.submittedBy ?? '—'}</Td>
               {cols.map((q) => (
@@ -246,90 +238,21 @@ function Submissions({ form, onClose }: { form: FormDto; onClose(): void }) {
   );
 }
 
-const fmtAnswer = (v: unknown) =>
-  v === undefined || v === null ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : String(v);
-
 // ---------------------------------------------------------------- fill in
 
 export function FormFillPage() {
   const { tenantId, project, base } = useProject();
   const { formKey } = useParams({ strict: false }) as { formKey: string };
   const search = useSearch({ strict: false }) as { entity?: string };
-  const navigate = useNavigate();
-  const toast = useToast();
-  const outbox = useOutbox();
-  const forms = useQuery({ queryKey: ['forms', tenantId, project.key], queryFn: () => api.forms(tenantId, project.key) });
-  const form = forms.data?.find((f) => f.key === formKey);
-  const [answers, setAnswers] = useState<Answers>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [entity, setEntity] = useState<string>(search.entity ?? '');
-  const subjects = useQuery({
-    queryKey: ['entities', tenantId, project.key, 'subjects', form?.subjectType?.key],
-    queryFn: () => api.entities(tenantId, project.key, { type: form!.subjectType!.key, pageSize: 200 }),
-    enabled: !!form?.subjectType,
-  });
-  const submit = useMutation({
-    mutationFn: async () => {
-      const def = form!.published!;
-      const local = validate(def, answers);
-      if (!local.ok) {
-        setErrors(local.errors);
-        throw new Error('Some answers need attention');
-      }
-      const input = { id: uuidv7(), version: form!.currentVersion!, entityId: entity || null, answers, collectedAt: new Date().toISOString() };
-      try {
-        return { saved: await api.submit(tenantId, project.key, form!.key, input), offline: false };
-      } catch (e) {
-        if (e instanceof ApiError) {
-          if (e.problem.errors) setErrors(Object.fromEntries(e.problem.errors.map((x) => [x.path, x.message])));
-          throw e;
-        }
-        outbox.add({ tenantId, project: project.key, form: form!.key, formName: form!.name, input });
-        return { saved: null, offline: true };
-      }
-    },
-    onSuccess: ({ offline }) => {
-      toast(offline ? 'Saved on this device; it will be sent when you are back online' : 'Submitted');
-      setAnswers({});
-      setErrors({});
-      void navigate({ to: `${base}/forms` });
-    },
-  });
-  if (forms.isPending) return <Loading />;
-  if (!form?.published) return <ErrorNotice error={new Error('This form is not published yet.')} />;
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <Link to={`${base}/forms`} className="text-sm text-accent-700 hover:underline">
-          ← Forms
-        </Link>
-        <h2 className="mt-2 text-xl font-semibold">{form.published.title}</h2>
-        {form.published.description && <p className="mt-1 text-sm text-zinc-600">{form.published.description}</p>}
-        <p className="mt-1 text-xs text-zinc-500">Version {form.currentVersion}</p>
-      </div>
-      {form.subjectType && (
-        <Panel title={`Which ${form.subjectType.name.toLowerCase()}?`}>
-          <Select aria-label={form.subjectType.name} value={entity} onChange={(e) => setEntity(e.target.value)}>
-            <option value="">Choose…</option>
-            {subjects.data?.items.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-                {e.parent ? ` (${e.parent.name})` : ''}
-              </option>
-            ))}
-          </Select>
-        </Panel>
-      )}
-      <FormRenderer definition={form.published} answers={answers} onChange={setAnswers} errors={errors} />
-      <ErrorNotice error={submit.error} />
-      <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-zinc-200 bg-canvas/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
-        <Button variant="secondary" onClick={() => setAnswers({})}>
-          Clear
-        </Button>
-        <Button icon={Send} onClick={() => submit.mutate()} loading={submit.isPending} disabled={!!form.subjectType && !entity}>
-          Submit
-        </Button>
-      </div>
-    </div>
+    <FillForm
+      tenantId={tenantId}
+      project={project.key}
+      projectName={project.name}
+      formKey={formKey}
+      entityId={search.entity}
+      back={{ to: `${base}/forms`, label: 'Forms' }}
+      inboxHref={`/o/${tenantId}/inbox`}
+    />
   );
 }

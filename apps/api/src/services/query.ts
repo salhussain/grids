@@ -18,7 +18,7 @@ import type { DashboardInput } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import type { EventBus } from './events.js';
-import type { ProjectService } from './projects.js';
+import { canSee, type ProjectService } from './projects.js';
 import { iso, isUniqueViolation } from './util.js';
 import { DEFAULT_THEME, Theme } from '@grids/schema';
 
@@ -52,7 +52,7 @@ const round = (v: unknown) => (v === null || v === undefined ? null : Math.round
  */
 export class QueryService {
   /** Result cache: tenant|project|scope|spec → result (insertion-ordered for LRU eviction). */
-  private readonly cache = new Map<string, { at: number; result: QueryResult }>();
+  private readonly cache = new Map<string, { at: number; result: unknown }>();
 
   constructor(
     private readonly ctx: ServiceContext,
@@ -78,13 +78,13 @@ export class QueryService {
    * cache is only used while change events are flowing for the tenant's cell, so
    * results never outlive a data change by more than the notification latency.
    */
-  private async cached(tenantId: string, projectId: string, rootPath: string | null, spec: QuerySpec, compute: () => Promise<QueryResult>): Promise<QueryResult> {
+  async cached<T>(tenantId: string, projectId: string, rootPath: string | null, spec: unknown, compute: () => Promise<T>): Promise<T> {
     const live = this.events ? await this.events.ensure(tenantId).catch(() => false) : false;
     if (!live) return compute();
     const key = `${tenantId}|${projectId}|${rootPath ?? '*'}|${JSON.stringify(spec)}`;
     const hit = this.cache.get(key);
     const now = Date.now();
-    if (hit && now - hit.at < this.cacheOpts.ttlMs) return hit.result;
+    if (hit && now - hit.at < this.cacheOpts.ttlMs) return hit.result as T;
     const result = await compute();
     this.cache.delete(key);
     this.cache.set(key, { at: now, result });
@@ -137,8 +137,12 @@ export class QueryService {
     return freshness(last.rows[0]?.at ?? null, null, this.ctx.now());
   }
 
+  /**
+   * Ad-hoc queries (building dashboards, data exploration) need the editor role:
+   * viewers read data only through visuals, which their permission groups gate.
+   */
   async query(actor: Actor, tenantId: string, project: string, spec: QuerySpec): Promise<QueryResult> {
-    const a = await this.projects.access(actor, tenantId, project);
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
     return this.cached(tenantId, a.project.id, a.rootPath, spec, () => this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec)));
   }
 
@@ -171,39 +175,51 @@ export class QueryService {
                 ? sql`t.name`
                 : sql`e.name`;
         const joins = sql`left join entity p on p.id = e.parent_id join entity_type t on t.id = e.type_id`;
+        const keys = spec.elements ?? (spec.element ? [spec.element] : null);
+        const multi = !!spec.elements;
         let rows;
-        if (!spec.element) {
-          rows = await sql<{ label: string; value: number }>`
-            select ${labelExpr} as label, count(*)::float8 as value
+        if (!keys) {
+          rows = await sql<{ label: string; key: string | null; value: number }>`
+            select ${labelExpr} as label, null as key, count(*)::float8 as value
             from entity e ${joins}
             where e.project_id = ${projectId} ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc, 1 limit ${spec.limit}
+            group by 1 order by 3 desc, 1 limit ${spec.limit}
           `.execute(tx);
         } else if (spec.latest) {
-          rows = await sql<{ label: string; value: number }>`
+          rows = await sql<{ label: string; key: string; value: number }>`
             with latest as (
-              select distinct on (o.entity_id) o.entity_id, o.value_num as v, o.at
+              select distinct on (o.entity_id, d.key) o.entity_id, d.key, o.value_num as v, o.at
               from observation o join data_element d on d.id = o.element_id
-              where o.project_id = ${projectId} and d.key = ${spec.element}
-              order by o.entity_id, o.at desc
+              where o.project_id = ${projectId} and d.key in (${sql.join(keys)})
+              order by o.entity_id, d.key, o.at desc
             )
-            select ${labelExpr} as label, ${sql.raw(LATEST_AGG[spec.aggregation]!)}::float8 as value
+            select ${labelExpr} as label, l.key, ${sql.raw(LATEST_AGG[spec.aggregation]!)}::float8 as value
             from latest l join entity e on e.id = l.entity_id ${joins}
             where true ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc nulls last, 1 limit ${spec.limit}
+            group by 1, 2
           `.execute(tx);
         } else {
           const { from, to } = this.range(spec.range);
-          rows = await sql<{ label: string; value: number }>`
-            select ${labelExpr} as label, ${sql.raw(AGG[spec.aggregation]!)}::float8 as value
+          rows = await sql<{ label: string; key: string; value: number }>`
+            select ${labelExpr} as label, d.key, ${sql.raw(AGG[spec.aggregation]!)}::float8 as value
             from observation o join data_element d on d.id = o.element_id
             join entity e on e.id = o.entity_id ${joins}
-            where o.project_id = ${projectId} and d.key = ${spec.element} and o.at >= ${from} and o.at < ${to}
+            where o.project_id = ${projectId} and d.key in (${sql.join(keys)}) and o.at >= ${from} and o.at < ${to}
               ${this.scope(spec, rootPath)}
-            group by 1 order by 2 desc nulls last, 1 limit ${spec.limit}
+            group by 1, 2
           `.execute(tx);
         }
-        return { kind: 'breakdown', rows: rows.rows.map((r) => ({ label: r.label, value: round(r.value) })), freshness: fresh };
+        // Top labels by their total across elements; rows keep element order.
+        const totals = new Map<string, number>();
+        for (const r of rows.rows) totals.set(r.label, (totals.get(r.label) ?? 0) + (Number(r.value) || 0));
+        const top = [...totals.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, spec.limit).map(([l]) => l);
+        const rank = new Map(top.map((l, i) => [l, i]));
+        const order = keys ? new Map(keys.map((k, i) => [k, i])) : new Map<string, number>();
+        const kept = rows.rows
+          .filter((r) => rank.has(r.label))
+          .sort((x, y) => rank.get(x.label)! - rank.get(y.label)! || (order.get(x.key ?? '') ?? 0) - (order.get(y.key ?? '') ?? 0));
+        if (multi) return { kind: 'breakdown', rows: kept.map((r) => ({ label: r.label, key: r.key, value: round(r.value) })), freshness: fresh };
+        return { kind: 'breakdown', rows: kept.map((r) => ({ label: r.label, value: round(r.value) })), freshness: fresh };
       }
       case 'kpi': {
         const one = async (from: Date | null, to: Date | null): Promise<number | null> => {
@@ -320,7 +336,7 @@ export class QueryService {
 
   // ---------- dashboards ----------
 
-  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; updated_at: Date }): DashboardDto {
+  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; permission_group: string | null; updated_at: Date }): DashboardDto {
     return {
       id: d.id,
       key: d.key,
@@ -329,23 +345,42 @@ export class QueryService {
       widgets: d.widgets.map((w) => Widget.parse(w)),
       isPublic: d.is_public,
       filters: DashboardFilters.parse(d.filters ?? {}),
+      permissionGroup: d.permission_group,
       updatedAt: iso(d.updated_at),
     };
   }
 
+  /** Dashboards and widgets the caller's permission groups allow (managers see all). */
   async dashboards(actor: Actor, tenantId: string, project: string): Promise<DashboardDto[]> {
     const a = await this.projects.access(actor, tenantId, project);
-    return this.projects.cellTx(tenantId, async (tx) =>
-      (await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).orderBy('sort').orderBy('name').execute()).map((d) =>
-        this.toDashboard(d),
-      ),
+    const all = await this.projects.cellTx(tenantId, async (tx) =>
+      (await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).orderBy('sort').orderBy('name').execute()).map((d) => this.toDashboard(d)),
     );
+    return all.filter((d) => canSee(a, d.permissionGroup)).map((d) => ({ ...d, widgets: d.widgets.filter((w) => canSee(a, w.permissionGroup)) }));
+  }
+
+  /** One widget's stored query for a member, with explorer/dashboard parameters, if permitted. */
+  async widget(actor: Actor, tenantId: string, project: string, dashboardKey: string, widgetId: string, params: DashboardParams): Promise<QueryResult> {
+    const a = await this.projects.access(actor, tenantId, project);
+    const spec = await this.projects.cellTx(tenantId, async (tx) => {
+      const row = await tx.selectFrom('dashboard').selectAll().where('project_id', '=', a.project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      const d = row && this.toDashboard(row);
+      if (!d || !canSee(a, d.permissionGroup)) throw notFound('Dashboard');
+      const w = d.widgets.find((x) => x.id === widgetId);
+      if (!w?.query || !canSee(a, w.permissionGroup)) throw notFound('Widget');
+      if (params.entity && !(await this.areaExists(tx, a.project.id, null, params.entity))) throw notFound('Place');
+      return applyParams(w.query, params, d.filters);
+    });
+    return this.cached(tenantId, a.project.id, a.rootPath, spec, () => this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec)));
   }
 
   async saveDashboard(actor: Actor, tenantId: string, project: string, input: z.output<typeof DashboardInput>, existingKey?: string): Promise<DashboardDto[]> {
     const a = await this.projects.access(actor, tenantId, project, 'manager');
     const ids = input.widgets.map((w) => w.id);
     if (new Set(ids).size !== ids.length) throw badRequest('Widget ids must be unique');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      for (const g of new Set([input.permissionGroup, ...input.widgets.map((w) => w.permissionGroup)])) await this.projects.assertGroup(tx, a.project.id, g);
+    });
     if (input.filters.areaType) {
       const t = await this.projects.cellTx(tenantId, (tx) =>
         tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.filters.areaType!).executeTakeFirst(),
@@ -359,6 +394,7 @@ export class QueryService {
       widgets: JSON.stringify(input.widgets),
       is_public: input.isPublic,
       filters: JSON.stringify(input.filters),
+      permission_group: input.permissionGroup,
       updated_at: this.ctx.now(),
     };
     try {
@@ -387,7 +423,7 @@ export class QueryService {
 
   // ---------- public projects (anonymous, read-only) ----------
 
-  private async publicProject(tenantSlug: string, projectKey: string) {
+  async publicProject(tenantSlug: string, projectKey: string) {
     const t = await this.ctx.db.selectFrom('tenant').select(['id', 'name', 'slug', 'status']).where('slug', '=', tenantSlug).executeTakeFirst();
     if (!t || t.status !== 'active') throw notFound('Project');
     return this.projects.cellTx(t.id, async (tx) => {
@@ -400,33 +436,33 @@ export class QueryService {
 
   async publicView(tenantSlug: string, projectKey: string): Promise<PublicProjectDto> {
     const { tenant, project, theme } = await this.publicProject(tenantSlug, projectKey);
-    const dashboards = await this.projects.cellTx(tenant.id, (tx) =>
-      tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).orderBy('sort').execute(),
+    const [dashboards, elements] = await this.projects.cellTx(tenant.id, (tx) =>
+      Promise.all([
+        tx.selectFrom('dashboard').selectAll().where('project_id', '=', project.id).where('is_public', '=', true).where('permission_group', 'is', null).orderBy('sort').execute(),
+        tx.selectFrom('data_element').select(['key', 'name', 'unit']).where('project_id', '=', project.id).orderBy('key').execute(),
+      ]),
     );
     return {
-      tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor },
+      tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor, mapStyles: theme.mapStyles },
       project: { key: project.key, name: project.name, description: project.description, color: project.color },
-      dashboards: dashboards.map((d) => this.toDashboard(d)),
+      // Anonymous viewers have no permission group: only unrestricted widgets.
+      dashboards: dashboards.map((d) => this.toDashboard(d)).map((d) => ({ ...d, widgets: d.widgets.filter((w) => !w.permissionGroup) })),
+      elements,
     };
   }
 
-  private async areaExists(tx: Tx, projectId: string, typeKey: string, id: string) {
-    return !!(await tx
-      .selectFrom('entity as e')
-      .innerJoin('entity_type as t', 't.id', 'e.type_id')
-      .select('e.id')
-      .where('e.project_id', '=', projectId)
-      .where('t.key', '=', typeKey)
-      .where('e.id', '=', id)
-      .executeTakeFirst());
+  private async areaExists(tx: Tx, projectId: string, typeKey: string | null, id: string) {
+    let q = tx.selectFrom('entity as e').innerJoin('entity_type as t', 't.id', 'e.type_id').select('e.id').where('e.project_id', '=', projectId).where('e.id', '=', id);
+    if (typeKey) q = q.where('t.key', '=', typeKey);
+    return !!(await q.executeTakeFirst());
   }
 
   /** Choices for a public dashboard's area filter. */
   async publicAreas(tenantSlug: string, projectKey: string, dashboardKey: string): Promise<{ id: string; name: string }[]> {
     const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
     return this.projects.cellTx(tenant.id, async (tx) => {
-      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
-      if (!d?.is_public) throw notFound('Dashboard');
+      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters', 'permission_group']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      if (!d?.is_public || d.permission_group) throw notFound('Dashboard');
       const { areaType } = DashboardFilters.parse(d.filters ?? {});
       if (!areaType) return [];
       return tx
@@ -453,16 +489,17 @@ export class QueryService {
     const spec = await this.projects.cellTx(tenant.id, async (tx) => {
       const d = await tx
         .selectFrom('dashboard')
-        .select(['widgets', 'is_public', 'filters'])
+        .select(['widgets', 'is_public', 'filters', 'permission_group'])
         .where('project_id', '=', project.id)
         .where('key', '=', dashboardKey)
         .executeTakeFirst();
-      if (!d?.is_public) throw notFound('Dashboard');
+      if (!d?.is_public || d.permission_group) throw notFound('Dashboard');
       const w = (d.widgets as unknown[]).map((x) => Widget.parse(x)).find((x) => x.id === widgetId);
-      if (!w?.query) throw notFound('Widget');
+      if (!w?.query || w.permissionGroup) throw notFound('Widget');
       const filters = DashboardFilters.parse(d.filters ?? {});
       // Anonymous viewers may only pick areas of the dashboard's area type in this project.
       if (params.area && filters.areaType && !(await this.areaExists(tx, project.id, filters.areaType, params.area))) throw notFound('Area');
+      if (params.entity && !(await this.areaExists(tx, project.id, null, params.entity))) throw notFound('Place');
       return applyParams(w.query, params, filters);
     });
     return this.cached(tenant.id, project.id, null, spec, () => this.projects.cellTx(tenant.id, (tx) => this.run(tx, project.id, null, spec)));

@@ -344,7 +344,7 @@ export function parseCsv(text: string): Record<string, string>[] {
   }
   const [head, ...body] = rows.filter((r) => r.some((x) => x.trim() !== ''));
   if (!head) return [];
-  const keys = head.map((h) => h.trim().replace(/^﻿/, ''));
+  const keys = head.map((h) => h.trim().replace(/^\uFEFF/, ''));
   return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? '').trim()])));
 }
 

@@ -149,6 +149,24 @@ export function BrandingPage() {
               </Field>
             </div>
           </Panel>
+          <Panel title="Maps" description="Basemaps for the explorer. Leave blank for the defaults (CARTO Voyager by day, Dark Matter by night). Any MapLibre or Mapbox style URL works, e.g. MapTiler with your key.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Day style URL">
+                <Input
+                  value={draft.mapStyles.light ?? ''}
+                  placeholder="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+                  onChange={(e) => set('mapStyles', { ...draft.mapStyles, light: e.target.value.trim() || null })}
+                />
+              </Field>
+              <Field label="Night style URL">
+                <Input
+                  value={draft.mapStyles.dark ?? ''}
+                  placeholder="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+                  onChange={(e) => set('mapStyles', { ...draft.mapStyles, dark: e.target.value.trim() || null })}
+                />
+              </Field>
+            </div>
+          </Panel>
           <Panel title="Colour">
             <div className="flex flex-wrap items-center gap-2">
               {PRESETS.map((c) => (

@@ -30,7 +30,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { WorkspacePermission } from '@grids/schema';
 import { ErrorNotice, cx } from '@grids/ui';
 import { api } from './api';
@@ -44,8 +44,11 @@ import { EntitiesTab } from './pages/projects/EntitiesTab';
 import { EntityPage } from './pages/projects/EntityPage';
 import { FormBuilder } from './pages/projects/FormBuilder';
 import { FormFillPage, FormsTab } from './pages/projects/FormsTab';
+import { FormsHome } from './pages/forms/FormsHome';
+import { FormsNav } from './pages/forms/FormsNav';
+import { FillPage, InboxPage } from './pages/forms/InboxPage';
 import { JobsTab } from './pages/projects/JobsTab';
-import { MapTab } from './pages/projects/MapTab';
+import { OverlaysTab } from './pages/projects/OverlaysTab';
 import { ProjectLayout } from './pages/projects/ProjectLayout';
 import { ProjectsPage } from './pages/projects/ProjectsPage';
 import { PublicProjectPage } from './pages/projects/PublicProjectPage';
@@ -128,12 +131,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
 export function BrandMark({ className = 'size-8' }: { className?: string }) {
   const ws = useWorkspace();
   if (ws.theme.logo)
-    return <img src={ws.theme.logo} alt="" className={cx(className, 'object-contain')} />;
+    return <img src={ws.theme.logo} alt="" className={cx(className, 'rounded-lg object-contain')} />;
   return (
     <span
       className={cx(
         className,
-        'flex shrink-0 items-center justify-center bg-accent-600 text-sm font-semibold text-on-accent',
+        'flex shrink-0 items-center justify-center rounded-lg bg-accent-600 text-sm font-semibold text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]',
       )}
     >
       {(ws.theme.appName || ws.tenant.name).slice(0, 1).toUpperCase()}
@@ -152,17 +155,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const variant = ws.theme.sidebar;
   const tone = {
     dark: {
-      root: 'chrome bg-chrome text-zinc-300',
+      root: 'chrome bg-chrome bg-[radial-gradient(120%_60%_at_0%_0%,rgb(255_255_255/0.06),transparent)] text-zinc-300',
       muted: 'text-zinc-500',
-      active: 'border-accent-500 bg-white/[0.08] text-white',
-      hover: 'hover:bg-white/[0.04] hover:text-white',
+      active: 'bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)] [&>svg]:text-accent-500',
+      hover: 'hover:bg-white/[0.05] hover:text-white',
       rule: 'border-white/10',
       title: 'text-white',
     },
     light: {
       root: 'bg-snow text-zinc-700 border-r border-zinc-200',
       muted: 'text-zinc-400',
-      active: 'border-accent-600 bg-accent-50 text-accent-800',
+      active: 'bg-accent-50 text-accent-800 ring-1 ring-accent-100',
       hover: 'hover:bg-zinc-100',
       rule: 'border-zinc-200',
       title: 'text-ink',
@@ -170,7 +173,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     brand: {
       root: 'bg-accent-700 text-on-accent',
       muted: 'opacity-60',
-      active: 'border-on-accent bg-black/20',
+      active: 'bg-black/20',
       hover: 'hover:bg-black/10',
       rule: 'border-black/15',
       title: 'text-on-accent',
@@ -197,10 +200,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           );
           if (!items.length) return null;
           return (
-            <div key={group.section} className="mb-5">
+            <Fragment key={group.section}>
+            <div className="mb-5">
               <div
                 className={cx(
-                  'px-5 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase',
+                  'px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase',
                   tone.muted,
                 )}
               >
@@ -218,8 +222,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     onClick={onNavigate}
                     aria-current={active ? 'page' : undefined}
                     className={cx(
-                      'flex items-center gap-3 border-s-[3px] px-5 py-2 text-sm transition-colors',
-                      active ? tone.active : cx('border-transparent', tone.hover),
+                      'mx-3 mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      active ? tone.active : tone.hover,
                     )}
                   >
                     <item.icon className="size-[18px] shrink-0" strokeWidth={1.75} />
@@ -228,6 +232,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 );
               })}
             </div>
+            {group.section === 'workspace' && <FormsNav tone={tone} onNavigate={onNavigate} />}
+            </Fragment>
           );
         })}
       </nav>
@@ -296,6 +302,7 @@ function WorkspaceShell() {
     queryFn: () => api.workspace(tenantId),
   });
   const [open, setOpen] = useState(false);
+  const bare = useRouterState({ select: (st) => /^\/o\/[^/]+\/p\/[^/]+\/?$/.test(st.location.pathname) });
   useEffect(() => {
     if (ws.data) {
       applyTheme(ws.data.theme);
@@ -315,6 +322,15 @@ function WorkspaceShell() {
       </div>
     );
 
+  // A project's explorer is full-screen, without the workspace chrome.
+  if (bare)
+    return (
+      <WorkspaceProvider value={ws.data}>
+        <WorkspaceI18n>
+          <Outlet />
+        </WorkspaceI18n>
+      </WorkspaceProvider>
+    );
   return (
     <WorkspaceProvider value={ws.data}>
       <WorkspaceI18n>
@@ -415,8 +431,9 @@ export const projectRoute = createRoute({
 });
 const pr = () => projectRoute;
 const projectTree = projectRoute.addChildren([
-  createRoute({ getParentRoute: pr, path: '/', component: DashboardsTab }),
-  createRoute({ getParentRoute: pr, path: '/map', component: MapTab }),
+  createRoute({ getParentRoute: pr, path: '/', component: () => null }),
+  createRoute({ getParentRoute: pr, path: '/dashboards', component: DashboardsTab }),
+  createRoute({ getParentRoute: pr, path: '/overlays', component: OverlaysTab }),
   createRoute({ getParentRoute: pr, path: '/entities', component: EntitiesTab }),
   createRoute({ getParentRoute: pr, path: '/entities/$entityId', component: EntityPage }),
   createRoute({ getParentRoute: pr, path: '/data', component: DataTab }),
@@ -449,6 +466,27 @@ const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: ws, path: '/', component: HomePage }),
     createRoute({ getParentRoute: ws, path: '/projects', component: ProjectsPage }),
     projectTree,
+    createRoute({
+      getParentRoute: ws,
+      path: '/forms',
+      component: FormsHome,
+      validateSearch: (s: Record<string, unknown>) => ({ group: typeof s.group === 'string' ? s.group : undefined }),
+    }),
+    createRoute({
+      getParentRoute: ws,
+      path: '/inbox',
+      component: InboxPage,
+      validateSearch: (s: Record<string, unknown>) => ({ tab: s.tab === 'mine' || s.tab === 'review' ? (s.tab as 'mine' | 'review') : undefined }),
+    }),
+    createRoute({
+      getParentRoute: ws,
+      path: '/fill/$project/$formKey',
+      component: FillPage,
+      validateSearch: (s: Record<string, unknown>) => ({
+        resubmit: typeof s.resubmit === 'string' ? s.resubmit : undefined,
+        entity: typeof s.entity === 'string' ? s.entity : undefined,
+      }),
+    }),
     createRoute({ getParentRoute: ws, path: '/people', component: PeoplePage }),
     createRoute({ getParentRoute: ws, path: '/structure', component: StructurePage }),
     createRoute({ getParentRoute: ws, path: '/access', component: AccessPage }),

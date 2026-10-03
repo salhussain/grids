@@ -82,13 +82,40 @@ export const ProjectMemberDto = z.object({
   rootEntity: z.object({ id: z.string(), name: z.string(), type: z.string() }).nullable(),
   /** Inherited from an organisation role rather than granted on the project. */
   implicit: z.boolean(),
+  /** Permission group (key); null = only unrestricted visuals (managers see everything). */
+  permissionGroup: z.string().nullable(),
 });
 export type ProjectMemberDto = z.infer<typeof ProjectMemberDto>;
 export const ProjectMemberInput = z.object({
   userId: z.uuid(),
   role: ProjectRole,
   rootEntityId: z.uuid().nullable().default(null),
+  permissionGroup: Key.nullable().default(null),
 });
+
+// ---------------------------------------------------------------- permission groups
+// A tree per project, most privileged at the top (e.g. Admin > Staff > Public).
+// A member with a group sees visuals that need that group or any group below it.
+
+export const PermissionGroupInput = z.object({
+  key: Key,
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(300).default(''),
+  /** The more privileged group above this one; null = a top-level group. */
+  parent: Key.nullable().default(null),
+});
+export type PermissionGroupInput = z.input<typeof PermissionGroupInput>;
+export const PermissionGroupDto = z.object({
+  id: z.string(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string(),
+  parent: z.string().nullable(),
+  /** Distance from the top of the tree (for indenting). */
+  depth: z.number().int(),
+  memberCount: z.number().int(),
+});
+export type PermissionGroupDto = z.infer<typeof PermissionGroupDto>;
 
 // ---------------------------------------------------------------- entity types
 

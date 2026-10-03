@@ -7,6 +7,7 @@ import { api } from '../../api';
 import { useWorkspace } from '../../session';
 import { ICONS, iconOf, useProject } from './context';
 import { useTypes } from './EntitiesTab';
+import { PermissionGroupsPanel, usePermissionGroups } from './permissions';
 
 export function SettingsTab() {
   const { can } = useProject();
@@ -15,6 +16,7 @@ export function SettingsTab() {
       {can('manager') && <General />}
       <Types />
       <Members />
+      <PermissionGroupsPanel />
     </div>
   );
 }
@@ -290,8 +292,9 @@ function Members() {
   const [adding, setAdding] = useState(false);
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState<ProjectRole>('viewer');
+  const groups = usePermissionGroups();
   const set = useMutation({
-    mutationFn: (input: { userId: string; role: ProjectRole; rootEntityId?: string | null }) => api.setProjectMember(tenantId, project.key, input),
+    mutationFn: (input: { userId: string; role: ProjectRole; rootEntityId?: string | null; permissionGroup?: string | null }) => api.setProjectMember(tenantId, project.key, input),
     onSuccess: (data) => {
       qc.setQueryData(['project-members', tenantId, project.key], data);
       setAdding(false);
@@ -311,7 +314,7 @@ function Members() {
       actions={can('manager') ? <Button size="sm" icon={UserPlus} onClick={() => setAdding(true)}>Add member</Button> : undefined}
     >
       <ErrorNotice error={set.error ?? remove.error ?? members.error} />
-      <Table head={['Person', 'Role', 'Limited to', '']}>
+      <Table head={['Person', 'Role', 'Limited to', 'Permission group', '']}>
         {members.data?.map((m) => (
           <tr key={m.userId} className="border-t border-zinc-100">
             <Td>
@@ -325,7 +328,7 @@ function Members() {
                   {m.implicit && <Tag>Organisation admin</Tag>}
                 </span>
               ) : (
-                <Select aria-label={`Role of ${m.name ?? m.email}`} value={m.role} onChange={(e) => set.mutate({ userId: m.userId, role: e.target.value as ProjectRole, rootEntityId: m.rootEntity?.id ?? null })} className="w-36">
+                <Select aria-label={`Role of ${m.name ?? m.email}`} value={m.role} onChange={(e) => set.mutate({ userId: m.userId, role: e.target.value as ProjectRole, rootEntityId: m.rootEntity?.id ?? null, permissionGroup: m.permissionGroup })} className="w-36">
                   {PROJECT_ROLES.map((r) => (
                     <option key={r} value={r}>
                       {PROJECT_ROLE_INFO[r].label}
@@ -335,6 +338,28 @@ function Members() {
               )}
             </Td>
             <Td>{m.rootEntity ? `${m.rootEntity.name} (${m.rootEntity.type})` : <span className="text-zinc-500">Whole project</span>}</Td>
+            <Td>
+              {m.role === 'manager' ? (
+                <span className="text-zinc-500">Sees everything</span>
+              ) : can('manager') && groups.data?.length ? (
+                <Select
+                  aria-label={`Permission group of ${m.name ?? m.email}`}
+                  value={m.permissionGroup ?? ''}
+                  onChange={(e) => set.mutate({ userId: m.userId, role: m.role, rootEntityId: m.rootEntity?.id ?? null, permissionGroup: e.target.value || null })}
+                  className="w-44"
+                >
+                  <option value="">None</option>
+                  {groups.data.map((g) => (
+                    <option key={g.key} value={g.key}>
+                      {'\u00a0\u00a0'.repeat(g.depth)}
+                      {g.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <span className="text-zinc-600">{groups.data?.find((g) => g.key === m.permissionGroup)?.name ?? 'None'}</span>
+              )}
+            </Td>
             <Td>
               {can('manager') && !m.implicit && (
                 <button type="button" aria-label={`Remove ${m.name ?? m.email}`} className="p-1 text-zinc-500 hover:text-red-700" onClick={() => remove.mutate(m.userId)}>
