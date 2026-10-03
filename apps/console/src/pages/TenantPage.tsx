@@ -1,22 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, CreditCard, Pencil, Receipt, UserPlus } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarDays,
+  CreditCard,
+  Globe,
+  Pencil,
+  Receipt,
+  Tags,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { TenantDetail } from '@grids/schema';
 import { api } from '../api';
 import { tenantRoute } from '../router';
+import { Avatar, Fact } from '../ui';
 import { useCan } from '../session';
-import {
-  Button,
-  Callout,
-  ErrorNotice,
-  Loading,
-  Mono,
-  PageHeader,
-  Status,
-  Tabs,
-  useToast,
-} from '@grids/ui';
+import { Button, Callout, ErrorNotice, Loading, Mono, Status, Tabs, useToast } from '@grids/ui';
 import { relTime } from '@grids/ui';
 import { InvoiceDialog, SubscribeDialog } from './dialogs';
 import { ActivityTab } from './tenant/ActivityTab';
@@ -45,36 +46,48 @@ export function TenantPage() {
     <>
       <Link
         to="/tenants"
-        className="mb-3 inline-flex items-center gap-1.5 text-sm text-zinc-600 hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 rounded-lg py-1 pe-2 text-sm text-zinc-600 hover:text-ink"
       >
         <ArrowLeft className="size-4" /> Organisations
       </Link>
-      <PageHeader
-        eyebrow={t.legalName ?? 'Organisation'}
-        title={
-          <span className="flex flex-wrap items-center gap-3">
-            {t.name} <Status value={t.status} />
-          </span>
-        }
-        meta={
-          <>
-            <Mono>{primary?.hostname ?? t.slug}</Mono>
-            <span>{t.planName ? `${t.planName} plan` : 'No plan'}</span>
-            <span>{t.memberCount} members</span>
-            <span>Created {relTime(t.createdAt)}</span>
-          </>
-        }
-        actions={
-          <>
+      <section className="rise relative mb-6 overflow-hidden rounded-2xl border border-zinc-200 bg-snow p-5 shadow-surface sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -end-16 size-72 rounded-full bg-accent-600/10 blur-3xl"
+        />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={t.name} className="size-14 rounded-2xl text-lg" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] text-ink">
+                  {t.name}
+                </h1>
+                <Status value={t.status} />
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1">
+                <Fact icon={Globe}>
+                  <Mono>{primary?.hostname ?? t.slug}</Mono>
+                </Fact>
+                <Fact icon={Tags}>{t.planName ? `${t.planName} plan` : 'No plan'}</Fact>
+                <Fact icon={Users}>{t.memberCount} members</Fact>
+                <Fact icon={CalendarDays}>Created {relTime(t.createdAt)}</Fact>
+              </div>
+              {t.legalName && t.legalName !== t.name && (
+                <div className="mt-1 text-xs text-zinc-500">{t.legalName}</div>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {can('tenants.edit') && (
               <Button variant="secondary" icon={Pencil} onClick={() => setDialog('edit')}>
                 Edit profile
               </Button>
             )}
             {can('tenants.lifecycle') && <StatusActions t={t} />}
-          </>
-        }
-      />
+          </div>
+        </div>
+      </section>
 
       <NextStep
         t={t}

@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowRight, Building2 } from 'lucide-react';
+import { ArrowRight, Building2, LifeBuoy, MailWarning, TrendingUp, Wallet } from 'lucide-react';
 import {
   ErrorNotice,
   Loading,
   PageHeader,
   Panel,
   RefreshControl,
-  Stat,
   Status,
   Table,
   Td,
@@ -16,11 +15,25 @@ import {
   useLiveInterval,
 } from '@grids/ui';
 import { api } from '../api';
-import { NoAccess, useCan } from '../session';
+import { NoAccess, useCan, useSession } from '../session';
+import { Avatar, StatCard } from '../ui';
 import { ActivityList } from './shared';
+
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 5
+    ? 'Working late'
+    : h < 12
+      ? 'Good morning'
+      : h < 18
+        ? 'Good afternoon'
+        : 'Good evening';
+};
 
 export function OverviewPage() {
   const can = useCan();
+  const { me } = useSession();
+  const first = (me.displayName ?? '').split(' ')[0];
   const live = useLiveInterval();
   const o = useQuery({
     queryKey: ['overview'],
@@ -33,7 +46,7 @@ export function OverviewPage() {
   const header = (
     <PageHeader
       eyebrow="Platform"
-      title="Overview"
+      title={`${greeting()}${first ? `, ${first}` : ''}`}
       meta={
         <span>
           {new Date().toLocaleDateString('en-GB', {
@@ -50,7 +63,7 @@ export function OverviewPage() {
           {can('tenants.create') && (
             <Link
               to="/tenants/new"
-              className="inline-flex h-9 items-center gap-2 bg-accent-600 px-3.5 text-sm font-medium text-white hover:bg-accent-700"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent-600 px-3.5 text-sm font-medium text-white shadow-[0_1px_2px_rgb(16_24_40/0.15),inset_0_1px_0_rgb(255_255_255/0.2)] hover:bg-accent-700"
             >
               <Building2 className="size-4" /> New organisation
             </Link>
@@ -82,15 +95,18 @@ export function OverviewPage() {
     <>
       {header}
       <div
-        className={`stat-strip mb-6 grid grid-cols-2 gap-px border border-zinc-200 bg-zinc-200 [&>*]:border-0 ${billing ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}
+        className={`mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 ${billing ? 'xl:grid-cols-5' : 'xl:grid-cols-3'}`}
       >
-        <Stat
+        <StatCard
+          to="/tenants"
+          icon={Building2}
           label="Organisations"
           value={d.totalTenants}
           sub={`${d.tenants.active ?? 0} active · ${d.tenants.pending_payment ?? 0} awaiting payment`}
         />
         {billing && (
-          <Stat
+          <StatCard
+            icon={TrendingUp}
             label="Monthly recurring revenue"
             value={mrr ? moneyCompact(mrr.amount, mrr.currency) : '$0'}
             sub={
@@ -99,20 +115,26 @@ export function OverviewPage() {
           />
         )}
         {billing && (
-          <Stat
+          <StatCard
+            to="/billing"
+            icon={Wallet}
             label="Outstanding"
             value={out ? moneyCompact(out.amount, out.currency) : '$0'}
             sub={out?.overdueCount ? `${out.overdueCount} overdue` : 'Nothing overdue'}
             tone={out?.overdueCount ? 'bad' : undefined}
           />
         )}
-        <Stat
+        <StatCard
+          to="/support"
+          icon={LifeBuoy}
           label="Open tickets"
           value={d.openTickets}
           sub={d.urgentTickets ? `${d.urgentTickets} urgent` : 'No urgent tickets'}
           tone={d.urgentTickets ? 'warn' : undefined}
         />
-        <Stat
+        <StatCard
+          to="/logs/emails"
+          icon={MailWarning}
           label="Failed emails · 24h"
           value={d.emailsFailed24h}
           sub={`${d.totalMembers} members platform-wide`}
@@ -169,7 +191,12 @@ export function OverviewPage() {
             >
               {d.awaitingPayment.map((a) => (
                 <tr key={a.id} className="hover:bg-zinc-50">
-                  <Td className="font-medium">{a.name}</Td>
+                  <Td>
+                    <span className="flex items-center gap-3 font-medium">
+                      <Avatar name={a.name} className="size-8 text-xs" />
+                      {a.name}
+                    </span>
+                  </Td>
                   <Td className="text-zinc-500">{relTime(a.since)}</Td>
                   <Td className="text-right">
                     {can('tenants.view') && (

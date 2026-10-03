@@ -12,7 +12,6 @@ import {
   PageHeader,
   Pagination,
   Panel,
-  Select,
   Status,
   Table,
   Td,
@@ -22,6 +21,7 @@ import {
   usePagination,
 } from '@grids/ui';
 import { api } from '../api';
+import { Avatar, Chips } from '../ui';
 import { NoAccess, useCan } from '../session';
 
 export function TenantsPage() {
@@ -50,13 +50,24 @@ export function TenantsPage() {
           can('tenants.create') && (
             <Link
               to="/tenants/new"
-              className="inline-flex h-9 items-center gap-2 bg-accent-600 px-3.5 text-sm font-medium text-white hover:bg-accent-700"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent-600 px-3.5 text-sm font-medium text-white shadow-[0_1px_2px_rgb(16_24_40/0.15),inset_0_1px_0_rgb(255_255_255/0.2)] hover:bg-accent-700"
             >
               <Plus className="size-4" /> New organisation
             </Link>
           )
         }
       />
+      <div className="mb-4 overflow-x-auto">
+        <Chips
+          label="Status"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: '', label: 'All' },
+            ...TenantStatus.options.map((s) => ({ value: s, label: humanize(s) })),
+          ]}
+        />
+      </div>
       <Panel
         flush
         title={`${d?.total ?? '–'} organisations`}
@@ -68,23 +79,10 @@ export function TenantsPage() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search name, slug, email"
-                className="w-64 pl-8"
+                className="w-72 rounded-lg pl-8"
                 aria-label="Search organisations"
               />
             </div>
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              aria-label="Status"
-              className="w-44"
-            >
-              <option value="">All statuses</option>
-              {TenantStatus.options.map((s) => (
-                <option key={s} value={s}>
-                  {humanize(s)}
-                </option>
-              ))}
-            </Select>
           </>
         }
       >
@@ -117,15 +115,20 @@ export function TenantsPage() {
                   className="cursor-pointer hover:bg-zinc-50"
                 >
                   <Td>
-                    <Link
-                      to="/tenants/$tenantId"
-                      params={{ tenantId: t.id }}
-                      className="font-medium text-ink hover:text-accent-700"
-                    >
-                      {t.name}
-                    </Link>
-                    <div>
-                      <Mono className="text-xs text-zinc-500">{t.slug}</Mono>
+                    <div className="flex items-center gap-3">
+                      <Avatar name={t.name} />
+                      <div className="min-w-0">
+                        <Link
+                          to="/tenants/$tenantId"
+                          params={{ tenantId: t.id }}
+                          className="font-medium text-ink hover:text-accent-700"
+                        >
+                          {t.name}
+                        </Link>
+                        <div>
+                          <Mono className="text-xs text-zinc-500">{t.slug}</Mono>
+                        </div>
+                      </div>
                     </div>
                   </Td>
                   <Td>

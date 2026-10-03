@@ -43,6 +43,7 @@ import { applyColorMode, cx, Listbox, ModeSwitch, type ColorMode } from '@grids/
 import { LOCALES } from '@grids/i18n';
 import { I18nProvider, useI18n, usePlatform, usePlatformBranding, useT } from './i18n';
 import { SettingsPage } from './pages/SettingsPage';
+import { Avatar } from './ui';
 import type { StaffPermission } from '@grids/schema';
 import { StaffPage } from './pages/StaffPage';
 
@@ -170,14 +171,14 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { me } = useSession();
   const t = useT();
   return (
-    <div className="chrome flex h-full flex-col bg-chrome bg-[radial-gradient(120%_60%_at_0%_0%,rgb(255_255_255/0.06),transparent)] text-zinc-300">
-      <div className="flex h-14 items-center border-b border-white/10 px-5">
+    <div className="chrome flex h-full flex-col bg-chrome bg-[radial-gradient(90%_40%_at_0%_0%,color-mix(in_oklab,var(--brand-600)_28%,transparent),transparent),radial-gradient(80%_30%_at_100%_100%,color-mix(in_oklab,var(--brand-600)_12%,transparent),transparent)] text-zinc-300">
+      <div className="flex h-16 items-center px-5">
         <Logo dark />
       </div>
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="flex-1 overflow-y-auto pt-2 pb-4">
         {useNav().map((group) => (
           <div key={group.section} className="mb-5">
-            <div className="px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] text-zinc-500 uppercase">
+            <div className="px-6 pb-1.5 text-[10px] font-semibold tracking-[0.16em] text-zinc-500 uppercase">
               {t(group.section)}
             </div>
             {group.items.map((item) => {
@@ -189,10 +190,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
                   className={cx(
-                    'mx-3 mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                    'relative mx-3 mb-0.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors',
                     active
-                      ? 'bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]'
-                      : 'hover:bg-white/[0.05] hover:text-white',
+                      ? 'bg-white/[0.1] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_1px_2px_rgb(0_0_0/0.3)] before:absolute before:inset-y-2 before:-start-3 before:w-[3px] before:rounded-e-full before:bg-accent-500'
+                      : 'hover:bg-white/[0.06] hover:text-white',
                   )}
                 >
                   <item.icon
@@ -204,7 +205,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   />
                   <span className="flex-1">{t(item.label)}</span>
                   {!!item.badge && (
-                    <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
+                    <span className="num min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
                       {item.badge}
                     </span>
                   )}
@@ -214,11 +215,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         ))}
       </nav>
-      <div className="border-t border-white/10 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center bg-accent-600 text-xs font-semibold text-white">
-            {(me.displayName ?? me.email ?? '?').slice(0, 1).toUpperCase()}
-          </div>
+      <div className="p-3">
+        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-2.5">
+          <Avatar name={me.displayName ?? me.email ?? '?'} className="size-9 text-xs" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm text-white">{me.displayName ?? me.email}</div>
             <div className="truncate text-xs text-zinc-500">{me.email}</div>
@@ -227,7 +226,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             href={accountUrl()}
             title={t('console.shell.account')}
             aria-label={t('console.shell.account')}
-            className="p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <UserCog className="size-4" />
           </a>
@@ -235,7 +234,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             onClick={() => userManager.signoutRedirect()}
             title={t('console.shell.signOut')}
             aria-label={t('console.shell.signOut')}
-            className="p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="size-4" />
           </button>
@@ -257,7 +256,9 @@ function HeaderControls({ className }: { className?: string }) {
     onSuccess: (next) => qc.setQueryData(['me'], next),
   });
   const [mode, setMode] = useState<ColorMode>(me.preferences.colorMode);
-  const langs = LOCALES.filter((l) => (platform.data?.localization.consoleLanguages ?? ['en']).includes(l.code));
+  const langs = LOCALES.filter((l) =>
+    (platform.data?.localization.consoleLanguages ?? ['en']).includes(l.code),
+  );
   return (
     <div className={cx('flex items-center gap-2', className)}>
       {langs.length > 1 && (
@@ -268,12 +269,22 @@ function HeaderControls({ className }: { className?: string }) {
           className="w-40"
           value={locale as string}
           onChange={(v) => save.mutate({ locale: v })}
-          options={langs.map((l) => ({ value: l.code as string, label: l.nativeName, text: l.nativeName, icon: Globe }))}
+          options={langs.map((l) => ({
+            value: l.code as string,
+            label: l.nativeName,
+            text: l.nativeName,
+            icon: Globe,
+          }))}
         />
       )}
       <ModeSwitch
         value={mode}
-        labels={{ light: t('common.light'), dark: t('common.dark'), system: t('common.system'), group: t('common.appearance') }}
+        labels={{
+          light: t('common.light'),
+          dark: t('common.dark'),
+          system: t('common.system'),
+          group: t('common.appearance'),
+        }}
         onChange={(m) => {
           setMode(m);
           applyColorMode(m);
@@ -297,43 +308,43 @@ function ConsoleLayout() {
   return (
     <RequireSession>
       <ConsoleI18n>
-      <div className="min-h-full lg:ps-64">
-        <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 lg:block">
-          <Sidebar />
-        </aside>
-        <header className="sticky top-0 z-20 chrome flex h-14 items-center justify-between bg-chrome px-4 lg:hidden">
-          <Logo dark />
-          <button onClick={() => setOpen(true)} aria-label="Open menu" className="p-2 text-white">
-            <Menu className="size-5" />
-          </button>
-        </header>
-        {open && (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-            <div className="absolute inset-y-0 start-0 w-72">
-              <Sidebar onNavigate={() => setOpen(false)} />
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Close menu"
-                className="chrome absolute top-3 -end-11 bg-chrome p-2 text-white"
-              >
-                <X className="size-5" />
-              </button>
+        <div className="min-h-full lg:ps-64">
+          <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 lg:block">
+            <Sidebar />
+          </aside>
+          <header className="sticky top-0 z-20 chrome flex h-14 items-center justify-between bg-chrome px-4 lg:hidden">
+            <Logo dark />
+            <button onClick={() => setOpen(true)} aria-label="Open menu" className="p-2 text-white">
+              <Menu className="size-5" />
+            </button>
+          </header>
+          {open && (
+            <div className="fixed inset-0 z-40 lg:hidden">
+              <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
+              <div className="absolute inset-y-0 start-0 w-72">
+                <Sidebar onNavigate={() => setOpen(false)} />
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Close menu"
+                  className="chrome absolute top-3 -end-11 rounded-lg bg-chrome p-2 text-white"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-        <div className="hidden justify-end border-b border-zinc-200 bg-snow/80 px-8 py-2.5 backdrop-blur lg:flex">
-          <HeaderControls />
-        </div>
-        <main className="px-4 py-6 sm:px-8 sm:py-8">
-          <div className="mb-4 flex justify-end lg:hidden">
+          )}
+          <div className="sticky top-0 z-20 hidden justify-end border-b border-zinc-200/70 bg-canvas/70 px-8 py-2.5 backdrop-blur-xl lg:flex">
             <HeaderControls />
           </div>
-          <div className="mx-auto max-w-[1280px]">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+          <main className="px-4 py-6 sm:px-8 sm:py-8">
+            <div className="mb-4 flex justify-end lg:hidden">
+              <HeaderControls />
+            </div>
+            <div className="mx-auto max-w-[1280px]">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </ConsoleI18n>
     </RequireSession>
   );

@@ -304,7 +304,7 @@ export function Stat({
   tone?: 'warn' | 'bad';
 }) {
   return (
-    <div className="border border-zinc-200 bg-snow px-5 py-4">
+    <div className="rounded-lg border border-zinc-200 bg-snow px-5 py-4">
       <div className="font-mono text-[11px] tracking-[0.08em] text-zinc-500 uppercase">{label}</div>
       <div
         className={cx(
@@ -366,7 +366,7 @@ export function Tabs<T extends string>({
         >
           {t.label}
           {t.count !== undefined && t.count > 0 && (
-            <span className="num bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
+            <span className="num rounded-full bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
           )}
         </button>
       ))}
@@ -394,7 +394,7 @@ export function Table({
             {head.map((h, i) => (
               <th
                 key={i}
-                className="px-4 py-2.5 font-medium whitespace-nowrap first:ps-5 last:pe-5"
+                className="px-4 py-2.5 text-start font-medium whitespace-nowrap first:ps-5 last:pe-5"
               >
                 {h}
               </th>
@@ -457,7 +457,7 @@ export function Status({ value, tone, label }: { value: string; tone?: Tone; lab
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1.5 border px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
         TONES[t],
       )}
     >
