@@ -1,4 +1,3 @@
-import type { ServerResponse } from 'node:http';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ServerResponse } from 'node:http';
 import QRCode from 'qrcode';

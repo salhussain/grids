@@ -60,10 +60,13 @@ export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, a
       userinfo: { enabled: true },
       rpInitiatedLogout: {
         enabled: true,
-        // Sign out immediately (no extra confirmation page) for our own apps.
+        // Sign out immediately (no extra confirmation page) for our own apps. `logout=yes`
+        // ends the identity-provider session too; without it only the app's session ends
+        // and the next sign-in completes silently.
         logoutSource: async (ctx, form) => {
           ctx.type = 'html';
-          ctx.body = `<!doctype html><html><head><meta charset="utf-8"><title>Signing out…</title></head><body>${form}<script>document.forms[0].submit()</script></body></html>`;
+          const confirmed = form.replace('</form>', '<input type="hidden" name="logout" value="yes"/></form>');
+          ctx.body = `<!doctype html><html><head><meta charset="utf-8"><title>Signing out…</title></head><body>${confirmed}<script>document.forms[0].submit()</script></body></html>`;
         },
         postLogoutSuccessSource: async (ctx) => {
           ctx.type = 'html';

@@ -180,6 +180,35 @@ describe('sign in (authorization code + PKCE)', () => {
     await exchange(await codeFrom(b, d2.redirectTo!), second.verifier);
   });
 
+  it('signing out ends the identity session (no silent sign-in afterwards)', async () => {
+    await createAccount('out@example.org');
+    const b = new Browser();
+    const { uid, verifier } = await startAuth(b);
+    const login = (await (await b.json(`${base}/ui/interaction/${uid}/login`, { email: 'out@example.org', password: 'correct horse battery' })).json()) as { redirectTo: string };
+    const tokens = await exchange(await codeFrom(b, login.redirectTo), verifier);
+
+    // RP-initiated logout renders an auto-submitting form; submit it like the browser would.
+    const end = await b.fetch(
+      `${base}/oidc/session/end?${new URLSearchParams({ id_token_hint: tokens.id_token, post_logout_redirect_uri: 'http://web.test/', client_id: 'grids-web' })}`,
+    );
+    const html = await end.text();
+    const action = html.match(/<form[^>]*action="([^"]+)"/)![1]!;
+    const fields = Object.fromEntries([...html.matchAll(/<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/g)].map((m) => [m[1]!, m[2]!]));
+    expect(fields.logout).toBe('yes');
+    const done = await b.fetch(new URL(action, base).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields).toString(),
+    });
+    expect(done.headers.get('location')).toBe('http://web.test/');
+
+    // The next authorization must ask for credentials again.
+    const again = await startAuth(b);
+    const d = (await (await b.fetch(`${base}/ui/interaction/${again.uid}/details`)).json()) as { prompt: string; redirectTo?: string };
+    expect(d.redirectTo).toBeUndefined();
+    expect(d.prompt).toBe('login');
+  });
+
   it('rejects wrong passwords and locks after repeated failures', async () => {
     await createAccount('lock@example.org');
     const b = new Browser();
