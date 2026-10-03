@@ -1,7 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FILE_MAX_BYTES, JobInput, type JobDto, type RunDto, type RunStatus, type UploadResult } from '@grids/schema';
+import { FILE_MAX_BYTES, JOB_EVENTS, JobInput, type JobDto, type JobEvent, type RunDto, type RunStatus, type UploadResult } from '@grids/schema';
 import {
   Button,
+  CopyField,
   Dialog,
   Empty,
   ErrorNotice,
@@ -22,9 +23,10 @@ import {
   usePagination,
   useToast,
 } from '@grids/ui';
-import { CircleCheck, CircleX, Clock, Loader, FileUp, Pencil, Play, Plus, RotateCcw, Trash2, Upload, Workflow, XCircle } from 'lucide-react';
+import { CircleCheck, CircleX, Clock, Loader, FileUp, Pencil, Play, Plus, Radar, RotateCcw, Trash2, Upload, Webhook, Workflow, Zap, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
+import { env } from '../../env';
 import { FreshnessBadge } from '../../viz/Freshness';
 import { useProject } from './context';
 
@@ -120,10 +122,11 @@ export function JobsTab() {
                   </li>
                 ))}
               </ol>
+              <TriggerChips job={j} />
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div>
                   <dt className="text-xs text-zinc-500">Schedule</dt>
-                  <dd>{j.enabled ? cronText(j.schedule) : 'Paused'}</dd>
+                  <dd>{!j.enabled ? 'Paused' : !j.schedule && (j.triggers.events.length || j.triggers.webhook || j.sensor || j.runOnUpload) ? 'Triggers only' : cronText(j.schedule)}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-zinc-500">Next run</dt>
@@ -191,6 +194,135 @@ export function JobsTab() {
       {openRun && <RunDialog runId={openRun} onClose={() => setOpenRun(null)} onOpen={setOpenRun} />}
       {editing && <JobEditor job={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+const EVENT_INFO: Record<JobEvent, { label: string; ref: string }> = {
+  'submission.created': { label: 'A form is submitted', ref: 'Form' },
+  'submission.approved': { label: 'A submission is approved', ref: 'Form' },
+  'submission.rejected': { label: 'A submission is rejected', ref: 'Form' },
+  'entity.changed': { label: 'Entities change', ref: 'Entity type' },
+  'dataset.materialised': { label: 'A dataset is refreshed', ref: 'Dataset' },
+  'job.succeeded': { label: 'Another job succeeds', ref: 'Job' },
+  'job.failed': { label: 'Another job fails', ref: 'Job' },
+};
+
+/** What starts a job besides its schedule: events, webhook, sensor, uploads. */
+function TriggerChips({ job }: { job: JobDto }) {
+  const chips: { icon: typeof Zap; text: string; title?: string; tone?: 'bad' }[] = [];
+  for (const e of job.triggers.events) chips.push({ icon: Zap, text: `${EVENT_INFO[e.event].label}${e.ref ? `: ${e.ref}` : ''}` });
+  if (job.triggers.webhook) chips.push({ icon: Webhook, text: 'Webhook' });
+  if (job.sensor)
+    chips.push({
+      icon: Radar,
+      text: `Sensor every ${job.sensor.everyMinutes} min${job.sensorState?.lastCheckedAt ? ` · checked ${relTime(job.sensorState.lastCheckedAt)}` : ''}`,
+      title: job.sensorState?.lastError ?? job.sensor.url,
+      tone: job.sensorState?.lastError ? 'bad' : undefined,
+    });
+  if (job.runOnUpload) chips.push({ icon: FileUp, text: 'On file upload' });
+  if (!chips.length) return null;
+  return (
+    <ul className="mt-3 flex flex-wrap gap-1.5 text-xs">
+      {chips.map((c) => (
+        <li key={c.text} title={c.title} className={cx('inline-flex items-center gap-1 border px-1.5 py-0.5', c.tone === 'bad' ? 'border-red-300 bg-red-50 text-red-800' : 'border-accent-100 bg-accent-50 text-accent-800')}>
+          <c.icon className="size-3" /> {c.text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TriggersEditor({
+  value,
+  webhookPath,
+  onChange,
+}: {
+  value: { triggers: JobDto['triggers']; sensor: JobDto['sensor'] };
+  webhookPath: string | null;
+  onChange(v: { triggers: JobDto['triggers']; sensor: JobDto['sensor'] }): void;
+}) {
+  const { tenantId, project } = useProject();
+  const forms = useQuery({ queryKey: ['forms', tenantId, project.key], queryFn: () => api.forms(tenantId, project.key) });
+  const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
+  const datasets = useQuery({ queryKey: ['datasets', tenantId, project.key], queryFn: () => api.datasets(tenantId, project.key) });
+  const jobs = useQuery({ queryKey: ['jobs', tenantId, project.key], queryFn: () => api.jobs(tenantId, project.key) });
+  const { triggers: t, sensor } = value;
+  const refs = (e: JobEvent): { key: string; name: string }[] =>
+    e.startsWith('submission.')
+      ? (forms.data ?? []).map((x) => ({ key: x.key, name: x.name }))
+      : e === 'entity.changed'
+        ? (types.data ?? []).map((x) => ({ key: x.key, name: x.plural }))
+        : e === 'dataset.materialised'
+          ? (datasets.data ?? []).map((x) => ({ key: x.key, name: x.name }))
+          : (jobs.data ?? []).map((x) => ({ key: x.key, name: x.name }));
+  const setEvents = (events: JobDto['triggers']['events']) => onChange({ ...value, triggers: { ...t, events } });
+  return (
+    <fieldset className="space-y-4 border border-zinc-200 p-4">
+      <legend className="px-1 text-sm font-medium">Triggers</legend>
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-zinc-600">Run when…</div>
+        {t.events.map((e, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <Select aria-label="Event" value={e.event} onChange={(x) => setEvents(t.events.map((y, j) => (j === i ? { event: x.target.value as JobEvent } : y)))} className="w-56">
+              {JOB_EVENTS.map((ev) => (
+                <option key={ev} value={ev}>
+                  {EVENT_INFO[ev].label}
+                </option>
+              ))}
+            </Select>
+            <Select aria-label={EVENT_INFO[e.event].ref} value={e.ref ?? ''} onChange={(x) => setEvents(t.events.map((y, j) => (j === i ? { ...y, ref: x.target.value || undefined } : y)))} className="w-56">
+              <option value="">Any {EVENT_INFO[e.event].ref.toLowerCase()}</option>
+              {refs(e.event).map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+            <button type="button" aria-label="Remove trigger" onClick={() => setEvents(t.events.filter((_, j) => j !== i))} className="p-1 text-zinc-500 hover:text-red-700">
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        ))}
+        <Button size="sm" variant="secondary" icon={Plus} onClick={() => setEvents([...t.events, { event: 'submission.created' }])} disabled={t.events.length >= 10}>
+          Add event
+        </Button>
+        <p className="text-xs text-zinc-500">
+          Expressions can read the event as <code className="font-mono">$event</code> (e.g. <code className="font-mono">$event.submission</code>).
+        </p>
+      </div>
+      <div className="grid gap-4 border-t border-zinc-100 pt-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <SwitchField
+            label="Webhook"
+            description="Other systems POST JSON to a secret URL; the body (an array, or { rows: [...] }) becomes the job’s rows."
+            checked={t.webhook}
+            onChange={(v) => onChange({ ...value, triggers: { ...t, webhook: v } })}
+          />
+          {t.webhook && (webhookPath ? <CopyField value={`${env.apiUrl}${webhookPath}`} /> : <p className="text-xs text-zinc-500">Save the job to get its URL.</p>)}
+        </div>
+        <div className="space-y-2">
+          <SwitchField
+            label="Sensor"
+            description="Poll a URL and run when it changes."
+            checked={!!sensor}
+            onChange={(v) => onChange({ ...value, sensor: v ? { url: 'https://example.org/feed.json', headers: {}, everyMinutes: 5 } : null })}
+          />
+          {sensor && (
+            <div className="grid gap-2 sm:grid-cols-[1fr_7rem]">
+              <Field label="URL">
+                <Input value={sensor.url} onChange={(e) => onChange({ ...value, sensor: { ...sensor, url: e.target.value } })} />
+              </Field>
+              <Field label="Every (min)">
+                <Input type="number" min={1} max={1440} value={sensor.everyMinutes} onChange={(e) => onChange({ ...value, sensor: { ...sensor, everyMinutes: Number(e.target.value) } })} />
+              </Field>
+              <Field label="Cursor (JSONata, optional)" hint="Runs when this value changes, e.g. $max(items.updated_at). Blank: when the response changes." className="sm:col-span-2">
+                <Input value={sensor.cursor ?? ''} onChange={(e) => onChange({ ...value, sensor: { ...sensor, cursor: e.target.value || undefined } })} className="font-mono" />
+              </Field>
+            </div>
+          )}
+        </div>
+      </div>
+    </fieldset>
   );
 }
 
@@ -416,6 +548,8 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
     timeoutSeconds: job?.timeoutSeconds ?? 300,
     freshnessMinutes: job?.freshnessMinutes ?? null,
     runOnUpload: job?.runOnUpload ?? false,
+    triggers: job?.triggers ?? { events: [], webhook: false },
+    sensor: job?.sensor ?? null,
   });
   const [steps, setSteps] = useState(JSON.stringify(job?.steps ?? STARTER, null, 2));
   const [local, setLocal] = useState<string | null>(null);
@@ -505,6 +639,7 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
             />
           </div>
         </div>
+        <TriggersEditor value={{ triggers: f.triggers, sensor: f.sensor }} webhookPath={job?.webhookPath ?? null} onChange={(v) => setF({ ...f, ...v })} />
         <Field
           label="Steps (JSON)"
           error={local ?? undefined}

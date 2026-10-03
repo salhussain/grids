@@ -133,9 +133,9 @@ export function MapView({ data, options = {}, height = '100%', label }: { data: 
       map.current = null;
       fitted.current = false;
     };
-  }, [scheme]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scheme]);
 
-  useEffect(paint, [data, options.warn, options.alert, scheme]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(paint, [data, options.warn, options.alert, scheme]);
 
   return <div ref={el} role="region" aria-label={label} className="grids-map" style={{ height, width: '100%' }} />;
 }

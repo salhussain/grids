@@ -1,9 +1,11 @@
-import { cronProblem, enqueueRun, freshness, syncSchedule } from '@grids/data';
-import { createHash } from 'node:crypto';
+import { cronProblem, enqueueRun, freshness, syncSchedule, syncSensor } from '@grids/data';
+import { createHash, randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import {
   FILE_MAX_BYTES,
+  JobSensor,
   JobStep,
+  JobTriggers,
   uuidv7,
   type FileDto,
   type UploadResult,
@@ -81,6 +83,9 @@ export class JobService {
       const schedules = new Map(
         (await tx.selectFrom('job_schedule').select(['job_id', 'next_run_at']).where('job_id', 'in', ids).execute()).map((s) => [s.job_id, s.next_run_at]),
       );
+      const sensors = new Map(
+        (await tx.selectFrom('job_sensor').selectAll().where('job_id', 'in', ids).execute()).map((x) => [x.job_id, x]),
+      );
       const recent = await tx
         .selectFrom('run as r')
         .innerJoin('job as j', 'j.id', 'r.job_id')
@@ -117,6 +122,17 @@ export class JobService {
           timeoutSeconds: j.timeout_seconds,
           freshnessMinutes: j.freshness_minutes,
           runOnUpload: j.run_on_upload,
+          triggers: JobTriggers.parse(j.triggers ?? {}),
+          sensor: j.sensor ? JobSensor.parse(j.sensor) : null,
+          webhookPath: a.role === 'manager' && j.webhook_token ? `/hooks/${j.webhook_token}` : null,
+          sensorState: sensors.has(j.id)
+            ? {
+                lastCheckedAt: isoOrNull(sensors.get(j.id)!.last_checked_at),
+                nextCheckAt: iso(sensors.get(j.id)!.next_check_at as Date),
+                cursor: sensors.get(j.id)!.cursor,
+                lastError: sensors.get(j.id)!.last_error,
+              }
+            : null,
           nextRunAt: isoOrNull(schedules.get(j.id) ?? null),
           lastRun: runs[0] ? toRun(runs[0] as RunRow) : null,
           freshness: freshness(lastSuccess.get(j.id) ?? null, j.freshness_minutes, this.ctx.now()),
@@ -147,6 +163,8 @@ export class JobService {
       timeout_seconds: input.timeoutSeconds,
       freshness_minutes: input.freshnessMinutes,
       run_on_upload: input.runOnUpload,
+      triggers: JSON.stringify(input.triggers),
+      sensor: input.sensor ? JSON.stringify(input.sensor) : null,
       updated_at: this.ctx.now(),
     };
     try {
@@ -162,6 +180,11 @@ export class JobService {
           await tx.insertInto('job').values({ id, tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
         }
         await syncSchedule(tx, { id, tenantId, schedule: a.project.archived_at ? null : input.schedule, timezone: input.timezone, enabled: input.enabled }, this.ctx.now());
+        await syncSensor(tx, { id, tenantId, sensor: a.project.archived_at ? null : input.sensor, enabled: input.enabled });
+        // The webhook URL embeds the tenant (for routing) and a secret; it survives edits.
+        const cur = await tx.selectFrom('job').select('webhook_token').where('id', '=', id).executeTakeFirstOrThrow();
+        const token = input.triggers.webhook ? (cur.webhook_token ?? `${tenantId}.${randomBytes(24).toString('base64url')}`) : null;
+        if (token !== cur.webhook_token) await tx.updateTable('job').set({ webhook_token: token }).where('id', '=', id).execute();
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw conflict('Key taken', `A job with key "${input.key}" already exists.`);
@@ -265,6 +288,27 @@ export class JobService {
       const logs = await tx.selectFrom('run_log').select(['at', 'level', 'step', 'message']).where('run_id', '=', runId).orderBy('id').limit(1000).execute();
       return { ...toRun(r as RunRow), logs: logs.map((l) => ({ ...l, at: iso(l.at) })) };
     });
+  }
+
+  /**
+   * Inbound webhook (POST /hooks/:token): queues a run of the job whose secret
+   * token this is, with the JSON body as its rows (an array, `rows`, or one object).
+   */
+  async webhook(token: string, body: unknown): Promise<{ runId: string }> {
+    const tenantId = token.split('.')[0] ?? '';
+    if (!/^[0-9a-f-]{36}$/.test(tenantId)) throw notFound('Webhook');
+    const tenant = await this.ctx.db.selectFrom('tenant').select('status').where('id', '=', tenantId).executeTakeFirst();
+    if (tenant?.status !== 'active') throw notFound('Webhook');
+    const rows = Array.isArray(body) ? body : body && typeof body === 'object' && Array.isArray((body as { rows?: unknown }).rows) ? (body as { rows: unknown[] }).rows : body ? [body] : [];
+    if (rows.length > 10_000) throw badRequest('At most 10,000 rows per delivery');
+    const runId = await this.projects.cellTx(tenantId, async (tx) => {
+      const job = await tx.selectFrom('job').select(['id', 'project_id', 'enabled', 'triggers']).where('webhook_token', '=', token).executeTakeFirst();
+      if (!job || !JobTriggers.parse(job.triggers ?? {}).webhook) throw notFound('Webhook');
+      if (!job.enabled) throw conflict('Job paused', 'This job is paused, so its webhook is not accepting deliveries.');
+      // Every delivery is its own run: payloads differ, so they are never coalesced.
+      return enqueueRun(tx, { tenantId, projectId: job.project_id, jobId: job.id, trigger: 'webhook', context: { rows } });
+    });
+    return { runId };
   }
 
   // ---------- files ----------

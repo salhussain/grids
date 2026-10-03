@@ -63,9 +63,9 @@ function useEventStream(path: string | null, opts: { auth: boolean; onChange(m: 
 const RUN_KEYS = new Set(['runs', 'run', 'jobs', 'datasets', 'files', 'project']);
 
 /** Live updates for a project: refetches its queries when its data or runs change. */
-export function useProjectEvents(tenantId: string, projectKey: string): LiveStatus {
+export function useProjectEvents(tenantId: string, projectKey: string | null): LiveStatus {
   const qc = useQueryClient();
-  return useEventStream(`/tenants/${tenantId}/projects/${projectKey}/events`, {
+  return useEventStream(projectKey ? `/tenants/${tenantId}/projects/${projectKey}/events` : null, {
     auth: true,
     onChange: (m) => {
       const scoped = (q: Query) => q.queryKey[1] === tenantId && q.queryKey[2] === projectKey;
@@ -80,7 +80,8 @@ export function usePublicEvents(tenant: string, project: string): LiveStatus {
   return useEventStream(`/public/projects/${tenant}/${project}/events`, {
     auth: false,
     onChange: (m) => {
-      if (m.kind === 'data') void qc.invalidateQueries({ queryKey: ['public-widget', tenant, project] });
+      if (m.kind === 'data')
+        void qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith('public-') && q.queryKey[1] === tenant && q.queryKey[2] === project });
     },
   });
 }

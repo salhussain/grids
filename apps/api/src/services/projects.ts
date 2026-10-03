@@ -3,6 +3,7 @@ import { withTenant, type CellDB } from '@grids/db';
 import {
   DataError,
   entityType,
+  fireEvent,
   freshness,
   moveEntity,
   upsertEntities,
@@ -22,6 +23,7 @@ import {
   type Geometry,
   type LimitKey,
   type Page,
+  type PermissionGroupDto,
   type PlanLimits,
   type ProjectDto,
   type ProjectMemberDto,
@@ -37,6 +39,7 @@ import type {
   GeoQuery,
   ImportRowsInput,
   ObservationBatch,
+  PermissionGroupInput,
   ProjectInput,
   ProjectMemberInput,
   ProjectUpdate,
@@ -69,7 +72,12 @@ export interface ProjectAccess {
   role: ProjectRole;
   /** Entity subtree the caller is limited to (scoped members), else null. */
   rootPath: string | null;
+  /** Permission groups whose visuals the caller sees ('all' for managers). */
+  groups: Set<string> | 'all';
 }
+
+/** Whether a visual that needs `group` (none = unrestricted) is visible with this access. */
+export const canSee = (a: Pick<ProjectAccess, 'groups'>, group: string | null | undefined) => !group || a.groups === 'all' || a.groups.has(group);
 
 /** Hook that installs a project template (set by the composition root). */
 export type TemplateInstaller = (
@@ -131,13 +139,14 @@ export class ProjectService {
       if (!p) throw notFound('Project');
       let role: ProjectRole | null = null;
       let rootPath: string | null = null;
+      let group: string | null = null;
       if (policy && (policy.role === 'org_admin' || policy.has('projects.manage'))) role = 'manager';
       else {
         const m = policy
           ? await tx
               .selectFrom('project_member as m')
               .leftJoin('entity as e', 'e.id', 'm.root_entity_id')
-              .select(['m.role', sql<string | null>`e.path::text`.as('root_path')])
+              .select(['m.role', 'm.permission_group', sql<string | null>`e.path::text`.as('root_path')])
               .where('m.project_id', '=', p.id)
               .where('m.user_id', '=', actor.id)
               .executeTakeFirst()
@@ -145,12 +154,111 @@ export class ProjectService {
         if (m) {
           role = m.role;
           rootPath = m.root_path;
+          group = m.permission_group;
         } else if (staffView || p.visibility !== 'private') role = 'viewer';
       }
       if (!role) throw notFound('Project');
       if (!roleAtLeast(role, need)) throw forbidden(`Requires the project ${need} role.`);
-      return { project: p as ProjectRow, role, rootPath };
+      const groups = role === 'manager' ? ('all' as const) : await this.groupsBelow(tx, p.id, group);
+      return { project: p as ProjectRow, role, rootPath, groups };
     });
+  }
+
+  /** A group and every group below it (what its members may see). */
+  private async groupsBelow(tx: Tx, projectId: string, group: string | null): Promise<Set<string>> {
+    if (!group) return new Set();
+    const rows = await sql<{ key: string }>`
+      with recursive below as (
+        select key from permission_group where project_id = ${projectId} and key = ${group}
+        union
+        select g.key from permission_group g join below b on g.parent_key = b.key where g.project_id = ${projectId}
+      )
+      select key from below
+    `.execute(tx);
+    return new Set(rows.rows.map((r) => r.key));
+  }
+
+  // ---------- permission groups ----------
+
+  async permissionGroups(actor: Actor, tenantId: string, project: string): Promise<PermissionGroupDto[]> {
+    const a = await this.access(actor, tenantId, project);
+    return this.cellTx(tenantId, (tx) => this.groupTree(tx, a.project.id));
+  }
+
+  private async groupTree(tx: Tx, projectId: string): Promise<PermissionGroupDto[]> {
+    const rows = await tx.selectFrom('permission_group').selectAll().where('project_id', '=', projectId).orderBy('name').execute();
+    const counts = new Map(
+      (
+        await tx
+          .selectFrom('project_member')
+          .select(['permission_group', (eb) => eb.fn.countAll<string>().as('n')])
+          .where('project_id', '=', projectId)
+          .where('permission_group', 'is not', null)
+          .groupBy('permission_group')
+          .execute()
+      ).map((r) => [r.permission_group!, Number(r.n)]),
+    );
+    // Depth-first from the top so children follow their parent.
+    const out: PermissionGroupDto[] = [];
+    const walk = (parent: string | null, depth: number) => {
+      for (const g of rows.filter((r) => r.parent_key === parent)) {
+        out.push({ id: g.id, key: g.key, name: g.name, description: g.description, parent: g.parent_key, depth, memberCount: counts.get(g.key) ?? 0 });
+        walk(g.key, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  }
+
+  async savePermissionGroup(actor: Actor, tenantId: string, project: string, input: z.output<typeof PermissionGroupInput>, existingKey?: string): Promise<PermissionGroupDto[]> {
+    const a = await this.access(actor, tenantId, project, 'manager');
+    try {
+      await this.cellTx(tenantId, async (tx) => {
+        if (input.parent) {
+          if (input.parent === input.key || input.parent === existingKey) throw badRequest('A group cannot be its own parent');
+          const parent = await tx.selectFrom('permission_group').select('key').where('project_id', '=', a.project.id).where('key', '=', input.parent).executeTakeFirst();
+          if (!parent) throw badRequest(`Unknown parent group "${input.parent}"`);
+          if (existingKey && (await this.groupsBelow(tx, a.project.id, existingKey)).has(input.parent)) throw badRequest('A group cannot sit below one of its own subgroups');
+        }
+        const values = { key: input.key, name: input.name, description: input.description, parent_key: input.parent };
+        if (existingKey) {
+          if (input.key !== existingKey) throw badRequest('A group’s key cannot change');
+          const r = await tx.updateTable('permission_group').set(values).where('project_id', '=', a.project.id).where('key', '=', existingKey).executeTakeFirst();
+          if (!r.numUpdatedRows) throw notFound('Permission group');
+        } else await tx.insertInto('permission_group').values({ id: uuidv7(), tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
+      });
+    } catch (e) {
+      if (isUniqueViolation(e)) throw conflict('Key taken', `A permission group with key "${input.key}" already exists.`);
+      throw e;
+    }
+    await audit(this.ctx, actor.id, tenantId, existingKey ? 'permission_group.updated' : 'permission_group.created', { project: a.project.key, group: input.key });
+    return this.permissionGroups(actor, tenantId, project);
+  }
+
+  /** Deletes a group nothing refers to (members, subgroups, dashboards, widgets, overlays). */
+  async deletePermissionGroup(actor: Actor, tenantId: string, project: string, key: string): Promise<PermissionGroupDto[]> {
+    const a = await this.access(actor, tenantId, project, 'manager');
+    await this.cellTx(tenantId, async (tx) => {
+      const used = await sql<{ what: string }>`
+        select 'members' as what from project_member where project_id = ${a.project.id} and permission_group = ${key}
+        union all select 'subgroups' from permission_group where project_id = ${a.project.id} and parent_key = ${key}
+        union all select 'dashboards' from dashboard where project_id = ${a.project.id}
+          and (permission_group = ${key} or widgets @> ${JSON.stringify([{ permissionGroup: key }])}::jsonb)
+        union all select 'map overlays' from map_overlay where project_id = ${a.project.id} and config ->> 'permissionGroup' = ${key}
+      `.execute(tx);
+      if (used.rows.length) throw conflict('Group in use', `Still used by ${[...new Set(used.rows.map((r) => r.what))].join(', ')}. Reassign them first.`);
+      const r = await tx.deleteFrom('permission_group').where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
+      if (!r.numDeletedRows) throw notFound('Permission group');
+    });
+    await audit(this.ctx, actor.id, tenantId, 'permission_group.deleted', { project: a.project.key, group: key });
+    return this.permissionGroups(actor, tenantId, project);
+  }
+
+  /** Throws unless `group` is null or a group of the project. */
+  async assertGroup(tx: Tx, projectId: string, group: string | null | undefined) {
+    if (!group) return;
+    const g = await tx.selectFrom('permission_group').select('key').where('project_id', '=', projectId).where('key', '=', group).executeTakeFirst();
+    if (!g) throw badRequest(`Unknown permission group "${group}"`);
   }
 
   /** Display names (or emails) of users, by id. */
@@ -365,7 +473,7 @@ export class ProjectService {
         .selectFrom('project_member as m')
         .leftJoin('entity as e', 'e.id', 'm.root_entity_id')
         .leftJoin('entity_type as t', 't.id', 'e.type_id')
-        .select(['m.user_id', 'm.role', 'e.id as root_id', 'e.name as root_name', 't.name as root_type'])
+        .select(['m.user_id', 'm.role', 'm.permission_group', 'e.id as root_id', 'e.name as root_name', 't.name as root_type'])
         .where('m.project_id', '=', a.project.id)
         .execute(),
     );
@@ -389,6 +497,7 @@ export class ProjectService {
       role: m.role,
       rootEntity: m.root_id ? { id: m.root_id, name: m.root_name!, type: m.root_type! } : null,
       implicit: false,
+      permissionGroup: m.permission_group,
     }));
     for (const ad of admins)
       if (!explicit.some((m) => m.user_id === ad.user_id))
@@ -399,6 +508,7 @@ export class ProjectService {
           role: 'manager',
           rootEntity: null,
           implicit: true,
+          permissionGroup: null,
         });
     return out.sort((x, y) => PROJECT_ROLES.indexOf(x.role) - PROJECT_ROLES.indexOf(y.role) || (x.name ?? '').localeCompare(y.name ?? ''));
   }
@@ -417,10 +527,11 @@ export class ProjectService {
         const root = await tx.selectFrom('entity').select('id').where('id', '=', input.rootEntityId).where('project_id', '=', a.project.id).executeTakeFirst();
         if (!root) throw badRequest('That entity is not in this project');
       }
+      await this.assertGroup(tx, a.project.id, input.permissionGroup);
       await tx
         .insertInto('project_member')
-        .values({ project_id: a.project.id, tenant_id: tenantId, user_id: input.userId, role: input.role, root_entity_id: input.rootEntityId })
-        .onConflict((oc) => oc.columns(['project_id', 'user_id']).doUpdateSet({ role: input.role, root_entity_id: input.rootEntityId }))
+        .values({ project_id: a.project.id, tenant_id: tenantId, user_id: input.userId, role: input.role, root_entity_id: input.rootEntityId, permission_group: input.permissionGroup })
+        .onConflict((oc) => oc.columns(['project_id', 'user_id']).doUpdateSet({ role: input.role, root_entity_id: input.rootEntityId, permission_group: input.permissionGroup }))
         .execute();
     });
     await audit(this.ctx, actor.id, tenantId, 'project.member_set', { project: a.project.key, user: input.userId, role: input.role });
@@ -737,6 +848,7 @@ export class ProjectService {
         const type = await entityType(tx, a.project.id, input.typeKey);
         this.checkRequired(type.attributes, input.attributes);
         if (!input.parentId && type.parentTypes.length && a.rootPath) throw forbidden('Choose a parent within your part of the project.');
+        await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: input.typeKey, actorId: actor.id, detail: { change: 'created', code: input.code } });
         return upsertEntities(tx, {
           tenantId,
           projectId: a.project.id,
@@ -778,6 +890,7 @@ export class ProjectService {
           if (dupe) throw conflict('Code taken', `Another entity already has the code "${input.code}".`);
           await tx.updateTable('entity').set({ code: input.code }).where('id', '=', id).execute();
         }
+        await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: cur.type_key, actorId: actor.id, detail: { change: 'updated', entity: id } });
         await upsertEntities(tx, {
           tenantId,
           projectId: a.project.id,
@@ -823,11 +936,12 @@ export class ProjectService {
   async deleteEntity(actor: Actor, tenantId: string, project: string, id: string): Promise<void> {
     const a = await this.access(actor, tenantId, project, 'editor');
     await this.cellTx(tenantId, async (tx) => {
-      const cur = await this.entityBase(tx, a).select('e.id').where('e.id', '=', id).executeTakeFirst();
+      const cur = await this.entityBase(tx, a).select(['e.id', 'e.code', 't.key as type_key']).where('e.id', '=', id).executeTakeFirst();
       if (!cur) throw notFound('Entity');
       const child = await tx.selectFrom('entity').select('id').where('parent_id', '=', id).executeTakeFirst();
       if (child) throw conflict('Has children', 'Move or delete the entities under it first.');
       await tx.deleteFrom('entity').where('id', '=', id).execute();
+      await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: cur.type_key, actorId: actor.id, detail: { change: 'deleted', code: cur.code } });
     });
   }
 
@@ -934,7 +1048,10 @@ export class ProjectService {
             ...(hasPoint && { geometry: { type: 'Point' as const, coordinates: [lon, lat] } }),
           };
         });
-        return upsertEntities(tx, { tenantId, projectId: a.project.id, typeKey: input.typeKey, rows, source: 'import', actorId: actor.id, scopePath: a.rootPath });
+        const res = await upsertEntities(tx, { tenantId, projectId: a.project.id, typeKey: input.typeKey, rows, source: 'import', actorId: actor.id, scopePath: a.rootPath });
+        if (res.created + res.updated)
+          await fireEvent(tx, { tenantId, projectId: a.project.id, event: 'entity.changed', ref: input.typeKey, actorId: actor.id, detail: { change: 'imported', created: res.created, updated: res.updated } });
+        return res;
       }),
     );
     await audit(this.ctx, actor.id, tenantId, 'project.imported', { project: a.project.key, type: input.typeKey, created: res.created, updated: res.updated });

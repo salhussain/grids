@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ServerResponse } from 'node:http';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { AuthError, type Accounts } from '../accounts.js';
@@ -30,7 +31,7 @@ const Code = z.object({ code: z.string().trim().max(20).optional(), recoveryCode
  */
 export function interactionRoutes(app: FastifyInstance, deps: Deps) {
   const { provider, accounts, config } = deps;
-  async function getDetails(req: FastifyRequest, reply: { raw: import('node:http').ServerResponse }) {
+  async function getDetails(req: FastifyRequest, reply: { raw: ServerResponse }) {
     try {
       return await provider.interactionDetails(req.raw, reply.raw);
     } catch {
@@ -39,7 +40,7 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
   }
 
   /** Completes the interaction: login (if needed) plus an automatic first-party consent grant. */
-  async function finish(req: FastifyRequest, reply: { raw: import('node:http').ServerResponse }, accountId: string, remember: boolean, loggedIn = true) {
+  async function finish(req: FastifyRequest, reply: { raw: ServerResponse }, accountId: string, remember: boolean, loggedIn = true) {
     const d = await getDetails(req, reply);
     let grant = d.grantId ? await provider.Grant.find(d.grantId) : undefined;
     grant ??= new provider.Grant({ accountId, clientId: String(d.params.client_id) });
@@ -55,7 +56,7 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
   }
 
   /** After password (and email verification): second factor, forced setup, or done. */
-  async function afterPrimary(req: FastifyRequest, reply: { raw: import('node:http').ServerResponse }, accountId: string, remember: boolean) {
+  async function afterPrimary(req: FastifyRequest, reply: { raw: ServerResponse }, accountId: string, remember: boolean) {
     const d = await getDetails(req, reply);
     const status = await accounts.totpStatus(accountId);
     if (status.enabled) {

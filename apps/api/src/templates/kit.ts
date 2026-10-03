@@ -6,12 +6,16 @@ import {
   DataElementInput,
   EntityTypeInput,
   FormDefinition,
+  FormSettings,
   JobInput,
+  MapOverlayInput as MapOverlayInputSchema,
   uuidv7,
+  type MapOverlayInput,
   type DashboardInput as DashboardIn,
   type DataElementInput as ElementIn,
   type EntityTypeInput as TypeIn,
   type FormDefinitionInput,
+  type FormSettingsInput,
   type JobInput as JobIn,
 } from '@grids/schema';
 
@@ -101,22 +105,50 @@ export async function job(tx: Tx, c: TemplateCtx, raw: JobIn) {
       timeout_seconds: j.timeoutSeconds,
       freshness_minutes: j.freshnessMinutes,
       run_on_upload: j.runOnUpload,
+      triggers: JSON.stringify(j.triggers),
+      sensor: j.sensor ? JSON.stringify(j.sensor) : null,
     })
     .execute();
   await syncSchedule(tx, { id, tenantId: c.tenantId, schedule: j.schedule, timezone: j.timezone, enabled: j.enabled });
   return id;
 }
 
+export async function overlay(tx: Tx, c: TemplateCtx, raw: MapOverlayInput) {
+  const { key, isPublic, ...config } = MapOverlayInputSchema.parse(raw);
+  const n = await tx.selectFrom('map_overlay').select((eb) => eb.fn.countAll<string>().as('n')).where('project_id', '=', c.projectId).executeTakeFirstOrThrow();
+  await tx
+    .insertInto('map_overlay')
+    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key, is_public: isPublic, config: JSON.stringify(config), sort: Number(n.n) })
+    .execute();
+}
+
+/** An irregular island-like polygon around a centre (radii in degrees). */
+export function island(r: ReturnType<typeof rng>, lon: number, lat: number, rx: number, ry: number, points = 18) {
+  const ring: [number, number][] = [];
+  const phase = r.next() * Math.PI * 2;
+  for (let i = 0; i < points; i++) {
+    const a = (i / points) * Math.PI * 2;
+    const k = 0.72 + 0.18 * Math.sin(a * 3 + phase) + r.next() * 0.22;
+    ring.push([Math.round((lon + Math.cos(a) * rx * k) * 1e5) / 1e5, Math.round((lat + Math.sin(a) * ry * k) * 1e5) / 1e5]);
+  }
+  ring.push(ring[0]!);
+  return { type: 'Polygon' as const, coordinates: [ring] };
+}
+
 export async function dashboard(tx: Tx, c: TemplateCtx, raw: DashboardIn, sort = 0) {
   const d = DashboardInput.parse(raw);
   await tx
     .insertInto('dashboard')
-    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key: d.key, name: d.name, description: d.description, widgets: JSON.stringify(d.widgets), is_public: d.isPublic, filters: JSON.stringify(d.filters), sort })
+    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key: d.key, name: d.name, description: d.description, widgets: JSON.stringify(d.widgets), is_public: d.isPublic, filters: JSON.stringify(d.filters), permission_group: d.permissionGroup, sort })
     .execute();
 }
 
 /** Creates a form and publishes its first version. */
-export async function form(tx: Tx, c: TemplateCtx, f: { key: string; name: string; description?: string; subjectType: string | null; definition: FormDefinitionInput }) {
+export async function form(
+  tx: Tx,
+  c: TemplateCtx,
+  f: { key: string; name: string; description?: string; subjectType: string | null; definition: FormDefinitionInput; settings?: FormSettingsInput },
+) {
   const def = FormDefinition.parse(f.definition);
   const subject = f.subjectType
     ? await tx.selectFrom('entity_type').select('id').where('project_id', '=', c.projectId).where('key', '=', f.subjectType).executeTakeFirstOrThrow()
@@ -124,7 +156,7 @@ export async function form(tx: Tx, c: TemplateCtx, f: { key: string; name: strin
   const id = uuidv7();
   await tx
     .insertInto('form')
-    .values({ id, tenant_id: c.tenantId, project_id: c.projectId, key: f.key, name: f.name, description: f.description ?? '', subject_type_id: subject?.id ?? null, draft: JSON.stringify(def), current_version: 1 })
+    .values({ id, tenant_id: c.tenantId, project_id: c.projectId, key: f.key, name: f.name, description: f.description ?? '', subject_type_id: subject?.id ?? null, draft: JSON.stringify(def), settings: JSON.stringify(FormSettings.parse(f.settings ?? {})), current_version: 1 })
     .execute();
   await tx.insertInto('form_version').values({ form_id: id, tenant_id: c.tenantId, version: 1, definition: JSON.stringify(def), published_by: c.actorId }).execute();
   return id;
