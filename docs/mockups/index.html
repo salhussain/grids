@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Mockups</title>
+<meta name="description" content="Index of clickable mockups for every Grids page, to redesign and rethink from." />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="mock.css" />
+<style>
+  body { padding: 0; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 80px; display: grid; gap: 40px; }
+  h1 { margin: 6px 0 0; font-size: 34px; letter-spacing: -0.025em; }
+  .lede { color: var(--ink-2); max-width: 64ch; margin: 8px 0 0; }
+  .app-h { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--line-2); padding-bottom: 8px; margin-bottom: 14px; }
+  .app-h h2 { margin: 0; font-size: 20px; letter-spacing: -0.015em; }
+  .app-h a { margin-left: auto; }
+  .screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .screens a { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); background: var(--sheet); }
+  .screens a:hover { border-color: var(--brand); background: var(--brand-soft); }
+  .screens b { font-weight: 500; }
+  .screens span { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+</style>
+<main class="wrap" id="root"></main>
+<script>
+  const APPS = [
+    { name: 'Organisation workspace', real: 'apps/web', file: 'workspace.html', hash: true, note: 'Everyone in an organisation: collect, review, build, administer.', screens: [
+      ['Organisation picker', '/', 'picker'], ['Invitation', '/invite/:token', 'invite'],
+      ['Home', '/o/:id', 'home'], ['Projects', '/projects', 'projects'], ['People', '/people', 'people'], ['Structure', '/structure', 'structure'], ['Roles & access', '/access', 'access'],
+      ['Forms (collector home)', '/forms', 'forms'], ['Fill in a form', '/fill/:project/:form', 'fill'], ['Inbox', '/inbox', 'inbox'],
+      ['Branding', '/branding', 'branding'], ['Security', '/security', 'security'], ['Domains', '/domains', 'domains'], ['Languages', '/languages', 'languages'],
+      ['Billing', '/billing', 'billing'], ['Invoice', '/billing/invoices/:id', 'invoice'], ['Support', '/support', 'support'], ['Ticket', '/support/:id', 'ticket'], ['Activity', '/activity', 'activity'],
+      ['Project · Overview', '/p/:project', 'project:health@overview'], ['Project · Explore (map)', '/p/:project/explore', 'project:health@explore'], ['Project · Dashboards', '/p/:project/dashboards', 'project:health@dash'],
+      ['Project · Entities', '/p/:project/entities', 'project:health@entities'], ['Entity detail', '/entities/:id', 'entity'], ['Project · Data elements', '/data', 'project:health@data'], ['Project · Datasets', '/datasets', 'project:health@datasets'],
+      ['Project · Forms', '/forms', 'project:health@forms'], ['Form builder', '/forms/:key/edit', 'builder'], ['Project · Submissions', '/submissions', 'project:health@submissions'], ['Project · Jobs', '/jobs', 'project:health@jobs'],
+      ['Project · Map overlays', '/overlays', 'project:health@overlays'], ['Project · Members', '/members', 'project:health@members'], ['Project · Settings & entity types', '/settings, /types', 'project:health@settings'],
+    ] },
+    { name: 'Platform console', real: 'apps/console', file: 'console.html', hash: true, note: 'Grids staff: onboarding, billing, support and operations.', screens: [
+      ['Staff sign-in', '/', 'signin'], ['Staff invitation', '/invite/:token', 'invite'], ['Overview', '/', 'overview'], ['Organisations', '/tenants', 'orgs'], ['New organisation', '/tenants/new', 'neworg'],
+      ['Organisation · Overview', '/tenants/:id', 'org@overview'], ['Organisation · People', 'tab', 'org@people'], ['Organisation · Billing', 'tab', 'org@billing'], ['Organisation · Domains', 'tab', 'org@domains'],
+      ['Organisation · Security', 'tab', 'org@security'], ['Organisation · Support', 'tab', 'org@support'], ['Organisation · Activity', 'tab', 'org@activity'],
+      ['Billing', '/billing', 'billing'], ['Plans', '/plans', 'plans'], ['Support', '/support', 'support'], ['Ticket', '/support/:id', 'ticket'], ['Email log', '/logs/emails', 'emails'], ['System log', '/logs/system', 'system'], ['Staff', '/staff', 'staff'], ['Platform settings', '/settings', 'settings'],
+    ] },
+    { name: 'Sign-in & account', real: 'apps/login', file: 'login.html', note: 'Identity pages: sign in, two-step verification, reset, account & security.', screens: [['All sign-in screens', '/ui/interaction/:uid, /ui/reset/:token, /ui/account', '']] },
+    { name: 'Public & member dashboards', real: 'apps/portal', file: 'public-dashboard.html', note: 'Public project pages, the portal home and member project views.', screens: [['Public dashboard', '/p/:tenant/:project', '']] },
+  ];
+  document.getElementById('root').innerHTML = `<header><div class="eyebrow">Design mockups</div><h1>Every Grids page</h1><p class="lede">Clickable, static mockups of the current product on the sharp Grids design language. Each page carries a “To rethink” note (bottom right) with an open question. Light and dark follow your system; the sun/moon button switches.</p></header>` +
+    APPS.map((a) => `<section><div class="app-h"><h2>${a.name}</h2><span class="muted mono sm">${a.real}</span><a class="btn" href="${a.file}">Open ${a.file}</a></div><p class="muted" style="margin:-4px 0 14px">${a.note} ${a.screens.length > 1 ? a.screens.length + ' screens.' : ''}</p>
+      <div class="screens">${a.screens.map(([n, r, h]) => `<a href="${a.file}${h && a.hash ? '#' + encodeURIComponent(h).replace(/%3A/g, ':').replace(/%40/g, '@') : ''}"><b>${n}</b><span>${r}</span></a>`).join('')}</div></section>`).join('');
+</script>

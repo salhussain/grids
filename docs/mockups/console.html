@@ -1,0 +1,240 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Platform Console Mockup</title>
+<meta name="description" content="Clickable mockup of every page in the Grids platform console (staff)." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="mock.css" />
+<style>
+  .org-mark.plat { background: var(--ink); color: var(--sheet); }
+  .env { margin-left: 8px; }
+  .funnel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); }
+  .funnel > div { padding: 14px 16px; border-left: 1px solid var(--line); display: grid; gap: 4px; }
+  .funnel > div:first-child { border-left: 0; }
+  .funnel .bar2 { height: 4px; background: var(--brand); }
+  @media (max-width: 860px) { .funnel { grid-template-columns: minmax(0, 1fr); } .funnel > div { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+
+<div class="app" id="app">
+  <aside class="side" aria-label="Console">
+    <div class="org">
+      <span class="org-mark plat"><svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor"><path d="M4 4h10v10H4zM18 4h10v10H18zM4 18h10v10H4zM18 18h10v10H18z"/></svg></span>
+      <div><div class="org-name">Grids</div><div class="org-sub">Platform console</div></div>
+    </div>
+    <button type="button" class="search-btn" id="open-palette"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Find organisation<span class="kbd">⌘K</span></button>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <span class="avatar" style="background:#161616">PA</span>
+      <div style="min-width:0"><div class="me-name">Platform Admin</div><div class="me-role">Super admin</div></div>
+      <button type="button" class="icon-btn theme" id="theme" aria-label="Switch to dark mode" title="Switch to dark mode">
+        <svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </aside>
+  <div class="mobile-scrim" id="mobile-scrim"></div>
+  <div class="main">
+    <div class="sheet">
+      <header class="topbar">
+        <button type="button" class="icon-btn menu-btn" id="menu" aria-label="Open menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <div class="crumbs" id="crumbs"></div>
+        <div class="right"><span class="chip good">All systems normal</span></div>
+      </header>
+      <div id="view"></div>
+    </div>
+  </div>
+</div>
+
+<script src="mock-kit.js"></script>
+<script>
+  const PEOPLE = [
+    ['Amina Rahman', 'amina.rahman@kestrel.example', 'District office', 'Organisation admin', 'Active', 'Now', '#8a3ffc'],
+    ['Joseph Tui', 'joseph.tui@kestrel.example', 'North region', 'Data manager', 'Active', '12 min ago', '#0f62fe'],
+    ['Mele Fifita', 'mele.fifita@kestrel.example', 'Riverside clinic', 'Data collector', 'Active', '1 h ago', '#007d79'],
+    ['Sina Leota', 'sina.leota@kestrel.example', 'Hill View health post', 'Data collector', 'Invited', '—', '#da1e28'],
+    ['Tomás Ruiz', 'tomas.ruiz@kestrel.example', 'East region', 'Data manager', 'Suspended', '24 days ago', '#6f6f6f'],
+  ];
+  const ORGS = [
+    ['Kestrel District Health', 'kestrel', 'Growth', 'Active', 214, '$2,880', 'Health', '#0f62fe'],
+    ['Pacific Water Alliance', 'pacific-water', 'Starter', 'Active', 38, '$600', 'Water & sanitation', '#007d79'],
+    ['Harbour Education Trust', 'harbour-edu', 'Growth', 'Pending payment', 0, '$2,880', 'Education', '#8a3ffc'],
+    ['Northern Lights Council', 'northern-lights', 'Enterprise', 'Provisioning', 0, '$14,400', 'Local government', '#0043ce'],
+    ['Reef Watch Foundation', 'reef-watch', 'Trial', 'Active', 9, '$0', 'Environment', '#198038'],
+    ['Old Mill Clinics', 'old-mill', 'Starter', 'Suspended', 22, '$600', 'Health', '#6f6f6f'],
+  ];
+  const stChip = { Active: 'good', 'Pending payment': 'stale', Provisioning: 'brand', Suspended: 'bad', Cancelled: '' };
+  const SUBS = ['Active', 'Pending payment'];
+
+  let route = 'overview', orgTab = 'overview';
+  const NAV = [
+    { group: null, items: [['overview', 'Overview', 'home'], ['orgs', 'Organisations', 'org', '6']] },
+    { group: 'Revenue', items: [['billing', 'Billing', 'billing', '2'], ['plans', 'Plans', 'chart']] },
+    { group: 'Operations', items: [['support', 'Support', 'support', 'dot'], ['emails', 'Email log', 'mail'], ['system', 'System log', 'activity']] },
+    { group: 'Administration', items: [['staff', 'Staff', 'people'], ['settings', 'Settings', 'settings']] },
+  ];
+  const LABEL = { overview: 'Overview', orgs: 'Organisations', neworg: 'New organisation', billing: 'Billing', plans: 'Plans', support: 'Support', emails: 'Email log', system: 'System log', staff: 'Staff', settings: 'Settings', signin: 'Sign in', invite: 'Invitation', ticket: 'Support' };
+  const BARE = ['signin', 'invite'];
+  function renderNav() {
+    const sel = route === 'org' || route === 'neworg' ? 'orgs' : route === 'ticket' ? 'support' : route;
+    document.getElementById('nav').innerHTML = NAV.map((g) => `<div class="nav-group">${g.group ? `<div class="eyebrow">${g.group}</div>` : ''}${g.items.map(([id, l, i, c]) => `<a data-go="${id}" aria-current="${sel === id ? 'page' : 'false'}">${ic(i)}<span>${l}</span>${c === 'dot' ? '<span class="dot"></span>' : c ? `<span class="count">${c}</span>` : ''}</a>`).join('')}</div>`).join('');
+  }
+  function crumbs() {
+    let c = [LABEL[route]];
+    if (route === 'org') c = ['Organisations', 'Kestrel District Health'];
+    if (route === 'neworg') c = ['Organisations', 'New organisation'];
+    if (route === 'ticket') c = ['Support', '#1042'];
+    document.getElementById('crumbs').innerHTML = `<span>Grids</span>${c.map((x, i) => `${ic('chevron', 13)}${i === c.length - 1 ? `<b>${x}</b>` : `<span>${x}</span>`}`).join('')}`;
+  }
+  function go(r) {
+    if (r.includes('@')) { [r, orgTab] = r.split('@'); } else if (r === 'org') orgTab = 'overview';
+    route = r;
+    document.getElementById('app').classList.toggle('bare', BARE.includes(r));
+    renderNav(); crumbs(); render(); annotate();
+    document.getElementById('app').classList.remove('open');
+    window.scrollTo({ top: 0 });
+  }
+  document.addEventListener('click', (e) => { const a = e.target.closest('[data-go]'); if (a) { e.preventDefault(); go(a.dataset.go); } });
+
+  const Q = {
+    overview: 'Revenue, health and onboarding on one page. What does staff open the console for first thing?',
+    orgs: 'Lifecycle states are only a filter. Should “needs action” (unpaid, stuck provisioning) be the default view?',
+    neworg: 'Five steps to create an organisation. Could the business profile be optional until payment?',
+    org: 'Seven tabs per organisation. Which of them are daily tasks and which are rare admin?',
+    billing: 'Payments are recorded by hand today. This table is where a payment provider would plug in.',
+    plans: 'Prices are snapshotted per subscription. How do we show “customers on an old price”?',
+    support: 'Triage by priority and assignee. Do we need SLA timers and saved views?',
+    ticket: 'Internal notes sit in the thread. Should they be visually separate?',
+    emails: 'Mostly for debugging delivery. Is a per-organisation view more useful than a global log?',
+    system: 'Append-only audit log. Filters and export for compliance requests.',
+    staff: 'Roles are coarse (super admin, billing, support). Do we need per-organisation scoping?',
+    settings: 'Mail transport, base domain, defaults. Group by what changes how often.',
+    signin: 'Staff sign in through the same identity service as customers, but with a different frame.',
+  };
+  function annotate() {
+    document.querySelector('.annot')?.remove();
+    const q = Q[route]; if (!q) return;
+    const d = document.createElement('div');
+    d.className = 'annot min';
+    d.innerHTML = `<button aria-label="Hide" onclick="event.stopPropagation();this.parentElement.classList.add('min')">✕</button><b>To rethink ＋</b><span>${q}</span>`;
+    d.addEventListener('click', () => d.classList.remove('min'));
+    document.body.appendChild(d);
+  }
+
+  const V = {};
+  const orgChip = (s) => chip(s, stChip[s]);
+
+  V.overview = () => `<section class="page">
+    ${hero('Friday 3 October', 'Platform overview', 'Revenue, customers and what needs your attention today.', btn('New organisation', 'plus', 'primary', 'neworg'))}
+    <div class="kpis">
+      <div class="kpi"><span class="eyebrow">Monthly recurring revenue</span><div class="row"><span class="val">$21.4k</span>${spark([14, 15, 16, 17, 18, 19, 20, 21.4])}</div><span class="sub"><span class="delta up">+6.2%</span> on last month</span></div>
+      <div class="kpi"><span class="eyebrow">Active organisations</span><div class="row"><span class="val">38</span>${spark([22, 25, 27, 29, 31, 34, 36, 38])}</div><span class="sub"><span class="delta up">+2</span> this month</span></div>
+      <div class="kpi"><span class="eyebrow">Overdue invoices</span><div class="row"><span class="val">$3,480</span></div><span class="sub"><span class="delta down">2</span> past due</span></div>
+      <div class="kpi"><span class="eyebrow">Open tickets</span><div class="row"><span class="val">7</span>${spark([4, 5, 9, 6, 8, 7, 7])}</div><span class="sub">median first reply 2 h</span></div>
+    </div>
+    <div class="cols">
+      ${panel('Onboarding pipeline', `<div class="funnel">${[['Created', 6, 100], ['Pending payment', 3, 60], ['Provisioning', 2, 40], ['Admin invited', 2, 30], ['Active', 38, 100]].map(([n, c, w]) => `<div><span class="eyebrow">${n}</span><span class="big-num">${c}</span><div class="bar2" style="width:${w}%"></div></div>`).join('')}</div>`)}
+      ${panel('Needs attention', `<ul class="list">
+        <li><span class="sev" style="background:var(--bad)"></span><div><div class="t">Northern Lights Council stuck provisioning</div><div class="s">Identity provider unavailable for 2 h</div></div><span class="ml-auto">${btn('Resume', 'play')}</span></li>
+        <li><span class="sev" style="background:var(--warn)"></span><div><div class="t">Harbour Education Trust unpaid</div><div class="s">INV-2026-00198 · due in 3 days</div></div><span class="when">$2,880</span></li>
+        <li><span class="sev" style="background:var(--bad)"></span><div><div class="t">Ticket #1042 awaiting staff reply</div><div class="s">Kestrel · High · 12 min</div></div></li></ul>`)}
+    </div>
+    <div class="cols">
+      ${panel('Revenue by plan', [['Enterprise', 14400, 'var(--ink)'], ['Growth', 5760, 'var(--brand)'], ['Starter', 1200, 'var(--brand-line)']].map(([n, v, c]) => `<div class="setting"><span style="width:10px;height:10px;background:${c}"></span><span class="grow">${n}</span><span class="mono">$${v.toLocaleString()}</span></div>`).join(''), 'per year · billed')}
+      ${panel('Recent activity', `<ul class="timeline"><li class="g"><div><b>Pacific Water Alliance</b> <span class="muted">payment recorded · $600</span></div><span class="when mono sm muted ml-auto">1 h</span></li><li class="b"><div><b>Reef Watch</b> <span class="muted">invited an administrator</span></div><span class="when mono sm muted ml-auto">3 h</span></li><li class="r"><div><b>Old Mill Clinics</b> <span class="muted">suspended by Priya</span></div><span class="when mono sm muted ml-auto">Yesterday</span></li></ul>`)}
+    </div></section>`;
+
+  V.orgs = () => `<section class="page">
+    ${hero('Platform', 'Organisations', 'Every customer organisation, where it is in its lifecycle, and what it pays.', btn('Export', 'download') + btn('New organisation', 'plus', 'primary', 'neworg'))}
+    <div class="toolbar"><div class="seg"><button aria-pressed="true">All <span class="mono muted">6</span></button><button aria-pressed="false">Active <span class="mono muted">3</span></button><button aria-pressed="false">Needs action <span class="mono muted">3</span></button><button aria-pressed="false">Suspended</button></div><label class="field">${ic('search', 15)}<input placeholder="Search name or address"/></label><select class="select"><option>All plans</option></select></div>
+    <div class="panel">${tableOf(['Organisation', 'Plan', 'Status', 'People', 'Annual', ''], ORGS.map(([n, s, p, st, pe, a, ind, c]) => [`<div class="person">${av(n, c, 32)}<div><a class="dl" data-go="org"><b>${n}</b></a><div class="muted sm mono">${s}.grids.app · ${ind}</div></div></div>`, p, orgChip(st), pe || '—', a, `<button class="icon-btn" aria-label="More">${ic('more', 16)}</button>`], [3, 4]))}</div></section>`;
+
+  V.neworg = () => `<section class="page" style="max-width:900px">
+    ${hero('Organisations', 'New organisation', 'Create the customer record, choose a plan, and invite the first administrator.', '')}
+    <div class="steps"><div class="on"><span class="no">1</span>Profile</div><div><span class="no">2</span>Contacts</div><div><span class="no">3</span>Plan</div><div><span class="no">4</span>Payment</div><div><span class="no">5</span>Administrator</div></div>
+    ${panel('Business profile', `<div class="form-grid">${field('Display name', 'Kestrel District Health')}${field('Legal name', 'Kestrel District Health Authority')}${select('Industry', ['Health', 'Education', 'Water & sanitation', 'Local government', 'Environment'])}${select('Size', ['1–10', '11–50', '51–250', '250+'])}${field('Website', 'https://kestrel.example')}${field('Address slug', 'kestrel', 'Generated from the legal name when empty · kestrel.grids.app')}${field('Registration number', '')}${field('Tax number', '')}${select('Time zone', ['Pacific/Apia', 'UTC'])}${select('Currency', ['USD', 'EUR', 'AUD'])}<label class="label full">Internal notes<textarea class="textarea" placeholder="Only staff see this"></textarea></label></div>`, '', true)}
+    <div class="row-between"><button class="btn ghost" data-go="orgs">Cancel</button><span class="ml-auto">${btn('Continue', 'arrow', 'primary')}</span></div></section>`;
+
+  const OT = {
+    overview: () => `<div class="kpis"><div class="kpi"><span class="eyebrow">Status</span><span class="val" style="font-size:22px">Active</span><span class="sub">since 14 Jan 2026</span></div><div class="kpi"><span class="eyebrow">Plan</span><span class="val" style="font-size:22px">Growth</span><span class="sub">yearly · $2,880</span></div><div class="kpi"><span class="eyebrow">Seats</span><span class="val">214<small>/250</small></span><span class="sub">6 invitations pending</span></div><div class="kpi"><span class="eyebrow">Data cell</span><span class="val" style="font-size:22px">cell-03</span><span class="sub">41 GB stored</span></div></div>
+      <div class="grid2">${panel('Business profile', `<div class="kv"><div>Legal name</div><div>Kestrel District Health Authority</div><div>Industry</div><div>Health · 51–250</div><div>Registered address</div><div>12 Harbour Rd, Apia</div><div>Time zone</div><div>Pacific/Apia</div><div>Currency</div><div>USD</div></div>`)}
+      ${panel('Contacts', `<div class="kv"><div>Primary</div><div>Amina Rahman · amina@kestrel.example</div><div>Billing</div><div>Finance · billing@kestrel.example</div><div>Technical</div><div>Joseph Tui · joseph@kestrel.example</div></div>`)}</div>
+      ${panel('Lifecycle', `<div class="panel-b"><div class="pipeline">${[['Created', '14 Jan'], ['Subscribed', '14 Jan'], ['Paid', '20 Jan'], ['Provisioned', '20 Jan'], ['Active', 'Now']].map(([n, w], i, a) => `<div class="stage"><div class="eyebrow">${w}</div><b>${n}</b></div>${i < a.length - 1 ? '<div class="link"></div>' : ''}`).join('')}</div></div>`)}`,
+    people: () => `<div class="toolbar"><span class="ml-auto">${btn('Invite administrator', 'plus', 'primary')}</span></div><div class="panel">${tableOf(['Person', 'Role', '2FA', 'Status', ''], PEOPLE.slice(0, 5).map(([n, e, , r, s, , c]) => [`<div class="person">${av(n, c)}<div><b>${n}</b><div class="muted sm">${e}</div></div></div>`, r, chip(s === 'Invited' ? 'Not enrolled' : 'Enrolled', s === 'Invited' ? 'stale' : 'good'), chip(s, { Active: 'good', Invited: 'brand', Suspended: 'stale' }[s]), `<button class="icon-btn">${ic('more', 16)}</button>`]))}</div>`,
+    billing: () => `<div class="grid2">${panel('Subscription', `<div class="kv"><div>Plan</div><div>Growth</div><div>Cycle</div><div>Yearly (10% off)</div><div>Negotiated discount</div><div>0%</div><div>Period</div><div>14 Jan 2026 – 13 Jan 2027</div></div><div class="panel-h" style="border-top:1px solid var(--line);border-bottom:0">${btn('Change plan', '')}${btn('Cancel subscription', '', 'ghost')}</div>`)}${panel('Invoices', tableOf(['Invoice', 'Amount', 'Status'], [['<span class="mono">INV-2026-00041</span>', '$2,880', chip('Paid', 'good')], ['<span class="mono">INV-2025-00112</span>', '$2,400', chip('Paid', 'good')]], [1]))}</div>`,
+    domains: () => `<div class="panel">${tableOf(['Hostname', 'Status', 'Primary'], [['<span class="mono">kestrel.grids.app</span>', chip('Platform address', ''), ''], ['<span class="mono">data.kestrel.example</span>', chip('Verified', 'good'), chip('Primary', 'brand')]])}</div>`,
+    security: () => `<div class="panel"><div class="setting"><div class="grow"><div class="t">Require 2FA</div><div class="s">Enforced by the identity service for every member.</div></div>${toggle(true, 'Require 2FA')}</div><div class="setting"><div class="grow"><div class="t">Suspend organisation</div><div class="s">Everyone loses access immediately. Data is kept.</div></div><button class="btn" style="color:var(--bad);border-color:var(--bad)">Suspend…</button></div></div>`,
+    support: () => `<div class="panel">${tableOf(['Ticket', 'Status', 'Updated'], [['<a class="dl" data-go="ticket">Dashboard export times out</a>', chip('Reply waiting', 'bad'), '<span class="muted">12 min ago</span>'], ['Add a second billing contact', chip('Open', 'brand'), '<span class="muted">Yesterday</span>']])}</div>`,
+    activity: () => `<div class="panel"><ul class="timeline"><li class="b"><div><b>Amina Rahman</b> <span class="muted">invited Sina Leota</span></div><span class="ml-auto mono sm muted">2 h</span></li><li class="g"><div><b>Platform</b> <span class="muted">recorded payment $2,880</span></div><span class="ml-auto mono sm muted">20 Jan</span></li></ul></div>`,
+  };
+  V.org = () => {
+    const tabs = [['overview', 'Overview'], ['people', 'People'], ['billing', 'Billing'], ['domains', 'Domains'], ['security', 'Security'], ['support', 'Support'], ['activity', 'Activity']];
+    return `<section class="page"><div class="p-head">${av('Kestrel District Health', '#0f62fe', 48)}<div><a class="eyebrow dl" data-go="orgs">Organisations</a><h1>Kestrel District Health</h1></div><div class="chips">${chip('Active', 'good')}<button class="btn">${ic('arrow', 15)}Open workspace</button></div></div>
+      <div class="tabs">${tabs.map(([id, l]) => `<button data-otab="${id}" aria-selected="${orgTab === id}">${l}</button>`).join('')}</div>${OT[orgTab]()}</section>`;
+  };
+
+  V.billing = () => `<section class="page">
+    ${hero('Revenue', 'Billing', 'Invoices across every organisation. Record payments as they arrive.', btn('Export', 'download'))}
+    <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span class="eyebrow">Outstanding</span><span class="val">$5,760</span><span class="sub">2 invoices</span></div><div class="kpi"><span class="eyebrow">Overdue</span><span class="val" style="color:var(--bad)">$3,480</span><span class="sub">1 invoice</span></div><div class="kpi"><span class="eyebrow">Collected this month</span><span class="val">$4,200</span><span class="sub"><span class="delta up">+12%</span></span></div></div>
+    <div class="toolbar"><div class="seg"><button aria-pressed="true">All</button><button aria-pressed="false">Outstanding</button><button aria-pressed="false">Paid</button><button aria-pressed="false">Void</button></div></div>
+    <div class="panel">${tableOf(['Invoice', 'Organisation', 'Issued', 'Due', 'Amount', 'Status', ''], [['<span class="mono">INV-2026-00198</span>', 'Harbour Education Trust', '30 Sep', '14 Oct', '$2,880', chip('Awaiting payment', 'stale'), btn('Record payment', 'check')], ['<span class="mono">INV-2026-00187</span>', 'Old Mill Clinics', '2 Sep', '16 Sep', '$600', chip('Overdue', 'bad'), btn('Record payment', 'check')], ['<span class="mono">INV-2026-00176</span>', 'Pacific Water Alliance', '1 Sep', '15 Sep', '$600', chip('Paid', 'good'), ''], ['<span class="mono">INV-2026-00041</span>', 'Kestrel District Health', '14 Jan', '28 Jan', '$2,880', chip('Paid', 'good'), '']], [4])}</div></section>`;
+
+  V.plans = () => `<section class="page">
+    ${hero('Revenue', 'Plans', 'What customers can buy. Prices are copied onto each subscription, so editing a plan never changes existing customers.', btn('New plan', 'plus', 'primary'))}
+    <div class="grid3" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${[['Trial', '$0', '30 days', ['Up to 10 people', '1 project', 'Community support'], 9], ['Starter', '$50 / mo', '$600 / yr', ['Up to 50 people', '3 projects', 'Email support'], 14], ['Growth', '$300 / mo', '$2,880 / yr', ['Up to 250 people', '10 projects', 'Custom domain', 'Offline forms', 'API access'], 12], ['Enterprise', 'Custom', '', ['Unlimited people', 'Dedicated cell', 'SSO', 'Priority support'], 3]].map(([n, m, y, f, c], i) => `<div class="price ${i === 2 ? 'cur' : ''}"><div class="row-between"><b style="font-size:16px">${n}</b>${i === 2 ? chip('Most popular', 'brand') : ''}</div><div class="big-num">${m}</div><div class="muted sm">${y || '&nbsp;'}</div><ul>${f.map((x) => `<li>${x}</li>`).join('')}</ul><div class="row-between" style="border-top:1px solid var(--line);padding-top:10px"><span class="muted sm">${c} organisations</span><span class="ml-auto">${btn('Edit', 'edit', 'ghost')}</span></div></div>`).join('')}</div></section>`;
+
+  V.support = () => `<section class="page">
+    ${hero('Operations', 'Support', 'Customer tickets. Staff replies set a ticket to “pending”; a customer reply reopens it.', btn('New ticket on behalf', 'plus'))}
+    <div class="toolbar"><div class="seg"><button aria-pressed="true">Open <span class="mono muted">7</span></button><button aria-pressed="false">Mine <span class="mono muted">3</span></button><button aria-pressed="false">Pending</button><button aria-pressed="false">Closed</button></div><select class="select"><option>All priorities</option></select><select class="select"><option>Anyone</option></select></div>
+    <div class="panel">${tableOf(['Ticket', 'Organisation', 'Priority', 'Status', 'Assignee', 'Updated'], [['<a class="dl" data-go="ticket"><b>Dashboard export times out</b></a><div class="muted sm">#1042</div>', 'Kestrel District Health', chip('High', 'bad'), chip('Open', 'brand'), `<div class="person">${av('Grace', '#198038', 24)}Grace</div>`, '<span class="muted">12 min</span>'], ['<b>Add a second billing contact</b><div class="muted sm">#1040</div>', 'Pacific Water Alliance', chip('Normal', ''), chip('Pending', 'stale'), 'Unassigned', '<span class="muted">Yesterday</span>'], ['<b>Custom domain not verifying</b><div class="muted sm">#1037</div>', 'Reef Watch Foundation', chip('Normal', ''), chip('Open', 'brand'), `<div class="person">${av('Priya', '#0043ce', 24)}Priya</div>`, '<span class="muted">2 days</span>']])}</div></section>`;
+
+  V.ticket = () => `<section class="page">
+    <div class="hero"><div><a class="eyebrow dl" data-go="support">Support</a><h1>Dashboard export times out</h1><p>#1042 · Kestrel District Health · Amina Rahman</p></div><div class="actions">${btn('Close ticket', 'check')}</div></div>
+    <div class="split wide" style="grid-template-columns:minmax(0,1fr) 300px">
+      ${panel('Conversation', `${[['Amina Rahman', '#8a3ffc', '2 days ago', 'Exporting the weekly dashboard as PDF spins forever when more than 3 regions are selected.', ''], ['Grace', '#198038', 'Yesterday', 'Reproduced. Fix is in the export queue.', ''], ['Grace · internal note', '#198038', 'Yesterday', 'Queue worker was OOM at 200+ widgets. Raised limit; follow up in ENG-221.', 'note'], ['Amina Rahman', '#8a3ffc', '12 min ago', 'Works now, thank you!', '']].map(([n, c, w, t, k]) => `<div class="msg ${k}">${av(n, c, 32)}<div class="grow"><div class="row-between"><b>${n}</b>${k ? chip('Staff only', 'stale') : ''}<span class="ml-auto muted mono sm">${w}</span></div><div class="bubble">${t}</div></div></div>`).join('')}<div class="panel-b" style="border-top:1px solid var(--line)"><div class="seg" style="margin-bottom:10px"><button aria-pressed="true">Reply</button><button aria-pressed="false">Internal note</button></div><textarea class="textarea" placeholder="Write a reply"></textarea><div class="row-between" style="margin-top:10px"><span class="ml-auto">${btn('Send reply', 'send', 'primary')}</span></div></div>`)}
+      ${panel('Triage', `<div class="panel-b" style="display:grid;gap:14px">${select('Status', ['Open', 'Pending', 'Closed'])}${select('Priority', ['High', 'Normal', 'Low'])}${select('Assignee', ['Grace', 'Priya', 'Unassigned'])}</div>`)}</div></section>`;
+
+  V.emails = () => `<section class="page">
+    ${hero('Operations', 'Email log', 'Every transactional email the platform tried to send, with the delivery result.')}
+    <div class="toolbar"><label class="field">${ic('search', 15)}<input placeholder="Search recipient or template"/></label><select class="select"><option>Any status</option><option>Sent</option><option>Failed</option></select><select class="select"><option>All templates</option></select></div>
+    <div class="panel">${tableOf(['When', 'Template', 'To', 'Status', ''], [['<span class="mono sm">10:42:05</span>', 'ticket.reply', 'amina@kestrel.example', chip('Sent', 'good'), btn('View', '', 'ghost')], ['<span class="mono sm">10:12:51</span>', 'invitation', 'sina.leota@kestrel.example', chip('Sent', 'good'), btn('View', '', 'ghost')], ['<span class="mono sm">09:03:11</span>', 'invoice.issued', 'billing@harbour.example', chip('Failed · mailbox full', 'bad'), btn('View', '', 'ghost')]])}</div></section>`;
+
+  V.system = () => `<section class="page">
+    ${hero('Operations', 'System log', 'Append-only record of every change made on the platform.', btn('Export', 'download'))}
+    <div class="toolbar"><label class="field">${ic('search', 15)}<input placeholder="Search"/></label><select class="select"><option>All areas</option><option>Organisations</option><option>Billing</option><option>Staff</option><option>Settings</option></select><select class="select"><option>All organisations</option></select></div>
+    <div class="panel"><ul class="timeline">${[['g', 'Priya', 'recorded payment <b>$600</b> for Pacific Water Alliance', 'Billing', '10:40'], ['b', 'Grace', 'replied to ticket <b>#1042</b>', 'Support', '10:12'], ['r', 'Priya', 'suspended <b>Old Mill Clinics</b>', 'Organisations', 'Yesterday'], ['w', 'Platform Admin', 'changed mail transport to <b>relay</b>', 'Settings', 'Mon'], ['b', 'Platform Admin', 'added staff member <b>Grace</b> as Support', 'Staff', 'Mon']].map(([c, w, t, a, when]) => `<li class="${c}"><div class="grow"><b>${w}</b> <span class="muted">${t.replace(/<b>/g, '<b style="color:var(--ink);font-weight:500">')}</span></div>${chip(a)}<span class="mono sm muted" style="width:80px;text-align:right">${when}</span></li>`).join('')}</ul></div></section>`;
+
+  V.staff = () => `<section class="page">
+    ${hero('Administration', 'Staff', 'People who can sign in to this console and what they can do.', btn('Invite staff', 'plus', 'primary'))}
+    <div class="panel">${tableOf(['Person', 'Role', '2FA', 'Status', 'Last active', ''], [['Platform Admin', 'Super admin', 'Enrolled', 'Active', 'Now', '#161616'], ['Priya Nair', 'Billing', 'Enrolled', 'Active', '1 h ago', '#0043ce'], ['Grace Lim', 'Support', 'Enrolled', 'Active', '12 min ago', '#198038'], ['Tomás Ruiz', 'Support', 'Not enrolled', 'Invited', '—', '#b28600']].map(([n, r, f, s, l, c]) => [`<div class="person">${av(n, c)}<b>${n}</b></div>`, r, chip(f, f === 'Enrolled' ? 'good' : 'stale'), chip(s, s === 'Active' ? 'good' : 'brand'), `<span class="muted">${l}</span>`, rowActions]))}</div>
+    ${panel('What each role can do', `<div class="table-wrap"><table class="matrix"><thead><tr><th>Capability</th><th>Super admin</th><th>Billing</th><th>Support</th></tr></thead><tbody>${[['Create organisations', 1, 1, 0], ['Record payments', 1, 1, 0], ['Edit plans', 1, 0, 0], ['Reply to tickets', 1, 0, 1], ['Suspend organisations', 1, 0, 0], ['Manage staff & settings', 1, 0, 0]].map(([n, ...g]) => `<tr><td>${n}</td>${g.map((x) => `<td><span class="tick ${x ? '' : 'no'}">${ic('check', 12)}</span></td>`).join('')}</tr>`).join('')}</tbody></table></div>`)}</section>`;
+
+  V.settings = () => `<section class="page">
+    ${hero('Administration', 'Platform settings', 'Defaults and delivery settings that apply to every organisation.', btn('Save changes', '', 'primary'))}
+    <div class="grid2">${panel('Addresses', `<div class="panel-b"><div class="form-grid">${field('Base domain', 'grids.app', 'Organisations live at {slug}.grids.app')}${field('Edge host', 'edge.grids.app', 'Custom domains CNAME here')}</div></div>`)}
+    ${panel('Defaults for new organisations', `<div class="panel-b"><div class="form-grid">${select('Plan', ['Trial', 'Starter', 'Growth'])}${select('Language', ['English', 'Français'])}${select('Currency', ['USD', 'EUR'])}${field('Invoice terms (days)', '14', '', 'number')}</div></div>`)}</div>
+    ${panel('Email delivery', `<div class="setting"><div class="grow"><div class="t">Transport</div><div class="s">Log writes to the email log only. Relay sends through the identity service mailer.</div></div><div class="seg"><button aria-pressed="false">Log</button><button aria-pressed="true">Relay</button></div></div><div class="setting"><div class="grow"><div class="t">From address</div></div><input class="input" style="max-width:280px" value="Grids &lt;no-reply@grids.app&gt;"/></div><div class="setting"><div class="grow"><div class="t">Send a test email</div></div>${btn('Send test', 'send')}</div>`)}
+    ${panel('Support', `<div class="setting"><div class="grow"><div class="t">Notify staff of new tickets</div><div class="s">Emails everyone with the Support role.</div></div>${toggle(true, 'Notify')}</div>`)}</section>`;
+
+  V.signin = () => `<section class="centered"><div><span class="org-mark plat" style="width:36px;height:36px;display:inline-grid;margin-bottom:12px">${ic('org', 18)}</span><h1>Grids platform console</h1><p>Staff only. Sign in with your Grids account.</p></div>${field('Email', 'platform-admin@grids-platform.localhost')}${field('Password', 'Password1!', '', 'password')}<button class="btn primary" style="justify-content:center;height:40px" data-go="overview">Sign in</button><div class="muted sm" style="text-align:center"><a class="dl">Forgot your password?</a></div></section>`;
+  V.invite = () => `<section class="centered"><div><span class="org-mark plat" style="width:36px;height:36px;display:inline-grid;margin-bottom:12px">${ic('mail', 18)}</span><h1>Join the platform team</h1><p>Platform Admin invited you as <b>Support</b>.</p></div><div class="form-grid">${field('First name', 'Grace')}${field('Last name', 'Lim')}</div><button class="btn primary" style="justify-content:center;height:40px" data-go="overview">Accept and continue</button></section>`;
+
+  function render() {
+    document.getElementById('view').innerHTML = V[route]();
+    document.querySelectorAll('[data-otab]').forEach((b) => b.addEventListener('click', () => { orgTab = b.dataset.otab; render(); annotate(); }));
+    document.querySelectorAll('.seg').forEach((seg) => seg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }));
+  }
+
+  /* Theme + mobile menu */
+  const themeBtn = document.getElementById('theme'), sys = matchMedia('(prefers-color-scheme: dark)');
+  const cur = () => document.documentElement.dataset.theme || (sys.matches ? 'dark' : 'light');
+  const syncTheme = () => { const c = cur(), n = c === 'dark' ? 'light' : 'dark'; themeBtn.dataset.current = c; themeBtn.title = `Switch to ${n} mode`; themeBtn.setAttribute('aria-label', themeBtn.title); };
+  themeBtn.addEventListener('click', () => { const n = cur() === 'dark' ? 'light' : 'dark'; if ((n === 'dark') === sys.matches) delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = n; syncTheme(); });
+  sys.addEventListener('change', syncTheme); syncTheme();
+  document.getElementById('menu').addEventListener('click', () => document.getElementById('app').classList.add('open'));
+  document.getElementById('mobile-scrim').addEventListener('click', () => document.getElementById('app').classList.remove('open'));
+  document.getElementById('open-palette').addEventListener('click', () => go('orgs'));
+  const start = location.hash.slice(1);
+  go(start && (V[start.split('@')[0]]) ? start : 'overview');
+</script>
