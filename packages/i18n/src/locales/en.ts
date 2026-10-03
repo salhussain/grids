@@ -177,6 +177,12 @@ const en = {
       preferences: 'Preferences',
       account: 'Account & security',
       yourOrgs: 'Your organisations',
+      search: 'Search or jump to',
+      searchPlaceholder: 'Search pages and projects',
+      noMatches: 'No matches',
+      goTo: 'Go to',
+      lightMode: 'Switch to light mode',
+      darkMode: 'Switch to dark mode',
     },
     prefs: {
       title: 'Preferences',

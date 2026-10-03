@@ -213,13 +213,13 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50',
+        'relative inline-flex h-6 w-11 shrink-0 items-center border transition-colors disabled:opacity-50',
         checked ? 'border-accent-600 bg-accent-600' : 'border-zinc-300 bg-zinc-200',
       )}
     >
       <span
         className={cx(
-          'block size-[18px] rounded-full bg-white shadow-[0_1px_3px_rgb(16_24_40/0.25)] transition-transform',
+          'block size-[18px] bg-white shadow-[0_1px_3px_rgb(16_24_40/0.25)] transition-transform',
           checked ? 'translate-x-[22px]' : 'translate-x-[2px]',
         )}
       />
@@ -276,7 +276,7 @@ export function PageHeader({
     <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
         {eyebrow && (
-          <div className="mb-1.5 text-xs font-medium tracking-[0.12em] text-zinc-500 uppercase">
+          <div className="mb-1.5 font-mono text-[11px] tracking-[0.1em] text-zinc-500 uppercase">
             {eyebrow}
           </div>
         )}
@@ -305,10 +305,10 @@ export function Stat({
 }) {
   return (
     <div className="border border-zinc-200 bg-snow px-5 py-4">
-      <div className="text-[13px] font-medium text-zinc-500">{label}</div>
+      <div className="font-mono text-[11px] tracking-[0.08em] text-zinc-500 uppercase">{label}</div>
       <div
         className={cx(
-          'num mt-2 text-[26px] font-semibold tracking-[-0.02em]',
+          'num mt-2 font-mono text-[26px] font-medium tracking-[-0.03em]',
           tone === 'bad' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-ink',
         )}
       >
@@ -366,7 +366,7 @@ export function Tabs<T extends string>({
         >
           {t.label}
           {t.count !== undefined && t.count > 0 && (
-            <span className="num rounded-full bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
+            <span className="num bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
           )}
         </button>
       ))}
@@ -457,7 +457,7 @@ export function Status({ value, tone, label }: { value: string; tone?: Tone; lab
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
+        'inline-flex items-center gap-1.5 border px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
         TONES[t],
       )}
     >

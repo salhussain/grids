@@ -178,6 +178,12 @@ const tpi: Catalog = {
       preferences: 'Ol laik bilong yu',
       account: 'Akaun na sekiuriti',
       yourOrgs: 'Ol oganaisesen bilong yu',
+      search: 'Painim o go long',
+      searchPlaceholder: 'Painim ol pes na ol projek',
+      noMatches: 'I no gat wanpela samting',
+      goTo: 'Go long',
+      lightMode: 'Senis i go long lait mod',
+      darkMode: 'Senis i go long tudak mod',
     },
     prefs: {
       title: 'Ol laik bilong yu',

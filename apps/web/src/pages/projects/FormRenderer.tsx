@@ -113,7 +113,7 @@ export function FormRunner({
             }}
           >
             <div className="mb-6 flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
-              <span className="num rounded-full bg-accent-50 px-2 py-0.5 text-accent-700">
+              <span className="num bg-accent-50 px-2 py-0.5 text-accent-700">
                 {page + 1} / {count}
               </span>
               {item?.section && <span className="truncate">{item.section}</span>}
@@ -146,7 +146,7 @@ export function FormRunner({
             const current = i === page;
             return (
               <li key={x.key} className="flex min-w-24 flex-1 flex-col gap-2">
-                <div className={cx('h-1.5 rounded-full transition-colors', done || current ? 'bg-accent-600' : 'bg-zinc-200')} />
+                <div className={cx('h-1.5 transition-colors', done || current ? 'bg-accent-600' : 'bg-zinc-200')} />
                 <button
                   type="button"
                   disabled={i > page}
@@ -156,7 +156,7 @@ export function FormRunner({
                 >
                   <span
                     className={cx(
-                      'flex size-5 shrink-0 items-center justify-center rounded-full text-[10px]',
+                      'flex size-5 shrink-0 items-center justify-center text-[10px]',
                       done ? 'bg-accent-600 text-on-accent' : current ? 'bg-ink text-canvas' : 'bg-zinc-200 text-zinc-600',
                     )}
                   >
@@ -226,7 +226,7 @@ export function FormRenderer({
             {s.title && <legend className="sr-only">{s.title}</legend>}
             {s.title && (
               <h3 className="flex items-center gap-2.5 border-b border-zinc-100 px-6 py-3.5 text-[15px] font-semibold tracking-tight" aria-hidden>
-                <span className="h-4 w-1 rounded-full bg-accent-600" />
+                <span className="h-4 w-1 bg-accent-600" />
                 {s.title}
               </h3>
             )}

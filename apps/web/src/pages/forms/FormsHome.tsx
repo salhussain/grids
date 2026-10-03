@@ -189,10 +189,10 @@ function FormCard({ form: f, href }: { form: MenuForm; href: string }) {
       </div>
       {f.description && <p className="mt-3 line-clamp-2 text-sm text-zinc-600">{f.description}</p>}
       <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-4 text-[11px] text-zinc-600">
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5">{f.questionCount} questions</span>
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5">{FORM_LAYOUT_INFO[f.layout].label}</span>
+        <span className="bg-zinc-100 px-2 py-0.5">{f.questionCount} questions</span>
+        <span className="bg-zinc-100 px-2 py-0.5">{FORM_LAYOUT_INFO[f.layout].label}</span>
         {f.hasWorkflow && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-sky-800">
+          <span className="inline-flex items-center gap-1 bg-sky-50 px-2 py-0.5 text-sky-800">
             <GitBranch className="size-3" /> Approval
           </span>
         )}

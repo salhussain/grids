@@ -1,9 +1,8 @@
-@import '@fontsource-variable/inter';
-
 /*
- * Grids design tokens: Inter, soft radii, quiet borders and a little depth.
- * Surfaces (`border` + `bg-snow`) and form controls pick up radius and shadow
- * from these tokens in the base layer below; components can still override.
+ * Grids design tokens: IBM Plex, sharp corners (every radius token is 0), quiet
+ * borders and a little depth. Surfaces (`border` + `bg-snow`) and form controls
+ * pick up radius and shadow from these tokens in the base layer below;
+ * components can still override.
  * Brand colours resolve at runtime from --brand-* variables (`@theme inline`), so
  * a tenant theme can recolour the whole app by setting a few CSS variables.
  * Apps import this after `@import 'tailwindcss'` and add `@source` for this package.
@@ -31,15 +30,15 @@
 }
 
 @theme {
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-  --radius-2xl: 18px;
-  --radius-3xl: 24px;
-  --radius-4xl: 32px;
-  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
   --color-ink: #0f1117;
   --color-canvas: #f5f6f8;
@@ -136,11 +135,10 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'cv11', 'ss01';
 }
 
 @layer base {
-  /* Controls: rounded; checkboxes a little less. */
+  /* Controls follow the radius tokens (sharp). */
   button,
   input,
   select,
@@ -151,7 +149,7 @@ body {
   input[type='checkbox'] {
     border-radius: var(--radius-xs);
   }
-  /* Surfaces: any bordered snow box (cards, panels, tiles) is a soft card. Zero
+  /* Surfaces: any bordered snow box (cards, panels, tiles) gets a little depth. Zero
      specificity, so a component's own rounded or shadow utility wins. */
   :where(.border.bg-snow) {
     border-radius: var(--radius-lg);

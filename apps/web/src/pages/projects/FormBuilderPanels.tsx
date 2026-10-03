@@ -33,7 +33,7 @@ function Card({ title, description, icon: I, children, action }: { title: string
 
 /** A tiny drawing of each layout. */
 function LayoutArt({ layout }: { layout: FormLayout }) {
-  const bar = 'rounded-full bg-zinc-300';
+  const bar = 'bg-zinc-300';
   if (layout === 'single')
     return (
       <div className="flex h-full flex-col gap-1.5 p-3">
@@ -50,7 +50,7 @@ function LayoutArt({ layout }: { layout: FormLayout }) {
       <div className="flex h-full flex-col gap-2 p-3">
         <div className="flex gap-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className={cx('h-1 flex-1 rounded-full', i === 0 ? 'bg-accent-500' : 'bg-zinc-300')} />
+            <div key={i} className={cx('h-1 flex-1', i === 0 ? 'bg-accent-500' : 'bg-zinc-300')} />
           ))}
         </div>
         <div className="flex-1 space-y-1.5 rounded-md bg-snow p-2 ring-1 ring-zinc-200">
@@ -63,8 +63,8 @@ function LayoutArt({ layout }: { layout: FormLayout }) {
     );
   return (
     <div className="flex h-full flex-col p-3">
-      <div className="h-1 rounded-full bg-zinc-200">
-        <div className="h-1 w-2/5 rounded-full bg-accent-500" />
+      <div className="h-1 bg-zinc-200">
+        <div className="h-1 w-2/5 bg-accent-500" />
       </div>
       <div className="flex flex-1 flex-col justify-center gap-1.5 px-2">
         <div className={cx(bar, 'h-2 w-4/5 bg-zinc-400')} />
@@ -214,7 +214,7 @@ function PreviewFrame({ def, device }: { def: FormDefinition; device: 'phone' | 
     <div className="mx-auto w-full max-w-[390px] rounded-[2.5rem] bg-zinc-900 p-2.5 shadow-2xl">
       <div className="relative overflow-hidden rounded-[2rem] bg-canvas">
         <div className="absolute inset-x-0 top-0 z-10 flex h-7 justify-center">
-          <div className="mt-2 h-4 w-24 rounded-full bg-zinc-900" />
+          <div className="mt-2 h-4 w-24 bg-zinc-900" />
         </div>
         <div className="h-[640px] overflow-y-auto pt-7">{body}</div>
       </div>
@@ -357,7 +357,7 @@ export function AccessPanel({ draft, set }: { draft: Draft; set(p: Partial<Draft
 function FlowNode({ tone, label }: { tone: 'start' | 'end'; label: string }) {
   return (
     <div className="flex justify-center">
-      <span className={cx('inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium', tone === 'start' ? 'bg-zinc-900 text-white' : 'bg-emerald-600 text-white')}>
+      <span className={cx('inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium', tone === 'start' ? 'bg-zinc-900 text-white' : 'bg-emerald-600 text-white')}>
         {tone === 'start' ? <Send className="size-3.5" /> : <CheckCircle2 className="size-3.5" />} {label}
       </span>
     </div>
@@ -369,7 +369,7 @@ function Connector({ condition }: { condition?: string }) {
     <div className="flex flex-col items-center py-1">
       <span className="h-3 w-px bg-zinc-300" />
       {condition && (
-        <span className="max-w-full truncate rounded-full bg-violet-50 px-2 py-0.5 font-mono text-[10px] text-violet-700 ring-1 ring-violet-200" title={condition}>
+        <span className="max-w-full truncate bg-violet-50 px-2 py-0.5 font-mono text-[10px] text-violet-700 ring-1 ring-violet-200" title={condition}>
           if {condition}
         </span>
       )}
@@ -413,7 +413,7 @@ function StageCard({
   return (
     <div className="rounded-2xl border border-zinc-200 bg-snow shadow-[0_1px_2px_rgb(16_24_40/0.04)]">
       <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-        <span className="num flex size-6 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-on-accent">{index + 1}</span>
+        <span className="num flex size-6 items-center justify-center bg-accent-600 text-xs font-semibold text-on-accent">{index + 1}</span>
         <input aria-label="Stage name" value={stage.name} onChange={(e) => set({ name: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
         <button type="button" aria-label="Move stage up" disabled={index === 0} onClick={() => move(-1)} className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 disabled:opacity-30">
           <ArrowUp className="size-3.5" />
@@ -449,9 +449,9 @@ function StageCard({
             <div className="mb-1.5 text-xs text-zinc-500">…or these people</div>
             <div className="flex flex-wrap items-center gap-1.5">
               {a.users.map((u) => (
-                <span key={u} className="inline-flex items-center gap-1 rounded-full bg-accent-50 py-0.5 ps-2.5 pe-1 text-xs text-accent-800 ring-1 ring-accent-100">
+                <span key={u} className="inline-flex items-center gap-1 bg-accent-50 py-0.5 ps-2.5 pe-1 text-xs text-accent-800 ring-1 ring-accent-100">
                   {name(u)}
-                  <button type="button" aria-label={`Remove ${name(u)}`} onClick={() => setA({ users: a.users.filter((x) => x !== u) })} className="rounded-full p-0.5 hover:bg-accent-100">
+                  <button type="button" aria-label={`Remove ${name(u)}`} onClick={() => setA({ users: a.users.filter((x) => x !== u) })} className="p-0.5 hover:bg-accent-100">
                     <X className="size-3" />
                   </button>
                 </span>
@@ -462,7 +462,7 @@ function StageCard({
                   aria-label="Add a person"
                   value=""
                   onChange={(e) => e.target.value && setA({ users: [...a.users, e.target.value] })}
-                  className="h-7 rounded-full border border-dashed border-zinc-300 bg-snow ps-7 pe-3 text-xs text-zinc-600 hover:border-zinc-500"
+                  className="h-7 border border-dashed border-zinc-300 bg-snow ps-7 pe-3 text-xs text-zinc-600 hover:border-zinc-500"
                 >
                   <option value="">Add person…</option>
                   {members.data

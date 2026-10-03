@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { TEMPLATE_KEYS, type ProjectDto, type ProjectTemplate, type ProjectVisibility } from '@grids/schema';
 import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, PageHeader, Tag, Textarea, cx } from '@grids/ui';
 import { Archive, FolderKanban, Globe, Lock, Plus, Users } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { api } from '../../api';
 import { useT } from '../../i18n';
 import { useCan, useWorkspace } from '../../session';
@@ -80,14 +80,15 @@ function ProjectCard({ p }: { p: ProjectDto }) {
       <Link
         to="/o/$tenantId/p/$project"
         params={{ tenantId: ws.tenant.id, project: p.key }}
-        className="group flex h-full flex-col border border-zinc-200 bg-snow transition-colors hover:border-zinc-400"
+        className="group flex h-full flex-col overflow-hidden border border-zinc-200 bg-snow transition-[border-color,box-shadow,translate] hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-raised motion-reduce:hover:translate-y-0"
       >
-        <div className="h-1" style={{ background: p.color }} />
+        <ProjectCover color={p.color}>
+          <span className="absolute start-5 -bottom-px flex size-10 items-center justify-center text-white" style={{ background: p.color }}>
+            <Icon className="size-5" />
+          </span>
+        </ProjectCover>
         <div className="flex flex-1 flex-col p-5">
           <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center text-white" style={{ background: p.color }}>
-              <Icon className="size-5" />
-            </span>
             <div className="min-w-0 flex-1">
               <h2 className="truncate font-semibold group-hover:text-accent-700">{p.name}</h2>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500">
@@ -119,6 +120,22 @@ function ProjectCard({ p }: { p: ProjectDto }) {
         </div>
       </Link>
     </li>
+  );
+}
+
+/** A quiet header band in the project's colour over the Grids grid. */
+function ProjectCover({ color, children }: { color: string; children?: ReactNode }) {
+  return (
+    <div
+      className="relative h-20 border-b border-zinc-200"
+      style={{
+        backgroundColor: `color-mix(in srgb, ${color} 6%, var(--color-snow))`,
+        backgroundImage: `linear-gradient(color-mix(in srgb, ${color} 14%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, ${color} 14%, transparent) 1px, transparent 1px)`,
+        backgroundSize: '16px 16px',
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

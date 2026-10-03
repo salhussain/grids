@@ -178,6 +178,12 @@ const sm: Catalog = {
       preferences: 'Mea e te manao ai',
       account: 'Teugatupe ma le saogalemu',
       yourOrgs: 'Au faalapotopotoga',
+      search: 'Saili pe alu i',
+      searchPlaceholder: 'Saili itulau ma galuega faatino',
+      noMatches: 'Leai se mea na maua',
+      goTo: 'Alu i',
+      lightMode: 'Sui i le lanu malamalama',
+      darkMode: 'Sui i le lanu pogisa',
     },
     prefs: {
       title: 'Mea e te manao ai',

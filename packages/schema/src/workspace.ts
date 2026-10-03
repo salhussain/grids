@@ -135,7 +135,7 @@ export const Theme = z.object({
     )
     .nullable()
     .default(null),
-  sidebar: z.enum(['dark', 'light', 'brand']).default('dark'),
+  sidebar: z.enum(['dark', 'light', 'brand']).default('light'),
   welcomeMessage: z.string().trim().max(500).default(''),
   /** Basemap style URLs (MapLibre/Mapbox style JSON, e.g. MapTiler with a key); null = the defaults. */
   mapStyles: z

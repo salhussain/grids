@@ -50,7 +50,7 @@ export function InboxPage() {
           {items.map((s) => (
             <li key={s.id}>
               <button type="button" onClick={() => setOpen(s)} className="group flex w-full items-center gap-4 px-5 py-4 text-start transition hover:bg-zinc-50">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-50 text-sm font-semibold text-accent-700 ring-1 ring-accent-100">
+                <span className="flex size-10 shrink-0 items-center justify-center bg-accent-50 text-sm font-semibold text-accent-700 ring-1 ring-accent-100">
                   {(tab === 'review' ? (s.submittedBy ?? '?') : s.formName).slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">

@@ -178,6 +178,12 @@ const bi: Catalog = {
       preferences: 'Ol jois blong yu',
       account: 'Akaon mo sekiuriti',
       yourOrgs: 'Ol oganaesesen blong yu',
+      search: 'Lukaotem o go long',
+      searchPlaceholder: 'Lukaotem ol pej mo ol projek',
+      noMatches: 'I no gat samting',
+      goTo: 'Go long',
+      lightMode: 'Jenis i go long laet mod',
+      darkMode: 'Jenis i go long tak mod',
     },
     prefs: {
       title: 'Ol jois blong yu',
