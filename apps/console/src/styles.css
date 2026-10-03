@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+@import '@grids/ui/theme.css';
+/* Scan the shared component package for class names. */
+@source '../../../packages/ui/src';

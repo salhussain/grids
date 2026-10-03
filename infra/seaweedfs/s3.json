@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "grids",
+      "credentials": [{ "accessKey": "grids", "secretKey": "gridssecret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

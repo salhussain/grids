@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+infra/zitadel/machinekey/
+apps/console/.env.local
+test-results/
+apps/web/.env.local
+.claude/settings.local.json

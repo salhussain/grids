@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+@import '@grids/ui/theme.css';
+@source '../../../packages/ui/src';
+
+:root[dir='rtl'] {
+  --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Map popups follow the design system (sharp, themed). */
+.grids-map .maplibregl-popup-content {
+  border-radius: 0;
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  background: var(--color-snow);
+  color: var(--color-ink);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+.grids-map .maplibregl-popup-tip {
+  display: none;
+}
+.grids-map .maplibregl-ctrl-group {
+  border-radius: 0;
+}
