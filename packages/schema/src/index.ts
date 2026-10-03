@@ -6,3 +6,4 @@ export * from './projects.js';
 export * from './orchestration.js';
 export * from './viz.js';
 export * from './forms.js';
+export * from './overlays.js';

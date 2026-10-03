@@ -24,11 +24,12 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-accent-600 text-white hover:bg-accent-700 border border-accent-600 hover:border-accent-700',
-  secondary: 'bg-snow text-ink border border-zinc-300 hover:border-zinc-900 hover:bg-zinc-50',
+    'bg-accent-600 text-white border border-accent-700/40 shadow-[0_1px_2px_rgb(16_24_40/0.12),inset_0_1px_0_rgb(255_255_255/0.18)] hover:bg-accent-700',
+  secondary:
+    'bg-snow text-ink border border-zinc-300 shadow-[0_1px_2px_rgb(16_24_40/0.05)] hover:bg-zinc-50 hover:border-zinc-400',
   ghost: 'text-zinc-700 border border-transparent hover:bg-zinc-200/60',
   danger:
-    'bg-snow text-red-700 border border-red-300 hover:bg-red-600 hover:text-white hover:border-red-600',
+    'bg-snow text-red-700 border border-red-300 shadow-[0_1px_2px_rgb(16_24_40/0.05)] hover:bg-red-600 hover:text-white hover:border-red-600',
 };
 
 export function Button({
@@ -51,9 +52,9 @@ export function Button({
       {...props}
       disabled={props.disabled || loading}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center gap-2 font-medium whitespace-nowrap transition-colors',
+        'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-[background-color,border-color,box-shadow,color] active:translate-y-px',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:cursor-not-allowed disabled:opacity-45',
-        size === 'md' ? 'h-9 px-3.5 text-sm' : 'h-7 px-2.5 text-xs',
+        size === 'md' ? 'h-9 px-3.5 text-sm' : 'h-7 rounded-md px-2.5 text-xs',
         VARIANTS[variant],
         className,
       )}
@@ -71,7 +72,7 @@ export function Button({
 // ---------------------------------------------------------------- form controls
 
 const control =
-  'block border border-zinc-300 bg-snow px-3 text-sm text-ink placeholder:text-zinc-400 hover:border-zinc-500 focus:border-accent-600 focus:outline-none focus:ring-1 focus:ring-accent-600 disabled:bg-zinc-100 disabled:text-zinc-500';
+  'block rounded-lg border border-zinc-300 bg-snow px-3 text-sm text-ink placeholder:text-zinc-400 transition-shadow hover:border-zinc-400 focus:border-accent-600 focus:outline-none focus:ring-4 focus:ring-accent-600/15 disabled:bg-zinc-100 disabled:text-zinc-500';
 
 /** Full width unless the caller sets an explicit width (`w-*`): utilities can't override each other reliably. */
 const width = (className?: string) =>
@@ -120,7 +121,7 @@ export function Field({
   const note = error ?? hint;
   return (
     <div className={cx('block', className)}>
-      <label htmlFor={id} className="mb-1.5 block text-xs font-medium tracking-wide text-zinc-600">
+      <label htmlFor={id} className="mb-1.5 block text-[13px] font-medium text-zinc-700">
         {label}
         {required && (
           <span className="text-accent-600" aria-hidden>
@@ -212,14 +213,14 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'relative inline-flex h-6 w-11 shrink-0 items-center border transition-colors disabled:opacity-50',
-        checked ? 'border-accent-600 bg-accent-600' : 'border-zinc-400 bg-zinc-200',
+        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50',
+        checked ? 'border-accent-600 bg-accent-600' : 'border-zinc-300 bg-zinc-200',
       )}
     >
       <span
         className={cx(
-          'block size-4 bg-snow shadow-sm transition-transform',
-          checked ? 'translate-x-6' : 'translate-x-1',
+          'block size-[18px] rounded-full bg-white shadow-[0_1px_3px_rgb(16_24_40/0.25)] transition-transform',
+          checked ? 'translate-x-[22px]' : 'translate-x-[2px]',
         )}
       />
     </button>
@@ -245,11 +246,11 @@ export function Panel({
   flush?: boolean;
 }) {
   return (
-    <section className={cx('border border-zinc-200 bg-snow', className)}>
+    <section className={cx('overflow-hidden rounded-xl border border-zinc-200 bg-snow', className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3.5">
           <div>
-            <h2 className="text-sm font-semibold text-ink">{title}</h2>
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h2>
             {description && <p className="mt-0.5 text-xs text-zinc-500">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -272,14 +273,14 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 border-b border-zinc-300 pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
         {eyebrow && (
           <div className="mb-1.5 text-xs font-medium tracking-[0.12em] text-zinc-500 uppercase">
             {eyebrow}
           </div>
         )}
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-ink">{title}</h1>
         {meta && (
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-600">
             {meta}
@@ -304,10 +305,10 @@ export function Stat({
 }) {
   return (
     <div className="border border-zinc-200 bg-snow px-5 py-4">
-      <div className="text-xs font-medium tracking-wide text-zinc-500">{label}</div>
+      <div className="text-[13px] font-medium text-zinc-500">{label}</div>
       <div
         className={cx(
-          'num mt-2 text-2xl font-semibold tracking-tight',
+          'num mt-2 text-[26px] font-semibold tracking-[-0.02em]',
           tone === 'bad' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-ink',
         )}
       >
@@ -357,7 +358,7 @@ export function Tabs<T extends string>({
           aria-selected={value === t.id}
           onClick={() => onChange(t.id)}
           className={cx(
-            '-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm transition-colors',
+            '-mb-px flex shrink-0 items-center gap-2 rounded-none border-b-2 px-4 py-2.5 text-sm transition-colors',
             value === t.id
               ? 'border-accent-600 font-medium text-ink'
               : 'border-transparent text-zinc-600 hover:border-zinc-400 hover:text-ink',
@@ -365,7 +366,7 @@ export function Tabs<T extends string>({
         >
           {t.label}
           {t.count !== undefined && t.count > 0 && (
-            <span className="num bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
+            <span className="num rounded-full bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
           )}
         </button>
       ))}
@@ -389,7 +390,7 @@ export function Table({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-start text-sm">
         <thead>
-          <tr className="border-b border-zinc-300 bg-zinc-50 text-xs font-medium tracking-wide text-zinc-600">
+          <tr className="border-b border-zinc-200 bg-zinc-50/70 text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase">
             {head.map((h, i) => (
               <th
                 key={i}
@@ -400,7 +401,7 @@ export function Table({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-200">{children}</tbody>
+        <tbody className="divide-y divide-zinc-100 [&>tr]:transition-colors [&>tr:hover]:bg-zinc-50/80">{children}</tbody>
       </table>
       {!hasRows && empty && (
         <div className="px-5 py-12 text-center text-sm text-zinc-500">{empty}</div>
@@ -456,11 +457,11 @@ export function Status({ value, tone, label }: { value: string; tone?: Tone; lab
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-[11px] font-medium tracking-wide whitespace-nowrap uppercase',
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
         TONES[t],
       )}
     >
-      <span className="size-1.5 bg-[var(--dot)]" />
+      <span className="size-1.5 rounded-full bg-[var(--dot)]" />
       {label ?? value.replace(/_/g, ' ')}
     </span>
   );
@@ -468,7 +469,7 @@ export function Status({ value, tone, label }: { value: string; tone?: Tone; lab
 
 export function Tag({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex border border-zinc-300 bg-snow px-1.5 py-0.5 text-[11px] whitespace-nowrap text-zinc-700">
+    <span className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-zinc-700 shadow-none">
       {children}
     </span>
   );
@@ -498,7 +499,7 @@ export function ErrorNotice({ error }: { error: unknown }) {
   return (
     <div
       role="alert"
-      className="flex gap-3 border-s-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-900"
+      className="flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
     >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <div>
@@ -532,8 +533,8 @@ export function Callout({
   return (
     <div
       className={cx(
-        'flex flex-col gap-3 border-s-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between',
-        tone === 'warn' ? 'border-amber-500 bg-amber-50' : 'border-accent-600 bg-accent-50',
+        'flex flex-col gap-3 rounded-xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between',
+        tone === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-accent-100 bg-accent-50',
       )}
     >
       <div className="flex gap-3">
@@ -568,8 +569,8 @@ export function Empty({
 }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
-      <div className="mb-4 flex size-11 items-center justify-center border border-zinc-300 bg-zinc-50">
-        <Icon className="size-5 text-zinc-500" />
+      <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-accent-50 ring-1 ring-accent-100">
+        <Icon className="size-5 text-accent-600" />
       </div>
       <p className="text-sm font-semibold text-ink">{title}</p>
       {children && <p className="mt-1 max-w-sm text-sm text-zinc-500">{children}</p>}
@@ -586,10 +587,11 @@ export function CopyField({ value, label = 'Copy' }: { value: string; label?: st
         readOnly
         value={value}
         onFocus={(e) => e.currentTarget.select()}
-        className={cx(control, 'h-9 w-full border-r-0 font-mono text-xs')}
+        className={cx(control, 'h-9 w-full rounded-e-none border-r-0 font-mono text-xs')}
       />
       <Button
         variant="secondary"
+        className="rounded-s-none"
         icon={copied ? Check : Copy}
         onClick={async () => {
           await navigator.clipboard.writeText(value);
@@ -639,7 +641,7 @@ export function Dialog({
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       className={cx(
-        'm-auto max-h-[90vh] w-[calc(100%-2rem)] border border-zinc-900 bg-snow p-0 text-ink shadow-2xl',
+        'm-auto max-h-[90vh] w-[calc(100%-2rem)] rounded-2xl border border-zinc-200 bg-snow p-0 text-ink shadow-[var(--shadow-raised)]',
         wide ? 'max-w-3xl' : 'max-w-lg',
       )}
     >
@@ -647,20 +649,20 @@ export function Dialog({
         <div className="flex max-h-[90vh] flex-col">
           <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4">
             <div>
-              <h2 className="text-base font-semibold">{title}</h2>
+              <h2 className="text-[17px] font-semibold tracking-tight">{title}</h2>
               {description && <p className="mt-0.5 text-sm text-zinc-500">{description}</p>}
             </div>
             <button
               onClick={onClose}
               aria-label={closeLabel}
-              className="p-1 text-zinc-500 hover:bg-zinc-100 hover:text-ink"
+              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-ink"
             >
               <X className="size-4" />
             </button>
           </header>
           <div className="overflow-y-auto px-6 py-5">{children}</div>
           {footer && (
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-6 py-3">
+            <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50/70 px-6 py-3.5">
               {footer}
             </footer>
           )}
@@ -692,7 +694,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className="flex items-center gap-2.5 border-s-4 chrome border-emerald-500 bg-chrome px-4 py-3 text-sm text-white shadow-lg"
+            className="chrome flex items-center gap-2.5 rounded-xl bg-chrome px-4 py-3 text-sm text-white shadow-[var(--shadow-raised)] ring-1 ring-white/10"
           >
             <Check className="size-4 text-emerald-400" />
             {t.msg}

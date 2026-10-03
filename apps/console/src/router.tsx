@@ -159,14 +159,14 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { me } = useSession();
   return (
-    <div className="chrome flex h-full flex-col bg-chrome text-zinc-300">
+    <div className="chrome flex h-full flex-col bg-chrome bg-[radial-gradient(120%_60%_at_0%_0%,rgb(255_255_255/0.06),transparent)] text-zinc-300">
       <div className="flex h-14 items-center border-b border-white/10 px-5">
         <Logo dark />
       </div>
       <nav className="flex-1 overflow-y-auto py-4">
         {useNav().map((group) => (
           <div key={group.section} className="mb-5">
-            <div className="px-5 pb-2 text-[10px] font-semibold tracking-[0.16em] text-zinc-500 uppercase">
+            <div className="px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] text-zinc-500 uppercase">
               {group.section}
             </div>
             {group.items.map((item) => {
@@ -178,10 +178,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
                   className={cx(
-                    'flex items-center gap-3 border-l-[3px] px-5 py-2 text-sm transition-colors',
+                    'mx-3 mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                     active
-                      ? 'border-accent-500 bg-white/[0.08] text-white'
-                      : 'border-transparent hover:bg-white/[0.04] hover:text-white',
+                      ? 'bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]'
+                      : 'hover:bg-white/[0.05] hover:text-white',
                   )}
                 >
                   <item.icon
@@ -193,7 +193,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   />
                   <span className="flex-1">{item.label}</span>
                   {!!item.badge && (
-                    <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
+                    <span className="num min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
                       {item.badge}
                     </span>
                   )}
@@ -205,7 +205,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
       <div className="border-t border-white/10 px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center bg-accent-600 text-xs font-semibold text-white">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white">
             {(me.displayName ?? me.email ?? '?').slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">

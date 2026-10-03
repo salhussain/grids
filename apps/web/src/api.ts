@@ -105,6 +105,22 @@ export const api = {
     request<Page<S.RunDto>>('GET', `${t(id)}/projects/${p}/runs${qs(query)}`),
   run: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
+  explore: (id: string, p: string, entity?: string | null) =>
+    request<S.ExploreDto>('GET', `${t(id)}/projects/${p}/explore${qs({ entity })}`),
+  places: (id: string, p: string, parent?: string | null) => request<S.PlaceNode[]>('GET', `${t(id)}/projects/${p}/places${qs({ parent })}`),
+  searchPlaces: (id: string, p: string, q: string) => request<S.SearchHit[]>('GET', `${t(id)}/projects/${p}/search${qs({ q })}`),
+  overlays: (id: string, p: string) => request<S.MapOverlayDto[]>('GET', `${t(id)}/projects/${p}/overlays`),
+  saveOverlay: (id: string, p: string, input: In<typeof S.MapOverlayInput>, key?: string) =>
+    request<S.MapOverlayDto[]>(key ? 'PUT' : 'POST', `${t(id)}/projects/${p}/overlays${key ? `/${key}` : ''}`, input),
+  deleteOverlay: (id: string, p: string, key: string) => request<S.MapOverlayDto[]>('DELETE', `${t(id)}/projects/${p}/overlays/${key}`),
+  overlayValues: (id: string, p: string, key: string, entity?: string | null) =>
+    request<S.OverlayResult>('GET', `${t(id)}/projects/${p}/overlays/${key}/values${qs({ entity })}`),
+  permissionGroups: (id: string, p: string) => request<S.PermissionGroupDto[]>('GET', `${t(id)}/projects/${p}/permission-groups`),
+  savePermissionGroup: (id: string, p: string, input: In<typeof S.PermissionGroupInput>, key?: string) =>
+    request<S.PermissionGroupDto[]>(key ? 'PUT' : 'POST', `${t(id)}/projects/${p}/permission-groups${key ? `/${key}` : ''}`, input),
+  deletePermissionGroup: (id: string, p: string, key: string) => request<S.PermissionGroupDto[]>('DELETE', `${t(id)}/projects/${p}/permission-groups/${key}`),
+  widget: (id: string, p: string, dashboard: string, widget: string, params: S.DashboardParams = {}) =>
+    request<S.QueryResult>('GET', `${t(id)}/projects/${p}/dashboards/${dashboard}/widgets/${widget}${qs(params)}`),
   files: (id: string, p: string) => request<S.FileDto[]>('GET', `${t(id)}/projects/${p}/files`),
   uploadFile: (id: string, p: string, key: string, file: File) =>
     request<S.UploadResult>('PUT', `${t(id)}/projects/${p}/files/${key}${qs({ name: file.name, type: file.type || undefined })}`, file),
@@ -127,8 +143,19 @@ export const api = {
     request<S.FormDto[]>('DELETE', `${t(id)}/projects/${p}/forms/${key}`),
   submit: (id: string, p: string, key: string, input: In<typeof S.SubmissionInput>) =>
     request<S.SubmissionDto>('POST', `${t(id)}/projects/${p}/forms/${key}/submissions`, input),
-  submissions: (id: string, p: string, key: string, query: { page: number; pageSize: number; entityId?: string }) =>
+  submissions: (id: string, p: string, key: string, query: { page: number; pageSize: number; entityId?: string; status?: S.SubmissionStatus }) =>
     request<Page<S.SubmissionDto>>('GET', `${t(id)}/projects/${p}/forms/${key}/submissions${qs(query)}`),
+  submission: (id: string, p: string, subId: string) => request<S.SubmissionDto>('GET', `${t(id)}/projects/${p}/submissions/${subId}`),
+  review: (id: string, p: string, subId: string, input: In<typeof S.ReviewInput>) =>
+    request<S.SubmissionDto>('POST', `${t(id)}/projects/${p}/submissions/${subId}/review`, input),
+  resubmit: (id: string, p: string, subId: string, input: In<typeof S.ResubmitInput>) =>
+    request<S.SubmissionDto>('PUT', `${t(id)}/projects/${p}/submissions/${subId}`, input),
+  formsMenu: (id: string) => request<S.FormsMenuDto>('GET', `${t(id)}/forms/menu`),
+  inbox: (id: string) => request<S.InboxDto>('GET', `${t(id)}/forms/inbox`),
+  formGroups: (id: string) => request<S.FormGroupDto[]>('GET', `${t(id)}/form-groups`),
+  saveFormGroup: (id: string, input: In<typeof S.FormGroupInput>, groupId?: string) =>
+    request<S.FormGroupDto[]>(groupId ? 'PUT' : 'POST', `${t(id)}/form-groups${groupId ? `/${groupId}` : ''}`, input),
+  deleteFormGroup: (id: string, groupId: string) => request<S.FormGroupDto[]>('DELETE', `${t(id)}/form-groups/${groupId}`),
 
   // public (no sign-in)
   publicProject: (tenant: string, project: string) =>
@@ -140,6 +167,16 @@ export const api = {
       undefined,
       { anonymous: true },
     ),
+  publicExplore: (tenant: string, project: string, entity?: string | null) =>
+    request<S.ExploreDto>('GET', `/public/projects/${tenant}/${project}/explore${qs({ entity })}`, undefined, { anonymous: true }),
+  publicOverlays: (tenant: string, project: string) =>
+    request<S.MapOverlayDto[]>('GET', `/public/projects/${tenant}/${project}/overlays`, undefined, { anonymous: true }),
+  publicOverlay: (tenant: string, project: string, key: string, entity?: string | null) =>
+    request<S.OverlayResult>('GET', `/public/projects/${tenant}/${project}/overlays/${key}/values${qs({ entity })}`, undefined, { anonymous: true }),
+  publicPlaces: (tenant: string, project: string, parent?: string | null) =>
+    request<S.PlaceNode[]>('GET', `/public/projects/${tenant}/${project}/places${qs({ parent })}`, undefined, { anonymous: true }),
+  publicSearch: (tenant: string, project: string, q: string) =>
+    request<S.SearchHit[]>('GET', `/public/projects/${tenant}/${project}/search${qs({ q })}`, undefined, { anonymous: true }),
   publicAreas: (tenant: string, project: string, dashboard: string) =>
     request<{ id: string; name: string }[]>('GET', `/public/projects/${tenant}/${project}/dashboards/${dashboard}/areas`, undefined, { anonymous: true }),
 

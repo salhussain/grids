@@ -1,16 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useParams, useRouterState } from '@tanstack/react-router';
 import { ErrorNotice, Loading, cx } from '@grids/ui';
-import { BarChart3, Boxes, ClipboardList, Database, Globe, Lock, Map as MapIcon, Settings, Users, Workflow } from 'lucide-react';
+import { BarChart3, Boxes, ClipboardList, Database, Globe, Layers, Lock, Map as MapIcon, Settings, Users, Workflow } from 'lucide-react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
 import { useProjectEvents } from '../../live';
 import { FreshnessBadge, LiveIndicator } from '../../viz/Freshness';
 import { iconOf, ProjectProvider, projectCtx } from './context';
+import { ProjectExplorer } from './ProjectExplorer';
 
 const TABS = [
-  { to: '', label: 'Dashboards', icon: BarChart3 },
-  { to: 'map', label: 'Map', icon: MapIcon },
+  { to: '', label: 'Explore', icon: MapIcon },
+  { to: 'dashboards', label: 'Dashboards', icon: BarChart3 },
+  { to: 'overlays', label: 'Map overlays', icon: Layers },
   { to: 'entities', label: 'Entities', icon: Boxes },
   { to: 'data', label: 'Data', icon: Database },
   { to: 'forms', label: 'Forms', icon: ClipboardList },
@@ -24,18 +26,26 @@ export function ProjectLayout() {
   const { project: key } = useParams({ strict: false }) as { project: string };
   const path = useRouterState({ select: (s) => s.location.pathname });
   const q = useQuery({ queryKey: ['project', ws.tenant.id, key], queryFn: () => api.project(ws.tenant.id, key) });
-  const live = useProjectEvents(ws.tenant.id, key);
+  const explore = /^\/o\/[^/]+\/p\/[^/]+\/?$/.test(path);
+  const live = useProjectEvents(ws.tenant.id, explore ? null : key);
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorNotice error={q.error} />;
   const p = q.data;
   const ctx = projectCtx(p, ws.tenant.id);
+  // The default view is the full-screen explorer (its own chrome, no tabs).
+  if (explore)
+    return (
+      <ProjectProvider value={ctx}>
+        <ProjectExplorer />
+      </ProjectProvider>
+    );
   const Icon = iconOf(p.icon);
   const V = p.visibility === 'public' ? Globe : p.visibility === 'organisation' ? Users : Lock;
   return (
     <ProjectProvider value={ctx}>
       <div className="mb-6 border-b border-zinc-300">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-4">
-          <span className="flex size-11 shrink-0 items-center justify-center text-white" style={{ background: p.color }}>
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]" style={{ background: p.color }}>
             <Icon className="size-[22px]" />
           </span>
           <div className="min-w-0 flex-1">

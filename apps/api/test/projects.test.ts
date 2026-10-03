@@ -138,7 +138,7 @@ describe('templates, queries and dashboards', () => {
     const res = await api(admin).post('', { name: 'Surveillance', template: 'health-surveillance' });
     expect(res.status).toBe(201);
     key = res.body.key;
-    expect(res.body.counts).toMatchObject({ entities: 4 + 8 + 24, forms: 2, dashboards: 1 });
+    expect(res.body.counts).toMatchObject({ entities: 4 + 8 + 24, forms: 3, dashboards: 1 });
     const types = (await api(admin).get(`/${key}/types`)).body;
     expect(types.map((t: { key: string; count: number }) => [t.key, t.count])).toEqual([
       ['province', 4],
@@ -154,6 +154,10 @@ describe('templates, queries and dashboards', () => {
     expect(series.freshness.status).toBe('fresh');
     const byDistrict = (await q({ kind: 'breakdown', element: 'ili_cases', by: 'parent', entityType: 'facility', range: { lastHours: 24 * 21 } })).body.rows;
     expect(byDistrict[0].label).toBe('Harbourside'); // the seeded ILI cluster
+    const grouped = (await q({ kind: 'breakdown', elements: ['ili_cases', 'malaria_cases'], by: 'parent', entityType: 'facility', range: { lastHours: 24 * 21 }, limit: 3 })).body.rows;
+    expect(grouped).toHaveLength(6); // 3 districts × 2 elements, element order kept
+    expect(grouped.slice(0, 2).map((r: { key: string }) => r.key)).toEqual(['ili_cases', 'malaria_cases']);
+    expect(grouped[0].label).toBe(grouped[1].label);
     const kpi = (await q({ kind: 'kpi', element: 'malaria_cases', range: { lastHours: 24 * 7 }, compare: true })).body.rows[0];
     expect(typeof kpi.value).toBe('number');
     expect(typeof kpi.previous).toBe('number');
@@ -177,6 +181,107 @@ describe('templates, queries and dashboards', () => {
     expect(bad.status).toBe(400);
     const badFilter = await api(admin).put(`/${key}/dashboards/overview`, { ...ds[0], filters: { areaType: 'planet', period: true } });
     expect(badFilter.status).toBe(400);
+  });
+
+  it('explores the hierarchy with overlays that roll up each place', async () => {
+    const p = api(admin);
+    const top = (await p.get(`/${key}/explore`)).body;
+    expect(top).toMatchObject({ entity: null, ancestors: [], childLevel: 'Provinces', self: null });
+    expect(top.children.features).toHaveLength(4);
+    expect(top.children.features[0].geometry.type).toBe('MultiPolygon');
+    expect(top.bounds).toHaveLength(4);
+
+    const overlays = (await p.get(`/${key}/overlays`)).body;
+    expect(overlays.map((o: { key: string }) => o.key)).toContain('ili_4w');
+    expect(overlays.find((o: { key: string }) => o.key === 'ili_4w')).toMatchObject({ group: 'Disease surveillance', elementName: 'Influenza-like illness', palette: 'heat' });
+
+    // Province values roll up their facilities' reports; the sum over provinces is the whole project.
+    const provinces = (await p.get(`/${key}/overlays/ili_4w/values`)).body;
+    const total = provinces.features.features.reduce((s: number, f: { properties: { value: number } }) => s + f.properties.value, 0);
+    const kpi = (await p.post(`/${key}/query`, { kind: 'kpi', element: 'ili_cases', range: { lastHours: 24 * 28 } })).body.rows[0].value;
+    expect(total).toBe(kpi);
+    expect(provinces.max).toBeGreaterThanOrEqual(provinces.min);
+
+    const central = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Central');
+    const inCentral = (await p.get(`/${key}/explore?entity=${central.id}`)).body;
+    expect(inCentral).toMatchObject({ entity: { name: 'Central', type: { key: 'province' } }, childLevel: 'Districts' });
+    expect(inCentral.children.features.map((f: { properties: { name: string } }) => f.properties.name)).toEqual(['Harbourside', 'Highlands']);
+    expect(inCentral.self.geometry.type).toBe('MultiPolygon');
+    const harbour = inCentral.children.features[0];
+    expect((await p.get(`/${key}/explore?entity=${harbour.id}`)).body.ancestors.map((a: { name: string }) => a.name)).toEqual(['Central']);
+
+    // Overlays with a level show those places under the selection.
+    const facilities = (await p.get(`/${key}/overlays/ili_facilities/values?entity=${central.id}`)).body.features.features;
+    expect(facilities).toHaveLength(6);
+    expect(facilities[0].geometry.type).toBe('Point');
+
+    const hits = (await p.get(`/${key}/search?q=harbour`)).body;
+    expect(hits[0]).toMatchObject({ name: 'Harbourside', path: 'Central' });
+    const tops = (await p.get(`/${key}/places`)).body;
+    expect(tops.map((n: { name: string }) => n.name)).toEqual(['Central', 'Eastern Islands', 'Northern', 'Western']);
+    expect((await p.get(`/${key}/places?parent=${central.id}`)).body).toEqual([
+      expect.objectContaining({ name: 'Harbourside', childCount: 3, hasChildren: true }),
+      expect.objectContaining({ name: 'Highlands', childCount: 3 }),
+    ]);
+
+    // Scoped members start at their own place and can't leave it.
+    await p.put(`/${key}/members`, { userId: await h.userId(tenantId, 'ed@ih.org'), role: 'viewer', rootEntityId: central.id });
+    expect((await api(ed).get(`/${key}/explore`)).body.entity.name).toBe('Central');
+    expect((await api(ed).get(`/${key}/places`)).body.map((n: { name: string }) => n.name)).toEqual(['Central']);
+    const other = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Northern');
+    expect((await api(ed).get(`/${key}/explore?entity=${other.id}`)).status).toBe(404);
+    expect((await api(ed).get(`/${key}/search?q=waimoana`)).body).toEqual([]);
+    expect((await api(ed).post(`/${key}/overlays`, { key: 'x', name: 'X', element: 'ili_cases' })).status).toBe(403);
+  });
+
+  it('hides dashboards, widgets and overlays outside a member’s permission groups', async () => {
+    const p = api(admin);
+    await p.post(`/${key}/permission-groups`, { key: 'admin', name: 'Admin' });
+    await p.post(`/${key}/permission-groups`, { key: 'staff', name: 'Staff', parent: 'admin' });
+    const tree = (await p.post(`/${key}/permission-groups`, { key: 'public', name: 'Public', parent: 'staff' })).body;
+    expect(tree.map((g: { key: string; depth: number }) => [g.key, g.depth])).toEqual([['admin', 0], ['staff', 1], ['public', 2]]);
+    expect((await p.put(`/${key}/permission-groups/admin`, { key: 'admin', name: 'Admin', parent: 'public' })).status).toBe(400); // no cycles
+
+    const overview = (await p.get(`/${key}/dashboards`)).body[0];
+    const widgets = overview.widgets.map((w: { id: string }) => (w.id === 'malaria' ? { ...w, permissionGroup: 'admin' } : w));
+    expect((await p.post(`/${key}/dashboards`, { key: 'bad', name: 'Bad', permissionGroup: 'nope' })).status).toBe(400);
+    await p.post(`/${key}/dashboards`, { key: 'staff_only', name: 'Staff only', permissionGroup: 'staff', widgets: [overview.widgets[1]] });
+    await p.put(`/${key}/dashboards/overview`, { ...overview, widgets });
+    await p.post(`/${key}/overlays`, { key: 'secret', name: 'Secret', element: 'deaths', permissionGroup: 'admin' });
+
+    // ed: a viewer (scoped to Central) without a group sees only unrestricted visuals.
+    const ed_ = api(ed);
+    const seen = async () => (await ed_.get(`/${key}/dashboards`)).body.map((d: { key: string; widgets: { id: string }[] }) => [d.key, d.widgets.some((w) => w.id === 'malaria')]);
+    expect(await seen()).toEqual([['overview', false]]);
+    expect((await ed_.get(`/${key}/dashboards/overview/widgets/malaria`)).status).toBe(404);
+    expect((await ed_.get(`/${key}/dashboards/overview/widgets/ili`)).status).toBe(200);
+    expect((await ed_.get(`/${key}/overlays`)).body.some((o: { key: string }) => o.key === 'secret')).toBe(false);
+    expect((await ed_.get(`/${key}/overlays/secret/values`)).status).toBe(404);
+    expect((await ed_.post(`/${key}/query`, { kind: 'kpi', element: 'malaria_cases' })).status).toBe(403); // no ad-hoc queries for viewers
+
+    // In "staff": the staff dashboard and everything below; still not admin's widget.
+    const userId = await h.userId(tenantId, 'ed@ih.org');
+    expect((await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'nope' })).status).toBe(400);
+    const members = (await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'staff' })).body;
+    expect(members.find((m: { email: string }) => m.email === 'ed@ih.org').permissionGroup).toBe('staff');
+    expect(await seen()).toEqual([['overview', false], ['staff_only', false]]);
+    // In "admin": everything.
+    await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'admin' });
+    expect(await seen()).toEqual([['overview', true], ['staff_only', false]]);
+    expect((await ed_.get(`/${key}/overlays/secret/values`)).status).toBe(200);
+
+    expect((await p.del(`/${key}/permission-groups/staff`)).status).toBe(409); // still used
+    expect((await p.get(`/${key}/permission-groups`)).body.find((g: { key: string }) => g.key === 'admin').memberCount).toBe(1);
+  });
+
+  it('validates overlays', async () => {
+    const p = api(admin);
+    expect((await p.post(`/${key}/overlays`, { key: 'bad', name: 'Bad', element: 'nope' })).status).toBe(400);
+    expect((await p.post(`/${key}/overlays`, { key: 'bad', name: 'Bad', element: 'deaths', level: 'planet' })).status).toBe(400);
+    const saved = (await p.post(`/${key}/overlays`, { key: 'deaths_x', name: 'Deaths', element: 'deaths', thresholds: [5, 1] })).body;
+    expect(saved.find((o: { key: string }) => o.key === 'deaths_x').thresholds).toEqual([1, 5]);
+    expect((await p.post(`/${key}/overlays`, { key: 'deaths_x', name: 'Again', element: 'deaths' })).status).toBe(409);
+    expect((await p.del(`/${key}/overlays/deaths_x`)).body.some((o: { key: string }) => o.key === 'deaths_x')).toBe(false);
   });
 });
 
@@ -241,6 +346,89 @@ describe('forms', () => {
     expect(publish.status).toBe(400);
     expect(publish.body.detail).toContain('unknown question ${missing}');
   });
+
+  it('organises forms into a menu of groups and sub-groups, managed by admins', async () => {
+    const g = (who: string) => ({
+      get: () => h.call(who, 'GET', `/tenants/${tenantId}/form-groups`),
+      post: (body: unknown) => h.call(who, 'POST', `/tenants/${tenantId}/form-groups`, body),
+      put: (id: string, body: unknown) => h.call(who, 'PUT', `/tenants/${tenantId}/form-groups/${id}`, body),
+      del: (id: string) => h.call(who, 'DELETE', `/tenants/${tenantId}/form-groups/${id}`),
+    });
+    expect((await g(vi).post({ name: 'Nope' })).status).toBe(403);
+    const top = (await g(admin).post({ name: 'Surveillance', icon: 'activity' })).body[0];
+    const sub = (await g(admin).post({ name: 'Weekly returns', parentId: top.id })).body.find((x: { name: string }) => x.name === 'Weekly returns');
+    expect(sub.parentId).toBe(top.id);
+    expect((await g(admin).put(top.id, { name: 'Surveillance', parentId: sub.id })).status).toBe(400); // no cycles
+    expect((await g(admin).del(top.id)).status).toBe(409); // has a sub-group
+
+    const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
+    const save = (settings: unknown, groupId: string | null = sub.id) =>
+      api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId, settings });
+    expect((await save({ fillRole: 'viewer', fillGroup: 'nope' })).status).toBe(400);
+    const saved = (await save({ fillRole: 'viewer', fillGroup: 'staff' })).body.find((f: { key: string }) => f.key === 'weekly_report');
+    expect(saved).toMatchObject({ groupId: sub.id, settings: { fillRole: 'viewer', fillGroup: 'staff', workflow: { enabled: false } }, canFill: true });
+    expect((await g(admin).get()).body.find((x: { id: string }) => x.id === sub.id).formCount).toBe(1);
+
+    // ed is a viewer in "admin", above "staff": the form shows up in their menu.
+    const menu = (await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body;
+    expect(menu.groups.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(['Surveillance', 'Weekly returns']));
+    expect(menu.forms.find((f: { key: string }) => f.key === 'weekly_report')).toMatchObject({ groupId: sub.id, project: { key }, layout: 'steps', hasWorkflow: false });
+    expect((await save({ fillRole: 'editor' })).status).toBe(200);
+    expect((await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body.forms.some((f: { key: string }) => f.key === 'weekly_report')).toBe(false);
+  });
+
+  it('routes submissions through multi-stage approvals before their data takes effect', async () => {
+    const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
+    const settings = (stages: unknown[]) => ({ fillRole: 'viewer', workflow: { enabled: true, stages } });
+    const put = (stages: unknown[]) =>
+      api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId: form.groupId, settings: settings(stages) });
+    expect((await put([{ key: 'x', name: 'X', approvers: { role: null, group: null, users: [] } }])).status).toBe(400); // nobody can approve
+    expect((await put([{ key: 'x', name: 'X', condition: '${nope} > 1' }])).status).toBe(400);
+    expect(
+      (
+        await put([
+          { key: 'district', name: 'District review', approvers: { role: 'viewer', group: 'admin' } },
+          { key: 'national', name: 'National sign-off', approvers: { role: 'manager' }, condition: '${deaths} > 0' },
+        ])
+      ).status,
+    ).toBe(200);
+
+    const mine = (await api(ed).get(`/${key}/entities?type=facility&pageSize=5`)).body.items[0];
+    const answers = { malaria: 1, ili: 777, diarrhoea: 0, measles: 0, deaths: 0, outbreak: false, stockout: 0 };
+    const sub = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-05T10:00:00Z', answers });
+    expect(sub.status).toBe(201);
+    expect(sub.body).toMatchObject({ status: 'in_review', stage: 0, stageName: 'District review', stages: ['District review', 'National sign-off'], canReview: false });
+    const id = sub.body.id;
+    const series = async () => (await api(admin).get(`/${key}/entities/${mine.id}/series?element=ili_cases`)).body.map((x: { value: number }) => x.value);
+    expect(await series()).not.toContain(777); // nothing takes effect while in review
+
+    const review = (who: string, body: unknown) => api(who).post(`/${key}/submissions/${id}/review`, body);
+    expect((await review(ed, { decision: 'approve' })).status).toBe(403); // not their own
+    const inbox = (await h.call(admin, 'GET', `/tenants/${tenantId}/forms/inbox`)).body;
+    expect(inbox.toReview.find((s: { id: string }) => s.id === id)).toMatchObject({ canReview: true, project: { key } });
+    expect((await h.call(ed, 'GET', `/tenants/${tenantId}/forms/inbox`)).body.mine.map((s: { id: string }) => s.id)).toContain(id);
+
+    expect((await review(admin, { decision: 'return' })).status).toBe(400); // needs a comment
+    expect((await review(admin, { decision: 'return', comment: 'Check deaths' })).body).toMatchObject({ status: 'returned', canResubmit: false });
+    expect((await review(admin, { decision: 'approve' })).status).toBe(409);
+    const again = await api(ed).put(`/${key}/submissions/${id}`, { answers: { ...answers, deaths: 2 }, comment: 'Fixed' });
+    expect(again.body).toMatchObject({ status: 'in_review', stage: 0 });
+
+    // Deaths > 0 now, so the national stage applies after the district one.
+    expect((await review(admin, { decision: 'approve' })).body).toMatchObject({ status: 'in_review', stage: 1, stageName: 'National sign-off' });
+    const done = (await review(admin, { decision: 'approve', comment: 'OK' })).body;
+    expect(done).toMatchObject({ status: 'approved', stage: null });
+    expect(done.decidedAt).not.toBeNull();
+    expect(done.reviews.map((r: { decision: string }) => r.decision)).toEqual(['submitted', 'returned', 'resubmitted', 'approved', 'approved']);
+    expect(await series()).toContain(777);
+
+    // Without deaths the national stage is skipped; rejection is final.
+    const quiet = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-12T10:00:00Z', answers });
+    expect((await api(admin).post(`/${key}/submissions/${quiet.body.id}/review`, { decision: 'approve' })).body.status).toBe('approved');
+    const third = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-19T10:00:00Z', answers });
+    expect((await api(admin).post(`/${key}/submissions/${third.body.id}/review`, { decision: 'reject', comment: 'Duplicate' })).body.status).toBe('rejected');
+    expect((await api(admin).get(`/${key}/forms/weekly_report/submissions?status=in_review`)).body.total).toBe(0);
+  });
 });
 
 describe('jobs and public projects', () => {
@@ -303,6 +491,23 @@ describe('jobs and public projects', () => {
     expect(ie).toBe(1);
     expect((await pub(`/widgets/tracked?area=${uuidv7()}`)).status).toBe(404); // not an area of this dashboard
     expect((await pub('/widgets/tracked?hours=5')).status).toBe(400);
+    // The explorer's selected place scopes any widget (it must be a place in this project).
+    expect((await pub(`/widgets/tracked?entity=${ireland.id}&hours=8760`)).body.rows[0].value).toBe(1);
+    expect((await pub(`/widgets/tracked?entity=${uuidv7()}`)).status).toBe(404);
+  });
+
+  it('serves the explorer anonymously with public overlays only', async () => {
+    const tenant = (await h.admin('GET', `/platform/tenants/${tenantId}`)).body;
+    const pub = (path: string) => h.call(null, 'GET', `/public/projects/${tenant.slug}/${key}${path}`);
+    await api(admin).post(`/${key}/overlays`, { key: 'altitude', name: 'Altitude', element: 'altitude_m', aggregation: 'avg', level: 'aircraft', hours: 8760, isPublic: true });
+    await api(admin).post(`/${key}/overlays`, { key: 'internal', name: 'Internal', element: 'altitude_m' });
+    expect((await pub('/overlays')).body.map((o: { key: string }) => o.key)).toEqual(['altitude']);
+    expect((await pub('/overlays/internal/values')).status).toBe(404);
+    const values = (await pub('/overlays/altitude/values')).body;
+    expect(values.features.features.length).toBeGreaterThan(0);
+    expect((await pub('/explore')).status).toBe(200);
+    expect((await pub('/search?q=ireland')).body[0]).toMatchObject({ name: 'Ireland' });
+    expect((await h.call(null, 'GET', `/public/projects/${tenant.slug}/water-points/explore`)).status).toBe(404);
   });
 
   it('keeps private projects private', async () => {
@@ -330,6 +535,37 @@ describe('jobs and public projects', () => {
     expect(again.body).toMatchObject({ status: 'queued', trigger: 'rerun', jobId: first.jobId });
     expect((await api(admin).post(`/${key}/runs/${again.body.id}/rerun`)).status).toBe(409); // still queued
     await api(admin).post(`/${key}/runs/${again.body.id}/cancel`);
+  });
+
+  it('runs jobs from webhooks, entity changes and sensors', async () => {
+    const cellDb = await h.cells.forTenant(tenantId);
+    await drainQueue(cellDb, { worker: 'test' });
+    const load = { id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' };
+    const saved = (await api(admin).post(`/${key}/jobs`, { key: 'inbound', name: 'Inbound countries', steps: [load], triggers: { webhook: true } })).body;
+    const inbound = saved.find((j: { key: string }) => j.key === 'inbound');
+    expect(inbound.webhookPath).toMatch(new RegExp(`^/hooks/${tenantId}\\.`));
+    // Viewers never see the secret URL.
+    expect((await api(vi).get(`/${key}/jobs`)).body.find((j: { key: string }) => j.key === 'inbound').webhookPath).toBeNull();
+
+    const hook = await h.call(null, 'POST', inbound.webhookPath, { rows: [{ iso: 'PG', name: 'Papua New Guinea' }] });
+    expect(hook.status).toBe(202);
+    expect((await h.call(null, 'POST', `/hooks/${tenantId}.not-the-secret-not-the-secret-not-the-secret`, [])).status).toBe(404);
+
+    // A job listening for country changes runs after the webhook's run writes one, and after a manual edit.
+    await api(admin).post(`/${key}/jobs`, { key: 'on_country', name: 'On country change', steps: [{ id: 'noop', type: 'filter', condition: 'true' }], triggers: { events: [{ event: 'entity.changed', ref: 'country' }] } });
+    await drainQueue(cellDb, { worker: 'test' });
+    expect((await api(admin).get(`/${key}/runs/${hook.body.runId}`)).body).toMatchObject({ status: 'succeeded', trigger: 'webhook', stats: { rows_received: 1, entities_created: 1 } });
+    const onCountry = async () => (await api(admin).get(`/${key}/runs?pageSize=100`)).body.items.filter((r: { jobName: string }) => r.jobName === 'On country change');
+    expect((await onCountry()).map((r: { trigger: string }) => r.trigger)).toEqual(['entity.changed']);
+    await api(admin).post(`/${key}/entities`, { typeKey: 'country', code: 'SB', name: 'Solomon Islands' });
+    expect((await onCountry()).length).toBe(2);
+
+    // Sensors are scheduled for the worker; turning the webhook off revokes its URL.
+    const withSensor = (await api(admin).put(`/${key}/jobs/inbound`, { ...inbound, triggers: { webhook: false }, sensor: { url: 'https://example.org/feed.json', everyMinutes: 15 } })).body;
+    const updated = withSensor.find((j: { key: string }) => j.key === 'inbound');
+    expect(updated).toMatchObject({ webhookPath: null, sensor: { everyMinutes: 15 }, sensorState: { cursor: null, lastError: null } });
+    expect((await h.call(null, 'POST', inbound.webhookPath, [])).status).toBe(404);
+    await drainQueue(cellDb, { worker: 'test' });
   });
 
   it('stores uploaded files and runs the jobs that parse them on upload', async () => {

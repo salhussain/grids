@@ -3,17 +3,37 @@ import { withTenant, type CellDB } from '@grids/db';
 import { JobStep, uuidv7 } from '@grids/schema';
 import { nextRun } from './cron.js';
 import { executeSteps, StepError } from './engine.js';
+import { fireEvent } from './triggers.js';
 import type { CellTx } from './model.js';
 
 /** Queues a run of a job (inside the tenant's transaction). */
 export async function enqueueRun(
   tx: CellTx,
-  opts: { tenantId: string; projectId: string; jobId: string; trigger: string; triggeredBy?: string | null; attempt?: number; availableAt?: Date },
+  opts: {
+    tenantId: string;
+    projectId: string;
+    jobId: string;
+    trigger: string;
+    triggeredBy?: string | null;
+    attempt?: number;
+    availableAt?: Date;
+    /** What started the run (event, sensor cursor, webhook rows); bound as $event / $sensor. */
+    context?: Record<string, unknown>;
+  },
 ): Promise<string> {
   const id = uuidv7();
   await tx
     .insertInto('run')
-    .values({ id, tenant_id: opts.tenantId, project_id: opts.projectId, job_id: opts.jobId, trigger: opts.trigger, triggered_by: opts.triggeredBy ?? null, attempt: opts.attempt ?? 1 })
+    .values({
+      id,
+      tenant_id: opts.tenantId,
+      project_id: opts.projectId,
+      job_id: opts.jobId,
+      trigger: opts.trigger,
+      triggered_by: opts.triggeredBy ?? null,
+      attempt: opts.attempt ?? 1,
+      context: JSON.stringify(opts.context ?? {}),
+    })
     .execute();
   // Database time (not the app's clock), so the claim query's now() sees it as available.
   await tx.insertInto('job_queue').values({ run_id: id, tenant_id: opts.tenantId, ...(opts.availableAt && { available_at: opts.availableAt }) }).execute();
@@ -103,7 +123,7 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
     const run = await tx
       .selectFrom('run as r')
       .innerJoin('job as j', 'j.id', 'r.job_id')
-      .select(['r.id', 'r.status', 'r.attempt', 'r.project_id', 'r.job_id', 'j.steps', 'j.max_retries', 'j.timeout_seconds', 'j.name'])
+      .select(['r.id', 'r.status', 'r.attempt', 'r.project_id', 'r.job_id', 'r.trigger', 'r.context', 'j.key', 'j.steps', 'j.max_retries', 'j.timeout_seconds', 'j.name'])
       .where('r.id', '=', claim.runId)
       .executeTakeFirst();
     if (!run) return null;
@@ -124,13 +144,26 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
   const started = Date.now();
   let stats: Record<string, number> = {};
   let error: string | null = null;
+  const materialised = new Set<string>();
+  const changedTypes = new Set<string>();
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(new Error('timeout')), loaded.timeout_seconds * 1000);
   try {
     const steps = (loaded.steps as unknown[]).map((s) => JobStep.parse(s));
     stats = await Promise.race([
       withTenant(cell, claim.tenantId, (tx) =>
-        executeSteps(tx, steps, { tenantId: claim.tenantId, projectId: loaded.project_id, runId: loaded.id, now: now(), fetch: deps.fetch ?? fetch, log, signal: abort.signal }),
+        executeSteps(tx, steps, {
+          tenantId: claim.tenantId,
+          projectId: loaded.project_id,
+          runId: loaded.id,
+          now: now(),
+          fetch: deps.fetch ?? fetch,
+          log,
+          signal: abort.signal,
+          context: loaded.context as Record<string, unknown>,
+          onMaterialised: (d) => materialised.add(d),
+          onEntitiesChanged: (t) => changedTypes.add(t),
+        }),
       ),
       new Promise<never>((_, reject) => abort.signal.addEventListener('abort', () => reject(new Error(`Timed out after ${loaded.timeout_seconds} s`)))),
     ]);
@@ -160,7 +193,22 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
     if (logs.length) await tx.insertInto('run_log').values(logs.map((l) => ({ tenant_id: claim.tenantId, run_id: loaded.id, ...l }))).execute();
     await tx.deleteFrom('job_queue').where('run_id', '=', loaded.id).execute();
     if (retryAt)
-      await enqueueRun(tx, { tenantId: claim.tenantId, projectId: loaded.project_id, jobId: loaded.job_id, trigger: 'retry', attempt: loaded.attempt + 1, availableAt: retryAt });
+      await enqueueRun(tx, {
+        tenantId: claim.tenantId,
+        projectId: loaded.project_id,
+        jobId: loaded.job_id,
+        trigger: 'retry',
+        attempt: loaded.attempt + 1,
+        availableAt: retryAt,
+        context: loaded.context as Record<string, unknown>,
+      });
+    // Downstream triggers: datasets this run refreshed, and the job's outcome (once final).
+    const ev = { tenantId: claim.tenantId, projectId: loaded.project_id, sourceJobId: loaded.job_id, detail: { job: loaded.key, run: loaded.id } };
+    if (status === 'succeeded') {
+      for (const d of materialised) await fireEvent(tx, { ...ev, event: 'dataset.materialised', ref: d });
+      for (const t of changedTypes) await fireEvent(tx, { ...ev, event: 'entity.changed', ref: t, detail: { ...ev.detail, change: 'job' } });
+      await fireEvent(tx, { ...ev, event: 'job.succeeded', ref: loaded.key });
+    } else if (status === 'failed' && !retryAt) await fireEvent(tx, { ...ev, event: 'job.failed', ref: loaded.key });
     return status;
   });
 }

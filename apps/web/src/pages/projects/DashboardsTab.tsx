@@ -11,11 +11,12 @@ import {
   type WidgetInput,
 } from '@grids/schema';
 import { Button, CopyField, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { ArrowDown, ArrowUp, BarChart3, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, BarChart3, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
 import { DashboardFilterBar } from '../../viz/DashboardFilters';
+import { GroupSelect, LockBadge } from './permissions';
 import { WidgetView } from '../../viz/WidgetView';
 import { useElementNames, useProject } from './context';
 
@@ -43,11 +44,11 @@ export function DashboardsTab() {
     queryFn: async () => (await api.entities(tenantId, project.key, { type: areaType!, pageSize: 200 })).items.map((e) => ({ id: e.id, name: e.name })),
     enabled: !!areaType,
   });
-  useEffect(() => setDraft(current && editing ? structuredClone(current) : null), [current?.key, editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setDraft(current && editing ? structuredClone(current) : null), [current?.key, editing]);
 
   const save = useMutation({
     mutationFn: (d: DashboardDto) =>
-      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic, filters: d.filters }, d.key),
+      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic, filters: d.filters, permissionGroup: d.permissionGroup }, d.key),
     onSuccess: (data) => {
       qc.setQueryData(['dashboards', tenantId, project.key], data);
       setEditing(false);
@@ -101,6 +102,7 @@ export function DashboardsTab() {
               className={cx('px-3 py-1.5 text-sm', d.key === current.key ? 'bg-ink text-canvas' : 'bg-snow hover:bg-zinc-50')}
             >
               {d.name}
+              {d.permissionGroup && <Lock className="ms-1.5 inline size-3 opacity-60" aria-label="Restricted" />}
             </button>
           ))}
         </div>
@@ -165,6 +167,7 @@ export function DashboardsTab() {
             checked={draft.filters.period}
             onChange={(v: boolean) => setDraft({ ...draft, filters: { ...draft.filters, period: v } })}
           />
+          <GroupSelect label="Who can see this dashboard" value={draft.permissionGroup} onChange={(g) => setDraft({ ...draft, permissionGroup: g })} />
         </div>
       )}
       {!editing && (current.description || current.filters.areaType || current.filters.period) && (
@@ -196,11 +199,15 @@ export function DashboardsTab() {
             widget={w}
             names={names}
             queryKey={['widget', tenantId, project.key, shown.key]}
-            load={() => api.query(tenantId, project.key, w.query as QuerySpecInput)}
+            // Saved widgets load by reference (permission-checked); drafts run their query.
+            load={(p = {}) =>
+              editing ? api.query(tenantId, project.key, applyParams(w.query!, p, shown.filters) as QuerySpecInput) : api.widget(tenantId, project.key, shown.key, w.id, { ...params, ...p })
+            }
             onSelectEntity={(id) => void navigate({ to: `${base}/entities/${id}` })}
             actions={
               editing ? (
-                <span className="flex gap-0.5">
+                <span className="flex items-center gap-0.5">
+                  <LockBadge group={w.permissionGroup} />
                   <IconBtn label="Move earlier" onClick={() => move(i, -1)} icon={ArrowUp} />
                   <IconBtn label="Move later" onClick={() => move(i, 1)} icon={ArrowDown} />
                   <IconBtn label={`Edit ${w.title}`} onClick={() => setWidgetDialog({ index: i })} icon={Pencil} />
@@ -285,7 +292,8 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
   const q = (w.query ?? {}) as Record<string, unknown> & { kind?: string };
   const setQ = (patch: Record<string, unknown>) => setW({ ...w, query: { ...q, ...patch } as QuerySpecInput });
   const setO = (patch: Record<string, unknown>) => setW({ ...w, options: { ...w.options, ...patch } });
-  const kindFor = (type: string) => ({ kpi: 'kpi', line: 'series', bar: 'breakdown', pie: 'breakdown', map: 'geo', table: 'table', text: null })[type] ?? null;
+  const kindFor = (type: string) =>
+    ({ kpi: 'kpi', gauge: 'kpi', line: 'series', area: 'series', bar: q.kind === 'series' ? 'series' : 'breakdown', pie: 'breakdown', matrix: 'breakdown', map: 'geo', table: 'table', text: null })[type] ?? null;
   const changeType = (type: Widget['type']) => {
     const kind = kindFor(type);
     const defaults: Record<string, QuerySpecInput> = {
@@ -295,8 +303,39 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
       geo: { kind: 'geo', entityType: types.data?.find((t) => t.geometry !== 'none')?.key },
       table: { kind: 'table', source: 'entities', limit: 50 },
     };
-    setW({ ...w, type, query: kind ? (q.kind === kind ? (q as QuerySpecInput) : defaults[kind]) : undefined, w: type === 'kpi' ? 3 : type === 'map' || type === 'table' ? 12 : 6, h: type === 'kpi' ? 1 : 3 });
+    setW({ ...w, type, query: kind ? (q.kind === kind ? (q as QuerySpecInput) : defaults[kind]) : undefined, w: type === 'kpi' ? 3 : type === 'gauge' ? 4 : type === 'map' || type === 'table' || type === 'matrix' ? 12 : 6, h: type === 'kpi' ? 1 : type === 'gauge' ? 2 : 3 });
   };
+  const setBarKind = (kind: 'breakdown' | 'series') =>
+    setW({
+      ...w,
+      query:
+        kind === 'series'
+          ? { kind: 'series', elements: elements.data?.[0] ? [elements.data[0].key] : [], aggregation: 'sum', interval: 'week', range: { lastHours: 24 * 90 } }
+          : { kind: 'breakdown', by: 'parent', aggregation: 'sum', range: { lastHours: 24 * 30 } },
+    });
+  const Multi = ({ value, onChange }: { value: string[]; onChange(v: string[]): void }) => (
+    <div className="flex flex-wrap gap-2">
+      {elements.data?.map((e) => {
+        const on = value.includes(e.key);
+        return (
+          <label key={e.key} className={cx('flex cursor-pointer items-center gap-2 border px-2.5 py-1.5 text-sm', on ? 'border-accent-600 bg-accent-50' : 'border-zinc-300')}>
+            <input type="checkbox" checked={on} onChange={() => onChange(on ? value.filter((k) => k !== e.key) : [...value, e.key])} className="size-4 accent-[var(--brand-600)]" />
+            {e.name}
+          </label>
+        );
+      })}
+    </div>
+  );
+  const Thresholds = () => (
+    <>
+      <Field label="Warning at ≥">
+        <Input type="number" step="any" value={w.options?.warn ?? ''} onChange={(e) => setO({ warn: e.target.value === '' ? undefined : Number(e.target.value) })} />
+      </Field>
+      <Field label="Alert at ≥">
+        <Input type="number" step="any" value={w.options?.alert ?? ''} onChange={(e) => setO({ alert: e.target.value === '' ? undefined : Number(e.target.value) })} />
+      </Field>
+    </>
+  );
   const range = (q.range ?? {}) as { lastHours?: number; lastMinutes?: number };
   const rangeDays = range.lastMinutes ? range.lastMinutes / 1440 : (range.lastHours ?? 720) / 24;
 
@@ -378,6 +417,9 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
           <Field label="Height (rows)">
             <Input type="number" min={1} max={6} value={w.h} onChange={(e) => setW({ ...w, h: Number(e.target.value) })} />
           </Field>
+          <div className="sm:col-span-2">
+            <GroupSelect value={w.permissionGroup} onChange={(g) => setW({ ...w, permissionGroup: g ?? undefined })} />
+          </div>
           <Field label="Unit">
             <Input value={w.options?.unit ?? ''} onChange={(e) => setO({ unit: e.target.value || undefined })} />
           </Field>
@@ -404,7 +446,28 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
                   <SwitchField label="Lower is better" checked={!!w.options?.invert} onChange={(v: boolean) => setO({ invert: v })} />
                 </div>
               ) : null}
+              {w.type === 'gauge' && (
+                <>
+                  <Field label="Dial maximum (target)">
+                    <Input type="number" step="any" value={w.options?.max ?? ''} onChange={(e) => setO({ max: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                  </Field>
+                  <Thresholds />
+                </>
+              )}
             </>
+          )}
+          {w.type === 'bar' && (
+            <Field label="Bars show">
+              <Select value={q.kind === 'series' ? 'series' : 'breakdown'} onChange={(e) => setBarKind(e.target.value as 'breakdown' | 'series')}>
+                <option value="breakdown">Categories</option>
+                <option value="series">Over time</option>
+              </Select>
+            </Field>
+          )}
+          {(w.type === 'area' || (w.type === 'bar' && (q.kind === 'series' || (q.elements as string[] | undefined)?.length))) && (
+            <div className="flex items-end pb-1">
+              <SwitchField label="Stacked" checked={!!w.options?.stacked} onChange={(v: boolean) => setO({ stacked: v })} />
+            </div>
           )}
           {q.kind === 'series' && (
             <>
@@ -440,7 +503,22 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
           )}
           {q.kind === 'breakdown' && (
             <>
-              <El label="Value" value={q.element as string} onChange={(v) => setQ({ element: v })} optional="Count of entities" />
+              <Field label="Values">
+                <Select
+                  value={q.elements ? 'many' : 'one'}
+                  onChange={(e) => setQ(e.target.value === 'many' ? { elements: q.element ? [q.element as string] : elements.data?.slice(0, 2).map((x) => x.key), element: undefined } : { elements: undefined })}
+                >
+                  <option value="one">One value</option>
+                  <option value="many">Several values side by side</option>
+                </Select>
+              </Field>
+              {q.elements ? (
+                <Field label="Values to compare" className="sm:col-span-3">
+                  <Multi value={q.elements as string[]} onChange={(v) => setQ({ elements: v.length ? v : undefined })} />
+                </Field>
+              ) : (
+                <El label="Value" value={q.element as string} onChange={(v) => setQ({ element: v })} optional="Count of entities" />
+              )}
               <Field label="Group by">
                 <Select value={(q.by as string) ?? 'parent'} onChange={(e) => setQ({ by: e.target.value })}>
                   <option value="parent">Parent</option>
@@ -465,8 +543,9 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
                 </Field>
               )}
               <TypeSel />
-              {q.element ? <Agg /> : null}
-              {q.element ? <Range /> : null}
+              {q.element || q.elements ? <Agg /> : null}
+              {q.element || q.elements ? <Range /> : null}
+              {w.type === 'matrix' && <Thresholds />}
               <Field label="Show top">
                 <Input type="number" min={1} max={100} value={(q.limit as number) ?? 12} onChange={(e) => setQ({ limit: Number(e.target.value) })} />
               </Field>

@@ -327,7 +327,7 @@ export function TotpEnrol({ start, confirm, intro }: { start(): Promise<TotpSetu
     if (started.current) return;
     started.current = true;
     void run(start).then((s) => s && setSetup(s));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const submit = async (c = code) => {
     if ((await run(() => confirm(c).then(() => true))) !== true) setCode('');
   };

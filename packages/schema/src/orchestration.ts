@@ -85,6 +85,25 @@ const Cron = z
   .trim()
   .regex(/^(\S+\s+){4}\S+$/, 'Five cron fields: minute hour day month weekday');
 
+/** Events that can trigger a job (spec §7); `ref` narrows to one form, type, dataset or job. */
+export const JOB_EVENTS = ['submission.created', 'submission.approved', 'submission.rejected', 'entity.changed', 'dataset.materialised', 'job.succeeded', 'job.failed'] as const;
+export const JobEvent = z.enum(JOB_EVENTS);
+export type JobEvent = z.infer<typeof JobEvent>;
+export const JobTriggers = z.object({
+  events: z.array(z.object({ event: JobEvent, ref: Key.optional() })).max(10).default([]),
+  /** Accept POSTs to a secret URL; the JSON body becomes the run's rows. */
+  webhook: z.boolean().default(false),
+});
+export type JobTriggers = z.infer<typeof JobTriggers>;
+/** Polls a URL; when the cursor (JSONata over the response, default: a hash of it) changes, the job runs. */
+export const JobSensor = z.object({
+  url: z.url(),
+  headers: z.record(z.string(), z.string()).default({}),
+  cursor: Expr.optional(),
+  everyMinutes: z.number().int().min(1).max(1440).default(5),
+});
+export type JobSensor = z.infer<typeof JobSensor>;
+
 export const JobInput = z.object({
   key: Key,
   name: z.string().trim().min(1).max(80),
@@ -98,6 +117,8 @@ export const JobInput = z.object({
   freshnessMinutes: z.number().int().min(1).max(525_600).nullable().default(null),
   /** Queue a run whenever a file this job parses is uploaded. */
   runOnUpload: z.boolean().default(false),
+  triggers: JobTriggers.default({ events: [], webhook: false }),
+  sensor: JobSensor.nullable().default(null),
 });
 export type JobInput = z.input<typeof JobInput>;
 
@@ -143,6 +164,13 @@ export const JobDto = z.object({
   timeoutSeconds: z.number().int(),
   freshnessMinutes: z.number().int().nullable(),
   runOnUpload: z.boolean(),
+  triggers: JobTriggers,
+  sensor: JobSensor.nullable(),
+  /** Path of the webhook (managers only; it embeds the secret). */
+  webhookPath: z.string().nullable(),
+  sensorState: z
+    .object({ lastCheckedAt: z.string().nullable(), nextCheckAt: z.string(), cursor: z.string().nullable(), lastError: z.string().nullable() })
+    .nullable(),
   nextRunAt: z.string().nullable(),
   lastRun: RunDto.nullable(),
   freshness: Freshness,
