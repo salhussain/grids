@@ -86,7 +86,7 @@ const Cron = z
   .regex(/^(\S+\s+){4}\S+$/, 'Five cron fields: minute hour day month weekday');
 
 /** Events that can trigger a job (spec §7); `ref` narrows to one form, type, dataset or job. */
-export const JOB_EVENTS = ['submission.created', 'entity.changed', 'dataset.materialised', 'job.succeeded', 'job.failed'] as const;
+export const JOB_EVENTS = ['submission.created', 'submission.approved', 'submission.rejected', 'entity.changed', 'dataset.materialised', 'job.succeeded', 'job.failed'] as const;
 export const JobEvent = z.enum(JOB_EVENTS);
 export type JobEvent = z.infer<typeof JobEvent>;
 export const JobTriggers = z.object({

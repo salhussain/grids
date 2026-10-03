@@ -130,7 +130,10 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
     subjectType: 'facility',
     definition: {
       title: 'Weekly surveillance report',
+      description: 'Counts for the previous epidemiological week (Monday to Sunday).',
       period: 'week',
+      layout: 'steps',
+      thankYou: 'Thank you — your weekly report is in. The district team sees it on the dashboard straight away.',
       sections: [
         {
           key: 'cases',
@@ -155,6 +158,43 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
           ],
         },
       ],
+    },
+  });
+  await form(tx, c, {
+    key: 'outbreak_alert',
+    name: 'Outbreak alert',
+    description: 'Report a suspected outbreak. Reviewed by the district team; large clusters also need national sign-off.',
+    subjectType: 'facility',
+    definition: {
+      title: 'Report a suspected outbreak',
+      description: 'One question at a time — it takes about a minute.',
+      layout: 'focus',
+      thankYou: 'Alert sent. The district surveillance officer has been notified and will review it shortly.',
+      sections: [
+        {
+          key: 'alert',
+          title: 'The alert',
+          questions: [
+            { key: 'disease', type: 'select', label: 'What do you suspect?', required: true, options: [{ value: 'measles', label: 'Measles' }, { value: 'cholera', label: 'Cholera / acute watery diarrhoea' }, { value: 'dengue', label: 'Dengue' }, { value: 'influenza', label: 'Influenza' }, { value: 'other', label: 'Something else' }] },
+            { key: 'other_disease', type: 'text', label: 'Which disease?', required: true, relevant: "${disease} = 'other'" },
+            { key: 'cases', type: 'integer', label: 'How many people are affected?', required: true, min: 1, max: 10000 },
+            { key: 'deaths', type: 'integer', label: 'How many have died?', min: 0, max: 10000, constraint: '. <= ${cases}', constraintMessage: 'Cannot be more than the number affected' },
+            { key: 'onset', type: 'date', label: 'When did the first case start?', required: true },
+            { key: 'symptoms', type: 'multiselect', label: 'Main symptoms', options: [{ value: 'fever', label: 'Fever' }, { value: 'rash', label: 'Rash' }, { value: 'diarrhoea', label: 'Diarrhoea' }, { value: 'vomiting', label: 'Vomiting' }, { value: 'cough', label: 'Cough' }] },
+            { key: 'details', type: 'textarea', label: 'Anything else the team should know?' },
+          ],
+        },
+      ],
+    },
+    settings: {
+      fillRole: 'editor',
+      workflow: {
+        enabled: true,
+        stages: [
+          { key: 'district', name: 'District review', description: 'Verify with the facility by phone and check the line list.', approvers: { role: 'editor' } },
+          { key: 'national', name: 'National sign-off', description: 'Decide on a rapid response team.', approvers: { role: 'manager' }, condition: '${cases} >= 10 or ${deaths} > 0' },
+        ],
+      },
     },
   });
   await form(tx, c, {

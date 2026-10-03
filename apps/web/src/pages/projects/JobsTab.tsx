@@ -199,6 +199,8 @@ export function JobsTab() {
 
 const EVENT_INFO: Record<JobEvent, { label: string; ref: string }> = {
   'submission.created': { label: 'A form is submitted', ref: 'Form' },
+  'submission.approved': { label: 'A submission is approved', ref: 'Form' },
+  'submission.rejected': { label: 'A submission is rejected', ref: 'Form' },
   'entity.changed': { label: 'Entities change', ref: 'Entity type' },
   'dataset.materialised': { label: 'A dataset is refreshed', ref: 'Dataset' },
   'job.succeeded': { label: 'Another job succeeds', ref: 'Job' },
@@ -246,7 +248,7 @@ function TriggersEditor({
   const jobs = useQuery({ queryKey: ['jobs', tenantId, project.key], queryFn: () => api.jobs(tenantId, project.key) });
   const { triggers: t, sensor } = value;
   const refs = (e: JobEvent): { key: string; name: string }[] =>
-    e === 'submission.created'
+    e.startsWith('submission.')
       ? (forms.data ?? []).map((x) => ({ key: x.key, name: x.name }))
       : e === 'entity.changed'
         ? (types.data ?? []).map((x) => ({ key: x.key, name: x.plural }))

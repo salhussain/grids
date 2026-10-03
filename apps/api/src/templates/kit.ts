@@ -6,6 +6,7 @@ import {
   DataElementInput,
   EntityTypeInput,
   FormDefinition,
+  FormSettings,
   JobInput,
   MapOverlayInput as MapOverlayInputSchema,
   uuidv7,
@@ -14,6 +15,7 @@ import {
   type DataElementInput as ElementIn,
   type EntityTypeInput as TypeIn,
   type FormDefinitionInput,
+  type FormSettingsInput,
   type JobInput as JobIn,
 } from '@grids/schema';
 
@@ -142,7 +144,11 @@ export async function dashboard(tx: Tx, c: TemplateCtx, raw: DashboardIn, sort =
 }
 
 /** Creates a form and publishes its first version. */
-export async function form(tx: Tx, c: TemplateCtx, f: { key: string; name: string; description?: string; subjectType: string | null; definition: FormDefinitionInput }) {
+export async function form(
+  tx: Tx,
+  c: TemplateCtx,
+  f: { key: string; name: string; description?: string; subjectType: string | null; definition: FormDefinitionInput; settings?: FormSettingsInput },
+) {
   const def = FormDefinition.parse(f.definition);
   const subject = f.subjectType
     ? await tx.selectFrom('entity_type').select('id').where('project_id', '=', c.projectId).where('key', '=', f.subjectType).executeTakeFirstOrThrow()
@@ -150,7 +156,7 @@ export async function form(tx: Tx, c: TemplateCtx, f: { key: string; name: strin
   const id = uuidv7();
   await tx
     .insertInto('form')
-    .values({ id, tenant_id: c.tenantId, project_id: c.projectId, key: f.key, name: f.name, description: f.description ?? '', subject_type_id: subject?.id ?? null, draft: JSON.stringify(def), current_version: 1 })
+    .values({ id, tenant_id: c.tenantId, project_id: c.projectId, key: f.key, name: f.name, description: f.description ?? '', subject_type_id: subject?.id ?? null, draft: JSON.stringify(def), settings: JSON.stringify(FormSettings.parse(f.settings ?? {})), current_version: 1 })
     .execute();
   await tx.insertInto('form_version').values({ form_id: id, tenant_id: c.tenantId, version: 1, definition: JSON.stringify(def), published_by: c.actorId }).execute();
   return id;

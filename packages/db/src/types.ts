@@ -550,9 +550,20 @@ export interface CellDB {
     subject_type_id: string | null;
     draft: Json<Record<string, unknown>>;
     current_version: number | null;
+    group_id: string | null;
+    settings: JsonDefault<Record<string, unknown>>;
     created_at: CreatedAt;
     updated_at: Timestamp;
     archived_at: Date | null;
+  };
+  form_group: {
+    id: string;
+    tenant_id: string;
+    parent_id: string | null;
+    name: string;
+    icon: Generated<string>;
+    sort: Generated<number>;
+    created_at: CreatedAt;
   };
   form_version: {
     form_id: string;
@@ -574,6 +585,20 @@ export interface CellDB {
     collected_at: Timestamp;
     submitted_at: Timestamp;
     location: unknown;
+    status: Generated<'complete' | 'in_review' | 'approved' | 'rejected' | 'returned'>;
+    stage: number | null;
+    decided_at: Date | null;
+  };
+  submission_review: {
+    id: Generated<string>;
+    tenant_id: string;
+    submission_id: string;
+    stage: number | null;
+    stage_name: string | null;
+    decision: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'returned';
+    comment: Generated<string>;
+    actor_id: string | null;
+    at: Timestamp;
   };
 }
 

@@ -30,7 +30,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { WorkspacePermission } from '@grids/schema';
 import { ErrorNotice, cx } from '@grids/ui';
 import { api } from './api';
@@ -44,6 +44,9 @@ import { EntitiesTab } from './pages/projects/EntitiesTab';
 import { EntityPage } from './pages/projects/EntityPage';
 import { FormBuilder } from './pages/projects/FormBuilder';
 import { FormFillPage, FormsTab } from './pages/projects/FormsTab';
+import { FormsHome } from './pages/forms/FormsHome';
+import { FormsNav } from './pages/forms/FormsNav';
+import { FillPage, InboxPage } from './pages/forms/InboxPage';
 import { JobsTab } from './pages/projects/JobsTab';
 import { OverlaysTab } from './pages/projects/OverlaysTab';
 import { ProjectLayout } from './pages/projects/ProjectLayout';
@@ -197,7 +200,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           );
           if (!items.length) return null;
           return (
-            <div key={group.section} className="mb-5">
+            <Fragment key={group.section}>
+            <div className="mb-5">
               <div
                 className={cx(
                   'px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase',
@@ -228,6 +232,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 );
               })}
             </div>
+            {group.section === 'workspace' && <FormsNav tone={tone} onNavigate={onNavigate} />}
+            </Fragment>
           );
         })}
       </nav>
@@ -460,6 +466,27 @@ const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: ws, path: '/', component: HomePage }),
     createRoute({ getParentRoute: ws, path: '/projects', component: ProjectsPage }),
     projectTree,
+    createRoute({
+      getParentRoute: ws,
+      path: '/forms',
+      component: FormsHome,
+      validateSearch: (s: Record<string, unknown>) => ({ group: typeof s.group === 'string' ? s.group : undefined }),
+    }),
+    createRoute({
+      getParentRoute: ws,
+      path: '/inbox',
+      component: InboxPage,
+      validateSearch: (s: Record<string, unknown>) => ({ tab: s.tab === 'mine' || s.tab === 'review' ? (s.tab as 'mine' | 'review') : undefined }),
+    }),
+    createRoute({
+      getParentRoute: ws,
+      path: '/fill/$project/$formKey',
+      component: FillPage,
+      validateSearch: (s: Record<string, unknown>) => ({
+        resubmit: typeof s.resubmit === 'string' ? s.resubmit : undefined,
+        entity: typeof s.entity === 'string' ? s.entity : undefined,
+      }),
+    }),
     createRoute({ getParentRoute: ws, path: '/people', component: PeoplePage }),
     createRoute({ getParentRoute: ws, path: '/structure', component: StructurePage }),
     createRoute({ getParentRoute: ws, path: '/access', component: AccessPage }),

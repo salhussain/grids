@@ -143,8 +143,19 @@ export const api = {
     request<S.FormDto[]>('DELETE', `${t(id)}/projects/${p}/forms/${key}`),
   submit: (id: string, p: string, key: string, input: In<typeof S.SubmissionInput>) =>
     request<S.SubmissionDto>('POST', `${t(id)}/projects/${p}/forms/${key}/submissions`, input),
-  submissions: (id: string, p: string, key: string, query: { page: number; pageSize: number; entityId?: string }) =>
+  submissions: (id: string, p: string, key: string, query: { page: number; pageSize: number; entityId?: string; status?: S.SubmissionStatus }) =>
     request<Page<S.SubmissionDto>>('GET', `${t(id)}/projects/${p}/forms/${key}/submissions${qs(query)}`),
+  submission: (id: string, p: string, subId: string) => request<S.SubmissionDto>('GET', `${t(id)}/projects/${p}/submissions/${subId}`),
+  review: (id: string, p: string, subId: string, input: In<typeof S.ReviewInput>) =>
+    request<S.SubmissionDto>('POST', `${t(id)}/projects/${p}/submissions/${subId}/review`, input),
+  resubmit: (id: string, p: string, subId: string, input: In<typeof S.ResubmitInput>) =>
+    request<S.SubmissionDto>('PUT', `${t(id)}/projects/${p}/submissions/${subId}`, input),
+  formsMenu: (id: string) => request<S.FormsMenuDto>('GET', `${t(id)}/forms/menu`),
+  inbox: (id: string) => request<S.InboxDto>('GET', `${t(id)}/forms/inbox`),
+  formGroups: (id: string) => request<S.FormGroupDto[]>('GET', `${t(id)}/form-groups`),
+  saveFormGroup: (id: string, input: In<typeof S.FormGroupInput>, groupId?: string) =>
+    request<S.FormGroupDto[]>(groupId ? 'PUT' : 'POST', `${t(id)}/form-groups${groupId ? `/${groupId}` : ''}`, input),
+  deleteFormGroup: (id: string, groupId: string) => request<S.FormGroupDto[]>('DELETE', `${t(id)}/form-groups/${groupId}`),
 
   // public (no sign-in)
   publicProject: (tenant: string, project: string) =>

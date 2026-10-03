@@ -138,7 +138,7 @@ describe('templates, queries and dashboards', () => {
     const res = await api(admin).post('', { name: 'Surveillance', template: 'health-surveillance' });
     expect(res.status).toBe(201);
     key = res.body.key;
-    expect(res.body.counts).toMatchObject({ entities: 4 + 8 + 24, forms: 2, dashboards: 1 });
+    expect(res.body.counts).toMatchObject({ entities: 4 + 8 + 24, forms: 3, dashboards: 1 });
     const types = (await api(admin).get(`/${key}/types`)).body;
     expect(types.map((t: { key: string; count: number }) => [t.key, t.count])).toEqual([
       ['province', 4],
@@ -345,6 +345,89 @@ describe('forms', () => {
     const publish = await api(admin).post(`/${key}/forms/facility_profile/publish`);
     expect(publish.status).toBe(400);
     expect(publish.body.detail).toContain('unknown question ${missing}');
+  });
+
+  it('organises forms into a menu of groups and sub-groups, managed by admins', async () => {
+    const g = (who: string) => ({
+      get: () => h.call(who, 'GET', `/tenants/${tenantId}/form-groups`),
+      post: (body: unknown) => h.call(who, 'POST', `/tenants/${tenantId}/form-groups`, body),
+      put: (id: string, body: unknown) => h.call(who, 'PUT', `/tenants/${tenantId}/form-groups/${id}`, body),
+      del: (id: string) => h.call(who, 'DELETE', `/tenants/${tenantId}/form-groups/${id}`),
+    });
+    expect((await g(vi).post({ name: 'Nope' })).status).toBe(403);
+    const top = (await g(admin).post({ name: 'Surveillance', icon: 'activity' })).body[0];
+    const sub = (await g(admin).post({ name: 'Weekly returns', parentId: top.id })).body.find((x: { name: string }) => x.name === 'Weekly returns');
+    expect(sub.parentId).toBe(top.id);
+    expect((await g(admin).put(top.id, { name: 'Surveillance', parentId: sub.id })).status).toBe(400); // no cycles
+    expect((await g(admin).del(top.id)).status).toBe(409); // has a sub-group
+
+    const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
+    const save = (settings: unknown, groupId: string | null = sub.id) =>
+      api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId, settings });
+    expect((await save({ fillRole: 'viewer', fillGroup: 'nope' })).status).toBe(400);
+    const saved = (await save({ fillRole: 'viewer', fillGroup: 'staff' })).body.find((f: { key: string }) => f.key === 'weekly_report');
+    expect(saved).toMatchObject({ groupId: sub.id, settings: { fillRole: 'viewer', fillGroup: 'staff', workflow: { enabled: false } }, canFill: true });
+    expect((await g(admin).get()).body.find((x: { id: string }) => x.id === sub.id).formCount).toBe(1);
+
+    // ed is a viewer in "admin", above "staff": the form shows up in their menu.
+    const menu = (await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body;
+    expect(menu.groups.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(['Surveillance', 'Weekly returns']));
+    expect(menu.forms.find((f: { key: string }) => f.key === 'weekly_report')).toMatchObject({ groupId: sub.id, project: { key }, layout: 'steps', hasWorkflow: false });
+    expect((await save({ fillRole: 'editor' })).status).toBe(200);
+    expect((await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body.forms.some((f: { key: string }) => f.key === 'weekly_report')).toBe(false);
+  });
+
+  it('routes submissions through multi-stage approvals before their data takes effect', async () => {
+    const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
+    const settings = (stages: unknown[]) => ({ fillRole: 'viewer', workflow: { enabled: true, stages } });
+    const put = (stages: unknown[]) =>
+      api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId: form.groupId, settings: settings(stages) });
+    expect((await put([{ key: 'x', name: 'X', approvers: { role: null, group: null, users: [] } }])).status).toBe(400); // nobody can approve
+    expect((await put([{ key: 'x', name: 'X', condition: '${nope} > 1' }])).status).toBe(400);
+    expect(
+      (
+        await put([
+          { key: 'district', name: 'District review', approvers: { role: 'viewer', group: 'admin' } },
+          { key: 'national', name: 'National sign-off', approvers: { role: 'manager' }, condition: '${deaths} > 0' },
+        ])
+      ).status,
+    ).toBe(200);
+
+    const mine = (await api(ed).get(`/${key}/entities?type=facility&pageSize=5`)).body.items[0];
+    const answers = { malaria: 1, ili: 777, diarrhoea: 0, measles: 0, deaths: 0, outbreak: false, stockout: 0 };
+    const sub = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-05T10:00:00Z', answers });
+    expect(sub.status).toBe(201);
+    expect(sub.body).toMatchObject({ status: 'in_review', stage: 0, stageName: 'District review', stages: ['District review', 'National sign-off'], canReview: false });
+    const id = sub.body.id;
+    const series = async () => (await api(admin).get(`/${key}/entities/${mine.id}/series?element=ili_cases`)).body.map((x: { value: number }) => x.value);
+    expect(await series()).not.toContain(777); // nothing takes effect while in review
+
+    const review = (who: string, body: unknown) => api(who).post(`/${key}/submissions/${id}/review`, body);
+    expect((await review(ed, { decision: 'approve' })).status).toBe(403); // not their own
+    const inbox = (await h.call(admin, 'GET', `/tenants/${tenantId}/forms/inbox`)).body;
+    expect(inbox.toReview.find((s: { id: string }) => s.id === id)).toMatchObject({ canReview: true, project: { key } });
+    expect((await h.call(ed, 'GET', `/tenants/${tenantId}/forms/inbox`)).body.mine.map((s: { id: string }) => s.id)).toContain(id);
+
+    expect((await review(admin, { decision: 'return' })).status).toBe(400); // needs a comment
+    expect((await review(admin, { decision: 'return', comment: 'Check deaths' })).body).toMatchObject({ status: 'returned', canResubmit: false });
+    expect((await review(admin, { decision: 'approve' })).status).toBe(409);
+    const again = await api(ed).put(`/${key}/submissions/${id}`, { answers: { ...answers, deaths: 2 }, comment: 'Fixed' });
+    expect(again.body).toMatchObject({ status: 'in_review', stage: 0 });
+
+    // Deaths > 0 now, so the national stage applies after the district one.
+    expect((await review(admin, { decision: 'approve' })).body).toMatchObject({ status: 'in_review', stage: 1, stageName: 'National sign-off' });
+    const done = (await review(admin, { decision: 'approve', comment: 'OK' })).body;
+    expect(done).toMatchObject({ status: 'approved', stage: null });
+    expect(done.decidedAt).not.toBeNull();
+    expect(done.reviews.map((r: { decision: string }) => r.decision)).toEqual(['submitted', 'returned', 'resubmitted', 'approved', 'approved']);
+    expect(await series()).toContain(777);
+
+    // Without deaths the national stage is skipped; rejection is final.
+    const quiet = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-12T10:00:00Z', answers });
+    expect((await api(admin).post(`/${key}/submissions/${quiet.body.id}/review`, { decision: 'approve' })).body.status).toBe('approved');
+    const third = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-19T10:00:00Z', answers });
+    expect((await api(admin).post(`/${key}/submissions/${third.body.id}/review`, { decision: 'reject', comment: 'Duplicate' })).body.status).toBe('rejected');
+    expect((await api(admin).get(`/${key}/forms/weekly_report/submissions?status=in_review`)).body.total).toBe(0);
   });
 });
 

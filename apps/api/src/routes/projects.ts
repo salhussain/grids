@@ -18,7 +18,14 @@ import {
   FILE_MAX_BYTES,
   FileDto,
   FormDto,
+  FormGroupDto,
+  FormGroupInput,
   FormInput,
+  FormsMenuDto,
+  InboxDto,
+  ResubmitInput,
+  ReviewInput,
+  SUBMISSION_STATUSES,
   GeoQuery,
   ImportRowsInput,
   JobDto,
@@ -365,11 +372,32 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
   app.get(
     '/tenants/:tenantId/projects/:project/forms/:key/submissions',
-    { schema: { params: PK, querystring: PageQuery.extend({ entityId: z.uuid().optional() }), response: { 200: pageOf(SubmissionDto) } } },
+    { schema: { params: PK, querystring: PageQuery.extend({ entityId: z.uuid().optional(), status: z.enum(SUBMISSION_STATUSES).optional() }), response: { 200: pageOf(SubmissionDto) } } },
     (req) => s.forms.submissions(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.query),
   );
   app.get('/tenants/:tenantId/projects/:project/submissions/:id', { schema: { params: PId, response: { 200: SubmissionDto } } }, (req) =>
     s.forms.submission(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
+  );
+  app.post('/tenants/:tenantId/projects/:project/submissions/:id/review', { schema: { params: PId, body: ReviewInput, response: { 200: SubmissionDto } } }, (req) =>
+    s.forms.review(actorOf(req), req.params.tenantId, req.params.project, req.params.id, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/submissions/:id', { schema: { params: PId, body: ResubmitInput, response: { 200: SubmissionDto } } }, (req) =>
+    s.forms.resubmit(actorOf(req), req.params.tenantId, req.params.project, req.params.id, req.body),
+  );
+
+  // ----- the organisation's Forms menu and review inbox -----
+  const FormGroups = { 200: z.array(FormGroupDto) };
+  app.get('/tenants/:tenantId/forms/menu', { schema: { params: T, response: { 200: FormsMenuDto } } }, (req) => s.forms.menu(actorOf(req), req.params.tenantId));
+  app.get('/tenants/:tenantId/forms/inbox', { schema: { params: T, response: { 200: InboxDto } } }, (req) => s.forms.inbox(actorOf(req), req.params.tenantId));
+  app.get('/tenants/:tenantId/form-groups', { schema: { params: T, response: FormGroups } }, (req) => s.forms.groups(actorOf(req), req.params.tenantId));
+  app.post('/tenants/:tenantId/form-groups', { schema: { params: T, body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveGroup(actorOf(req), req.params.tenantId, req.body),
+  );
+  app.put('/tenants/:tenantId/form-groups/:id', { schema: { params: T.extend({ id: z.uuid() }), body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveGroup(actorOf(req), req.params.tenantId, req.body, req.params.id),
+  );
+  app.delete('/tenants/:tenantId/form-groups/:id', { schema: { params: T.extend({ id: z.uuid() }), response: FormGroups } }, (req) =>
+    s.forms.deleteGroup(actorOf(req), req.params.tenantId, req.params.id),
   );
 };
 
