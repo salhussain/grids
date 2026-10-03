@@ -115,7 +115,7 @@ export function FullPageSpinner() {
 export function Centered({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="chrome flex min-h-full items-center justify-center bg-chrome p-4">
-      <div className="w-full max-w-md space-y-4 border-t-4 border-accent-600 bg-snow p-8 text-sm text-zinc-600">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border-t-4 border-accent-600 bg-snow p-8 text-sm text-zinc-600">
         <Logo />
         <h1 className="pt-2 text-xl font-semibold text-ink">{title}</h1>
         {children}
@@ -131,17 +131,31 @@ export function Logo({ dark, subtitle }: { dark?: boolean; subtitle?: string }) 
   return (
     <div className="flex items-center gap-3">
       {b?.logo ? (
-        <img src={b.logo} alt="" className="size-8 shrink-0 bg-white object-contain p-0.5" />
+        <img
+          src={b.logo}
+          alt=""
+          className="size-8 shrink-0 rounded-lg bg-white object-contain p-0.5"
+        />
       ) : (
         <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-          <rect width="32" height="32" className="fill-accent-600" />
+          <rect width="32" height="32" rx="9" className="fill-accent-600" />
           <path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" />
           <path d="M17 17h7v7h-7z" fill="white" fillOpacity=".45" />
         </svg>
       )}
       <div className="leading-tight">
-        <div className={dark ? 'text-sm font-semibold tracking-[0.18em] text-white uppercase' : 'text-sm font-semibold tracking-[0.18em] text-ink uppercase'}>{b?.appName ?? 'Grids'}</div>
-        <div className={dark ? 'text-[11px] text-zinc-400' : 'text-[11px] text-zinc-500'}>{subtitle ?? t('console.shell.subtitle')}</div>
+        <div
+          className={
+            dark
+              ? 'text-sm font-semibold tracking-[0.18em] text-white uppercase'
+              : 'text-sm font-semibold tracking-[0.18em] text-ink uppercase'
+          }
+        >
+          {b?.appName ?? 'Grids'}
+        </div>
+        <div className={dark ? 'text-[11px] text-zinc-400' : 'text-[11px] text-zinc-500'}>
+          {subtitle ?? t('console.shell.subtitle')}
+        </div>
       </div>
     </div>
   );

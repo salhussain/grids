@@ -2,3 +2,64 @@
 @import '@grids/ui/theme.css';
 /* Scan the shared component package for class names. */
 @source '../../../packages/ui/src';
+
+/*
+ * Console look: the shared theme is sharp-cornered (the tenant workspace keeps it);
+ * the platform console softens every radius token, so shared components that use
+ * rounded-* pick it up here without changing the workspace.
+ */
+@theme {
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
+  --shadow-surface: 0 1px 2px rgb(16 24 40 / 0.03), 0 4px 16px -6px rgb(16 24 40 / 0.07);
+  --shadow-raised: 0 24px 48px -12px rgb(16 24 40 / 0.22), 0 6px 14px -6px rgb(16 24 40 / 0.1);
+}
+
+/* A faint brand wash behind the page so surfaces float instead of sitting flat. */
+body {
+  background-image:
+    radial-gradient(
+      60rem 28rem at 85% -8rem,
+      color-mix(in oklab, var(--brand-600) 7%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      40rem 24rem at -10% 0,
+      color-mix(in oklab, var(--brand-600) 4%, transparent),
+      transparent
+    );
+  background-repeat: no-repeat;
+}
+
+:where(.border.bg-snow) {
+  border-color: color-mix(in oklab, var(--color-zinc-200) 80%, transparent);
+}
+
+/* Rows lift softly, buttons and links share one easing. */
+tbody > tr {
+  transition: background-color 120ms ease;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
