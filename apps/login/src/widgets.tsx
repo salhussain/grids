@@ -150,7 +150,7 @@ export function ErrorBanner({ error }: { error: unknown }) {
 export function Notice({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'success' }) {
   const Icon = tone === 'success' ? Check : Info;
   return (
-    <div role="status" className={cx('flex gap-2.5 border-s-4 px-3.5 py-3 text-sm', tone === 'success' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-accent-600 bg-accent-50 text-accent-800')}>
+    <div role="status" className="flex gap-2.5 border-s-4 border-accent-600 bg-accent-50 px-3.5 py-3 text-sm text-accent-800">
       <Icon className="mt-px size-4 shrink-0" />
       <span>{children}</span>
     </div>

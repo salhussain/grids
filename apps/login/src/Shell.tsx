@@ -1,8 +1,10 @@
 import { applyColorMode, cx, storedColorMode, type ColorMode } from '@grids/ui';
-import { BarChart3, ClipboardList, Globe, Monitor, Moon, Sun, Workflow } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { LocaleCode } from '@grids/i18n';
+import { Check, ChevronDown, Moon, Sun } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Branding } from './api';
 import { applyBrand } from './brand';
+import { Flag } from './flags';
 import { isDraft, useI18n, useT } from './i18n';
 
 /** The Grids mark: four squares. */
@@ -20,171 +22,253 @@ function OrgMark({ org, className }: { org: Branding | null; className?: string 
   return <GridsMark className={className} />;
 }
 
-/** Decorative animated grid in the brand colour. Deterministic so it never reflows. */
-function GridArt() {
-  const COLS = 24;
-  const ROWS = 18;
-  const SIZE = 20;
-  const cells = Array.from({ length: COLS * ROWS }, (_, i) => i).filter((i) => (i * 7919) % 23 < 2);
-  return (
-    <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" viewBox={`0 0 ${COLS * SIZE} ${ROWS * SIZE}`} aria-hidden>
-      <defs>
-        <pattern id="g" width={SIZE} height={SIZE} patternUnits="userSpaceOnUse">
-          <path d={`M${SIZE} 0H0v${SIZE}`} fill="none" stroke="white" strokeOpacity="0.05" strokeWidth="0.5" />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#g)" />
-      {cells.map((i) => (
-        <rect
-          key={i}
-          className="grid-cell fill-accent-500"
-          x={(i % COLS) * SIZE + 0.5}
-          y={Math.floor(i / COLS) * SIZE + 0.5}
-          width={SIZE - 1}
-          height={SIZE - 1}
-          style={{ animationDelay: `${((i * 0.61) % 9).toFixed(2)}s` }}
-        />
-      ))}
-    </svg>
-  );
+/**
+ * Full-page backdrop: a faint grid where cells in the brand colour fade in, hold
+ * and fade out at random. Reads the brand and theme from CSS each frame, so it
+ * follows tenant colours and the light/dark toggle without re-mounting.
+ */
+function GridBackground() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current!;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const root = document.documentElement;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const SIZE = 44;
+    let cols = 0;
+    let rows = 0;
+    type Cell = { c: number; r: number; t0: number; dur: number; peak: number };
+    let lit: Cell[] = [];
+    const rand = (a: number, b: number) => a + Math.random() * (b - a);
+    const spawn = (now: number, initial: boolean): Cell => ({
+      c: Math.floor(Math.random() * cols),
+      r: Math.floor(Math.random() * rows),
+      t0: now + (initial ? rand(-6000, 4000) : rand(0, 2500)),
+      dur: rand(4000, 8000),
+      peak: rand(0.35, 1),
+    });
+    const resize = () => {
+      const { width, height } = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      cols = Math.ceil(width / SIZE) + 1;
+      rows = Math.ceil(height / SIZE) + 1;
+      const now = performance.now();
+      lit = Array.from({ length: Math.round(cols * rows * 0.07) }, () => spawn(now, true));
+    };
+    const draw = (now: number) => {
+      const dpr = window.devicePixelRatio || 1;
+      const dark = root.getAttribute('data-theme') === 'dark';
+      const s = SIZE * dpr;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.05)' : 'rgba(22,22,22,0.06)';
+      ctx.lineWidth = dpr;
+      ctx.beginPath();
+      for (let c = 0; c <= cols; c++) {
+        ctx.moveTo(c * s + 0.5, 0);
+        ctx.lineTo(c * s + 0.5, canvas.height);
+      }
+      for (let r = 0; r <= rows; r++) {
+        ctx.moveTo(0, r * s + 0.5);
+        ctx.lineTo(canvas.width, r * s + 0.5);
+      }
+      ctx.stroke();
+      const max = dark ? 0.32 : 0.22;
+      ctx.fillStyle = getComputedStyle(root).getPropertyValue('--brand-600').trim() || '#0f62fe';
+      lit.forEach((cell, i) => {
+        const p = reduce ? 0.5 : (now - cell.t0) / cell.dur;
+        if (p >= 1) return void (lit[i] = spawn(now, false));
+        if (p <= 0) return;
+        ctx.globalAlpha = Math.sin(p * Math.PI) ** 2 * cell.peak * max;
+        ctx.fillRect(cell.c * s + 2 * dpr, cell.r * s + 2 * dpr, s - 3 * dpr, s - 3 * dpr);
+      });
+      ctx.globalAlpha = 1;
+    };
+
+    let frame = 0;
+    const loop = (now: number) => {
+      draw(now);
+      frame = requestAnimationFrame(loop);
+    };
+    resize();
+    const onResize = () => (resize(), draw(performance.now()));
+    window.addEventListener('resize', onResize);
+    // With reduced motion the cells stay still; redraw only when the theme or brand changes.
+    const observer = new MutationObserver(() => draw(performance.now()));
+    if (reduce) {
+      draw(performance.now());
+      observer.observe(root, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+    } else frame = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+  return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />;
 }
 
-/** Left half on large screens: who you are signing in to. */
-function BrandPanel({ org }: { org: Branding | null }) {
-  const t = useT();
-  const name = org ? org.appName || org.name : 'Grids';
-  const points = [
-    { icon: ClipboardList, text: t('auth.brand.points.collect') },
-    { icon: Workflow, text: t('auth.brand.points.automate') },
-    { icon: BarChart3, text: t('auth.brand.points.insight') },
-  ];
-  return (
-    <aside className="chrome relative hidden overflow-hidden bg-chrome text-white lg:flex lg:w-[44%] lg:max-w-[640px] lg:flex-col">
-      <GridArt />
-      <div className="absolute inset-0 bg-gradient-to-t from-chrome via-chrome/80 to-chrome/30" />
-      <div className="relative flex h-full flex-col p-10 xl:p-14">
-        <div className="flex items-center gap-3">
-          <OrgMark org={org} className="size-9" />
-          <span className="text-lg font-semibold tracking-tight">{name}</span>
-        </div>
-        <div className="mt-auto max-w-md">
-          <h2 className="text-[34px] leading-[1.15] font-semibold tracking-tight">{org?.welcomeMessage || t('auth.brand.headline')}</h2>
-          <ul className="mt-8 space-y-4">
-            {points.map((p) => (
-              <li key={p.text} className="flex items-start gap-3 text-[15px] text-zinc-300">
-                <span className="flex size-8 shrink-0 items-center justify-center border border-white/15 bg-white/5">
-                  <p.icon className="size-4 text-accent-500" />
-                </span>
-                <span className="pt-1">{p.text}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        {org && (
-          <div className="mt-12 flex items-center gap-2 text-xs text-zinc-500">
-            <GridsMark className="size-4" /> {t('common.poweredBy')}
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
-
+/** Language menu: flag and native name for each language the organisation offers. */
 function LanguagePicker() {
   const { locale, available, setLocale, t } = useI18n();
-  if (available.length < 2) return null;
-  return (
-    <label className="relative flex items-center">
-      <span className="sr-only">{t('common.language')}</span>
-      <Globe className="pointer-events-none absolute start-2.5 size-4 text-zinc-500" />
-      <select
-        value={locale}
-        onChange={(e) => setLocale(e.target.value as typeof locale)}
-        className="h-9 appearance-none border border-zinc-300 bg-snow ps-8 pe-3 text-sm text-ink hover:border-zinc-500 focus:outline-2 focus:outline-accent-600"
-      >
-        {available.map((l) => (
-          <option key={l.code} value={l.code}>
-            {l.nativeName}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
 
-function ModePicker() {
-  const t = useT();
-  const [mode, setMode] = useState<ColorMode>(storedColorMode);
-  useEffect(() => applyColorMode(mode), [mode]);
-  const opts = [
-    { v: 'light', icon: Sun, label: t('common.light') },
-    { v: 'dark', icon: Moon, label: t('common.dark') },
-    { v: 'system', icon: Monitor, label: t('common.system') },
-  ] as const;
+  useEffect(() => {
+    if (!open) return;
+    setActive(Math.max(0, available.findIndex((l) => l.code === locale)));
+    list.current?.focus();
+    const onDown = (e: MouseEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  if (available.length < 2) return null;
+  const current = available.find((l) => l.code === locale) ?? available[0]!;
+  const close = () => (setOpen(false), button.current?.focus());
+  const choose = (code: LocaleCode) => (setLocale(code), close());
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown') setActive((i) => (i + 1) % available.length);
+    else if (e.key === 'ArrowUp') setActive((i) => (i - 1 + available.length) % available.length);
+    else if (e.key === 'Home') setActive(0);
+    else if (e.key === 'End') setActive(available.length - 1);
+    else if (e.key === 'Enter' || e.key === ' ') choose(available[active]!.code);
+    else if (e.key === 'Escape' || e.key === 'Tab') return close();
+    else return;
+    e.preventDefault();
+  };
+
   return (
-    <div role="radiogroup" aria-label={t('common.appearance')} className="flex border border-zinc-300 bg-snow">
-      {opts.map((o) => (
-        <button
-          key={o.v}
-          type="button"
-          role="radio"
-          aria-checked={mode === o.v}
-          title={o.label}
-          aria-label={o.label}
-          onClick={() => setMode(o.v)}
-          className={cx(
-            'flex size-[34px] items-center justify-center transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-600',
-            mode === o.v ? 'bg-ink text-canvas' : 'text-zinc-500 hover:text-ink',
-          )}
+    <div ref={wrap} className="relative">
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${t('common.language')}: ${current.nativeName}`}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-9 items-center gap-2 border border-zinc-300 bg-snow px-2.5 text-sm text-ink hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-accent-600"
+      >
+        <Flag code={current.code} />
+        <span>{current.nativeName}</span>
+        <ChevronDown className={cx('size-3.5 text-zinc-500 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul
+          ref={list}
+          role="listbox"
+          tabIndex={-1}
+          aria-label={t('common.language')}
+          aria-activedescendant={`lang-${available[active]?.code}`}
+          onKeyDown={onKey}
+          className="absolute end-0 top-full z-20 mt-1 min-w-56 border border-zinc-300 bg-snow py-1 whitespace-nowrap shadow-lg focus:outline-none"
         >
-          <o.icon className="size-4" />
-        </button>
-      ))}
+          {available.map((l, i) => (
+            <li
+              key={l.code}
+              id={`lang-${l.code}`}
+              role="option"
+              lang={l.code}
+              aria-selected={l.code === locale}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => choose(l.code)}
+              className={cx('flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-ink', i === active && 'bg-zinc-100', l.code === locale && 'font-semibold')}
+            >
+              <Flag code={l.code} />
+              <span>{l.nativeName}</span>
+              {isDraft(l.code) && <span className="font-mono text-[10px] tracking-wide text-amber-700 uppercase">{t('common.draftTranslation')}</span>}
+              <Check className={cx('ms-auto size-3.5 text-accent-700', l.code !== locale && 'invisible')} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-/** Split-screen frame shared by every page of the login app. */
+/**
+ * Light/dark toggle. Follows the operating system until clicked, and always shows
+ * the mode it switches to; picking the system's own mode goes back to following it.
+ */
+function ThemeToggle() {
+  const t = useT();
+  const [mode, setMode] = useState<ColorMode>(storedColorMode);
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  const [systemDark, setSystemDark] = useState(media.matches);
+  useEffect(() => applyColorMode(mode), [mode]);
+  useEffect(() => {
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  const dark = mode === 'system' ? systemDark : mode === 'dark';
+  const label = `${t('common.appearance')}: ${dark ? t('common.light') : t('common.dark')}`;
+  const icon = 'absolute size-[17px] transition-[opacity,transform] duration-[400ms] motion-reduce:transition-none';
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={() => setMode(dark === systemDark ? (dark ? 'light' : 'dark') : 'system')}
+      className="relative flex size-9 items-center justify-center border border-zinc-300 bg-snow text-ink hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-accent-600"
+    >
+      <Sun className={cx(icon, dark ? 'scale-100 rotate-0 opacity-100' : 'scale-60 -rotate-90 opacity-0')} />
+      <Moon className={cx(icon, dark ? 'scale-60 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100')} />
+    </button>
+  );
+}
+
+/** Frame shared by every page of the login app: one card centred over the grid. */
 export function Shell({ org, children }: { org: Branding | null; children: ReactNode }) {
   const { locale, t } = useI18n();
+  const name = org ? org.appName || org.name : 'Grids';
   useEffect(() => applyBrand(org?.primaryColor), [org?.primaryColor]);
   useEffect(() => {
-    document.title = `${t('auth.signIn.title')} · ${org ? org.appName || org.name : 'Grids'}`;
-  }, [org, t]);
+    document.title = `${t('auth.signIn.title')} · ${name}`;
+  }, [name, t]);
   return (
-    <div className="flex min-h-full bg-canvas">
-      <BrandPanel org={org} />
-      <div className="flex min-w-0 flex-1 flex-col bg-snow">
-        <header className="flex items-center justify-between gap-3 px-5 py-4 sm:px-8">
-          <div className="flex min-w-0 items-center gap-2.5 lg:invisible">
-            <OrgMark org={org} className="size-7" />
-            <span className="truncate font-semibold tracking-tight text-ink">{org ? org.appName || org.name : 'Grids'}</span>
+    <div className="relative flex min-h-full flex-col overflow-hidden bg-canvas">
+      <GridBackground />
+      <header className="relative z-10 flex justify-end gap-2 p-4">
+        <LanguagePicker />
+        <ThemeToggle />
+      </header>
+      <main className="relative flex flex-1 items-center justify-center px-4 pt-2 pb-8">
+        <div className="w-full max-w-[420px] border border-zinc-200 bg-snow px-[22px] pt-8 pb-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.18)] sm:px-9 sm:pt-10 sm:pb-9">
+          <div className="mb-8 flex items-center gap-2.5">
+            <OrgMark org={org} className="size-[30px]" />
+            <span className="truncate font-semibold tracking-tight text-ink">{name}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <LanguagePicker />
-            <ModePicker />
-          </div>
-        </header>
-        <main className="flex flex-1 items-start justify-center px-5 pt-6 pb-12 sm:items-center sm:px-8 sm:pt-0">
-          <div className="w-full max-w-[400px]">{children}</div>
-        </main>
-        <footer className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs text-zinc-500 sm:px-8">
-          <span>© {new Date().getFullYear()} {org?.name ?? 'Grids'}</span>
-          <span className="flex items-center gap-4">
-            {isDraft(locale) && (
-              <span className="border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800" title={t('common.draftTranslation')}>
-                {t('common.draftTranslation')}
-              </span>
-            )}
-            <a href="#" className="hover:text-ink">
-              {t('common.privacy')}
-            </a>
-            <a href="#" className="hover:text-ink">
-              {t('common.terms')}
-            </a>
+          {children}
+        </div>
+      </main>
+      <footer className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 p-4 text-xs text-zinc-500">
+        <span>
+          © {new Date().getFullYear()} {org?.name ?? 'Grids'}
+        </span>
+        {org && (
+          <span className="flex items-center gap-1.5">
+            <GridsMark className="size-3.5" /> {t('common.poweredBy')}
           </span>
-        </footer>
-      </div>
+        )}
+        {isDraft(locale) && (
+          <span className="border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800" title={t('common.draftTranslation')}>
+            {t('common.draftTranslation')}
+          </span>
+        )}
+        <a href="#" className="hover:text-ink">
+          {t('common.privacy')}
+        </a>
+        <a href="#" className="hover:text-ink">
+          {t('common.terms')}
+        </a>
+      </footer>
     </div>
   );
 }
