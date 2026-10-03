@@ -12,6 +12,11 @@ export const OVERLAY_PALETTES = ['performance', 'heat', 'blues', 'greens', 'purp
 export const OverlayPalette = z.enum(OVERLAY_PALETTES);
 export type OverlayPalette = z.infer<typeof OverlayPalette>;
 
+/** How an overlay's values are drawn: shaded areas, 3D columns, sized bubbles or a heatmap. */
+export const OVERLAY_DISPLAYS = ['shade', 'extrude', 'bubbles', 'heatmap'] as const;
+export const OverlayDisplay = z.enum(OVERLAY_DISPLAYS);
+export type OverlayDisplay = z.infer<typeof OverlayDisplay>;
+
 export const MapOverlayInput = z.object({
   key: Key,
   name: z.string().trim().min(1).max(120),
@@ -25,6 +30,7 @@ export const MapOverlayInput = z.object({
   /** Entity type to show; null = the children of the selected place. */
   level: Key.nullable().default(null),
   palette: OverlayPalette.default('heat'),
+  display: OverlayDisplay.default('shade'),
   /** Class breaks (ascending); none = a continuous scale from the data's min to max. */
   thresholds: z.array(z.number()).max(8).default([]),
   /** Higher is better (flips the performance palette). */

@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { MapOverlayInput} from '@grids/schema';
-import { AGGREGATIONS, OVERLAY_PALETTES, type MapOverlayDto } from '@grids/schema';
+import { AGGREGATIONS, OVERLAY_DISPLAYS, OVERLAY_PALETTES, type MapOverlayDto, type OverlayDisplay } from '@grids/schema';
 import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { Globe, Layers, Map as MapIcon, Pencil, Plus } from 'lucide-react';
+import { Box, CircleDot, Flame, Globe, Layers, Map as MapIcon, Pencil, Plus, SquareStack } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { z } from 'zod';
 import { api } from '../../api';
@@ -19,6 +19,12 @@ const WINDOWS: [number | null, string][] = [
   [24 * 365, 'Last 12 months'],
 ];
 const AGG_LABEL: Record<string, string> = { sum: 'Sum', avg: 'Average', min: 'Minimum', max: 'Maximum', count: 'Number of reports', distinct: 'Places reporting', last: 'Latest value' };
+const DISPLAY_INFO: Record<OverlayDisplay, { label: string; hint: string; icon: typeof Box }> = {
+  shade: { label: 'Shaded areas', hint: 'Colour each place', icon: SquareStack },
+  extrude: { label: '3D columns', hint: 'Height by value', icon: Box },
+  bubbles: { label: 'Bubbles', hint: 'Size by value', icon: CircleDot },
+  heatmap: { label: 'Heatmap', hint: 'Hotspots of many points', icon: Flame },
+};
 const windowLabel = (h: number | null) => WINDOWS.find(([w]) => w === h)?.[1] ?? `Last ${h} hours`;
 
 /** Studio: the map overlays offered on the project's explorer. */
@@ -109,7 +115,7 @@ function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | 
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
   const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
   const [f, setF] = useState<z.input<typeof MapOverlayInput>>(
-    overlay ?? { key: '', name: '', group: groups[0] ?? 'General', element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
+    overlay ?? { key: '', name: '', group: groups[0] ?? 'General', element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', display: 'shade', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
   );
   const [breaks, setBreaks] = useState((overlay?.thresholds ?? []).join(', '));
   const parsedBreaks = breaks.trim() ? breaks.split(/[,\s]+/).filter(Boolean).map(Number) : [];
@@ -211,6 +217,28 @@ function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | 
             <Input type="number" min={0} max={6} value={f.decimals} onChange={(e) => set({ decimals: Number(e.target.value) })} />
           </Field>
         </div>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">Style</legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {OVERLAY_DISPLAYS.map((d) => {
+              const Icon = DISPLAY_INFO[d].icon;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => set({ display: d })}
+                  aria-pressed={(f.display ?? 'shade') === d}
+                  className={cx('flex flex-col items-start gap-1.5 rounded-xl border p-3 text-start', (f.display ?? 'shade') === d ? 'border-accent-600 bg-accent-50 ring-1 ring-accent-600' : 'border-zinc-300 hover:border-zinc-400')}
+                >
+                  <Icon className="size-5 text-accent-600" />
+                  <span className="text-sm font-medium">{DISPLAY_INFO[d].label}</span>
+                  <span className="text-xs text-zinc-500">{DISPLAY_INFO[d].hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Colour scale</legend>

@@ -53,13 +53,15 @@ export interface ExplorerProps {
   live?: ReactNode;
   /** Brand colour (outlines, accents). */
   accent: string;
+  /** The organisation's basemap style URLs. */
+  mapStyles?: { light: string | null; dark: string | null };
 }
 
 /**
  * The map-first project explorer (spec §9). The map fills the screen; layers,
  * the place trail and the place's dashboards float over it as glass cards.
  */
-export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays, live, accent }: ExplorerProps) {
+export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays, live, accent, mapStyles }: ExplorerProps) {
   const scheme = useScheme();
   const [search, setSearch] = useExplorerSearch();
   const entity = search.entity ?? null;
@@ -105,8 +107,10 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
         colorOf={colorOf}
         detailOf={detailOf}
         onSelect={(p) => go(p.id)}
+        display={overlay?.display}
         basemap={basemap}
         scheme={scheme}
+        styles={mapStyles}
         accent={accent}
         padding={{ top: 96, right: right + 24, bottom: 96, left: 360 }}
       />

@@ -39,6 +39,7 @@ export function PublicProjectPage() {
       source={source}
       title={v.project.name}
       accent={v.tenant.primaryColor}
+      mapStyles={v.tenant.mapStyles}
       subtitle={v.tenant.name}
       logo={
         v.tenant.logo ? (

@@ -202,10 +202,10 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
 
   const month = 24 * 28;
   await overlay(tx, c, { key: 'ili_4w', name: 'Influenza-like illness (4 weeks)', group: 'Disease surveillance', element: 'ili_cases', hours: month, palette: 'heat' });
-  await overlay(tx, c, { key: 'malaria_4w', name: 'Malaria cases (4 weeks)', group: 'Disease surveillance', element: 'malaria_cases', hours: month, palette: 'purples' });
+  await overlay(tx, c, { key: 'malaria_4w', name: 'Malaria cases (4 weeks)', group: 'Disease surveillance', element: 'malaria_cases', hours: month, palette: 'purples', display: 'bubbles' });
   await overlay(tx, c, { key: 'diarrhoea_4w', name: 'Acute diarrhoea (4 weeks)', group: 'Disease surveillance', element: 'diarrhoea_cases', hours: month, palette: 'blues' });
   await overlay(tx, c, { key: 'measles_12w', name: 'Suspected measles (12 weeks)', group: 'Disease surveillance', element: 'measles_suspected', hours: week * 12, palette: 'reds', thresholds: [1, 3, 6] });
-  await overlay(tx, c, { key: 'ili_facilities', name: 'ILI by facility (latest report)', group: 'Disease surveillance', element: 'ili_cases', hours: null, level: 'facility', palette: 'heat', thresholds: [5, 12, 25] });
+  await overlay(tx, c, { key: 'ili_facilities', name: 'ILI by facility (latest report)', group: 'Disease surveillance', element: 'ili_cases', hours: null, level: 'facility', palette: 'heat', thresholds: [5, 12, 25], display: 'heatmap' });
   await overlay(tx, c, { key: 'stockouts_4w', name: 'Stock-out days (4 weeks)', group: 'Health system', element: 'stockout_days', hours: month, palette: 'performance', thresholds: [1, 5, 10], unit: 'days' });
-  await overlay(tx, c, { key: 'deaths_12w', name: 'Deaths, all causes (12 weeks)', group: 'Health system', element: 'deaths', hours: week * 12, palette: 'greens' });
+  await overlay(tx, c, { key: 'deaths_12w', name: 'Deaths, all causes (12 weeks)', group: 'Health system', element: 'deaths', hours: week * 12, palette: 'greens', display: 'extrude' });
 }

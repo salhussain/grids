@@ -21,6 +21,7 @@ export function ProjectExplorer() {
       source={source}
       title={project.name}
       accent={ws.theme.primaryColor}
+      mapStyles={ws.theme.mapStyles}
       subtitle={ws.theme.appName || ws.tenant.name}
       logo={<BrandMark className="size-9" />}
       live={<LiveIndicator status={live} />}

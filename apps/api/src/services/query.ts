@@ -443,7 +443,7 @@ export class QueryService {
       ]),
     );
     return {
-      tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor },
+      tenant: { name: tenant.name, slug: tenant.slug, logo: theme.logo, primaryColor: theme.primaryColor, mapStyles: theme.mapStyles },
       project: { key: project.key, name: project.name, description: project.description, color: project.color },
       // Anonymous viewers have no permission group: only unrestricted widgets.
       dashboards: dashboards.map((d) => this.toDashboard(d)).map((d) => ({ ...d, widgets: d.widgets.filter((w) => !w.permissionGroup) })),

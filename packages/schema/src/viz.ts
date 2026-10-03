@@ -200,7 +200,13 @@ export type DashboardDto = z.infer<typeof DashboardDto>;
 
 /** Anonymous view of a public project. */
 export const PublicProjectDto = z.object({
-  tenant: z.object({ name: z.string(), slug: z.string(), logo: z.string().nullable(), primaryColor: z.string() }),
+  tenant: z.object({
+    name: z.string(),
+    slug: z.string(),
+    logo: z.string().nullable(),
+    primaryColor: z.string(),
+    mapStyles: z.object({ light: z.string().nullable(), dark: z.string().nullable() }).default({ light: null, dark: null }),
+  }),
   project: z.object({ key: z.string(), name: z.string(), description: z.string(), color: z.string() }),
   dashboards: z.array(DashboardDto),
   /** Data element names, for chart legends. */
