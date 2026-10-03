@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PageQuery, Slug } from '../common.js';
-import { Currency, PlanLimits, LimitKey, UsageItem } from './plans.js';
+import { Currency, PlanLimits, UsageItem } from './plans.js';
 import { SubscriptionDto } from './billing.js';
 import { DomainDto } from './domains.js';
 

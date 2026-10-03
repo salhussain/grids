@@ -51,8 +51,9 @@ const asRows = (v: unknown): Row[] => {
   return list.map((x) => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Row) : { value: x }));
 };
 
-/** Minimal CSV (RFC 4180 quotes) for http.extract of text/csv. */
-export function parseCsv(text: string): Row[] {
+/** Minimal CSV (RFC 4180 quotes) for text/csv responses and uploaded files. */
+export function parseCsv(input: string, delimiter = ','): Row[] {
+  const text = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
   const rows: string[][] = [];
   let cur: string[] = [];
   let field = '';
@@ -66,7 +67,7 @@ export function parseCsv(text: string): Row[] {
       } else if (c === '"') q = false;
       else field += c;
     } else if (c === '"') q = true;
-    else if (c === ',') {
+    else if (c === delimiter) {
       cur.push(field);
       field = '';
     } else if (c === '\n' || c === '\r') {
@@ -84,6 +85,40 @@ export function parseCsv(text: string): Row[] {
   const [head, ...body] = rows.filter((r) => r.some((x) => x !== ''));
   if (!head) return [];
   return body.map((r) => Object.fromEntries(head.map((h, i) => [h.trim(), r[i] ?? ''])));
+}
+
+/** The separator that splits the header line into the most fields. */
+export function detectDelimiter(text: string): string {
+  const head = text.slice(0, text.search(/\r?\n|$/));
+  let best = ',';
+  let most = 0;
+  for (const d of [',', ';', '\t', '|']) {
+    const n = head.split(d).length;
+    if (n > most) [best, most] = [d, n];
+  }
+  return best;
+}
+
+/** Parses an uploaded file's text as CSV, JSON or newline-delimited JSON. */
+export function parseFile(text: string, format: 'auto' | 'csv' | 'json' | 'ndjson', hint: { name: string; contentType: string }, delimiter?: string): { kind: 'csv' | 'json' | 'ndjson'; body: unknown } {
+  const name = hint.name.toLowerCase();
+  const kind =
+    format !== 'auto'
+      ? format
+      : /\.(ndjson|jsonl)$/.test(name) || hint.contentType.includes('ndjson')
+        ? 'ndjson'
+        : name.endsWith('.json') || hint.contentType.includes('json')
+          ? 'json'
+          : 'csv';
+  if (kind === 'csv') return { kind, body: parseCsv(text, delimiter ?? detectDelimiter(text)) };
+  if (kind === 'json') return { kind, body: JSON.parse(text) };
+  return {
+    kind,
+    body: text
+      .split(/\r?\n/)
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l)),
+  };
 }
 
 /** Runs a job's steps in order inside the tenant transaction; returns run statistics. */
@@ -120,6 +155,27 @@ export async function executeSteps(tx: CellTx, steps: JobStep[], ctx: EngineCont
         rows = asRows(step.rows ? await evalOn(compile(step.rows, sid), body, ctx) : body);
         add('rows_fetched', rows.length);
         await ctx.log('info', sid, `Fetched ${rows.length} rows from ${new URL(step.url).host} in ${Date.now() - started} ms`);
+        break;
+      }
+      case 'file.parse': {
+        const f = await tx
+          .selectFrom('project_file')
+          .select(['name', 'content_type', 'content', 'uploaded_at'])
+          .where('project_id', '=', ctx.projectId)
+          .where('key', '=', step.file)
+          .orderBy('uploaded_at', 'desc')
+          .limit(1)
+          .executeTakeFirst();
+        if (!f) throw new StepError(sid, `no file has been uploaded as "${step.file}"`);
+        let parsed;
+        try {
+          parsed = parseFile(f.content.toString('utf8'), step.format, { name: f.name, contentType: f.content_type }, step.delimiter);
+        } catch (e) {
+          throw new StepError(sid, `${f.name} could not be parsed: ${(e as Error).message}`);
+        }
+        rows = asRows(step.rows ? await evalOn(compile(step.rows, sid), parsed.body, ctx) : parsed.body);
+        add('rows_parsed', rows.length);
+        await ctx.log('info', sid, `Parsed ${rows.length} rows from ${f.name} (${parsed.kind}, uploaded ${f.uploaded_at.toISOString()})`);
         break;
       }
       case 'transform': {

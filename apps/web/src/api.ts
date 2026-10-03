@@ -105,6 +105,11 @@ export const api = {
     request<Page<S.RunDto>>('GET', `${t(id)}/projects/${p}/runs${qs(query)}`),
   run: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('GET', `${t(id)}/projects/${p}/runs/${runId}`),
+  files: (id: string, p: string) => request<S.FileDto[]>('GET', `${t(id)}/projects/${p}/files`),
+  uploadFile: (id: string, p: string, key: string, file: File) =>
+    request<S.UploadResult>('PUT', `${t(id)}/projects/${p}/files/${key}${qs({ name: file.name, type: file.type || undefined })}`, file),
+  deleteFile: (id: string, p: string, key: string) => request<S.FileDto[]>('DELETE', `${t(id)}/projects/${p}/files/${key}`),
+  rerun: (id: string, p: string, runId: string) => request<S.RunDto>('POST', `${t(id)}/projects/${p}/runs/${runId}/rerun`),
   cancelRun: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('POST', `${t(id)}/projects/${p}/runs/${runId}/cancel`),
   datasets: (id: string, p: string) => request<S.DatasetDto[]>('GET', `${t(id)}/projects/${p}/datasets`),
@@ -128,13 +133,15 @@ export const api = {
   // public (no sign-in)
   publicProject: (tenant: string, project: string) =>
     request<S.PublicProjectDto>('GET', `/public/projects/${tenant}/${project}`, undefined, { anonymous: true }),
-  publicWidget: (tenant: string, project: string, dashboard: string, widget: string) =>
+  publicWidget: (tenant: string, project: string, dashboard: string, widget: string, params: S.DashboardParams = {}) =>
     request<S.QueryResult>(
       'GET',
-      `/public/projects/${tenant}/${project}/dashboards/${dashboard}/widgets/${widget}`,
+      `/public/projects/${tenant}/${project}/dashboards/${dashboard}/widgets/${widget}${qs(params)}`,
       undefined,
       { anonymous: true },
     ),
+  publicAreas: (tenant: string, project: string, dashboard: string) =>
+    request<{ id: string; name: string }[]>('GET', `/public/projects/${tenant}/${project}/dashboards/${dashboard}/areas`, undefined, { anonymous: true }),
 
   // billing (organisation self-service)
   billing: (id: string) => request<OrgBillingDto>('GET', `${t(id)}/billing`),

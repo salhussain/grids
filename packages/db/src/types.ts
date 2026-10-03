@@ -412,6 +412,7 @@ export interface CellDB {
     max_retries: Generated<number>;
     timeout_seconds: Generated<number>;
     freshness_minutes: number | null;
+    run_on_upload: Generated<boolean>;
     created_at: CreatedAt;
     updated_at: Timestamp;
   };
@@ -474,6 +475,19 @@ export interface CellDB {
     dataset_id: string;
     data: Json<Record<string, unknown>>;
   };
+  project_file: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    content_type: string;
+    size: number;
+    sha256: string;
+    content: Buffer;
+    uploaded_by: string | null;
+    uploaded_at: Generated<Date>;
+  };
 
   // ---------- dashboards (M5) & forms (M6) ----------
   dashboard: {
@@ -485,6 +499,7 @@ export interface CellDB {
     description: Generated<string>;
     widgets: JsonDefault<unknown[]>;
     is_public: Generated<boolean>;
+    filters: JsonDefault<Record<string, unknown>>;
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;

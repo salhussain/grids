@@ -171,6 +171,7 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
     key: 'overview',
     name: 'Surveillance overview',
     description: 'This week’s reports, trends and hotspots across all facilities.',
+    filters: { areaType: 'province' },
     widgets: [
       { id: 'malaria', type: 'kpi', title: 'Malaria cases (7 days)', w: 3, h: 1, options: { invert: true }, query: { kind: 'kpi', element: 'malaria_cases', range: { lastHours: week }, compare: true } },
       { id: 'ili', type: 'kpi', title: 'Influenza-like illness (7 days)', w: 3, h: 1, options: { invert: true, warn: 150, alert: 220 }, query: { kind: 'kpi', element: 'ili_cases', range: { lastHours: week }, compare: true } },

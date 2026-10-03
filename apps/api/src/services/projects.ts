@@ -4,7 +4,6 @@ import {
   DataError,
   entityType,
   freshness,
-  label,
   moveEntity,
   upsertEntities,
   worstFreshness,
@@ -152,6 +151,16 @@ export class ProjectService {
       if (!roleAtLeast(role, need)) throw forbidden(`Requires the project ${need} role.`);
       return { project: p as ProjectRow, role, rootPath };
     });
+  }
+
+  /** Display names (or emails) of users, by id. */
+  async userNames(ids: (string | null)[]): Promise<Map<string, string | null>> {
+    const list = [...new Set(ids.filter((x): x is string => !!x))];
+    return new Map(
+      list.length
+        ? (await this.ctx.db.selectFrom('user_identity').select(['id', 'display_name', 'email']).where('id', 'in', list).execute()).map((u) => [u.id, u.display_name ?? u.email])
+        : [],
+    );
   }
 
   private async planLimits(tenantId: string): Promise<PlanLimits> {

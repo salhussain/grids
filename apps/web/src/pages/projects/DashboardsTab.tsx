@@ -3,6 +3,8 @@ import { useNavigate } from '@tanstack/react-router';
 import {
   AGGREGATIONS,
   WIDGET_TYPES,
+  applyParams,
+  type DashboardParams,
   type DashboardDto,
   type QuerySpecInput,
   type Widget,
@@ -13,6 +15,7 @@ import { ArrowDown, ArrowUp, BarChart3, Pencil, Plus, Trash2 } from 'lucide-reac
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
+import { DashboardFilterBar } from '../../viz/DashboardFilters';
 import { WidgetView } from '../../viz/WidgetView';
 import { useElementNames, useProject } from './context';
 
@@ -31,11 +34,20 @@ export function DashboardsTab() {
   const [newOpen, setNewOpen] = useState(false);
 
   const current = list.data?.find((d) => d.key === selected) ?? list.data?.[0] ?? null;
+  const [params, setParams] = useState<DashboardParams>({});
+  useEffect(() => setParams({}), [current?.key]);
+  const areaType = current?.filters.areaType ?? null;
+  const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key), enabled: !!areaType || editing });
+  const areas = useQuery({
+    queryKey: ['areas', tenantId, project.key, areaType],
+    queryFn: async () => (await api.entities(tenantId, project.key, { type: areaType!, pageSize: 200 })).items.map((e) => ({ id: e.id, name: e.name })),
+    enabled: !!areaType,
+  });
   useEffect(() => setDraft(current && editing ? structuredClone(current) : null), [current?.key, editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useMutation({
     mutationFn: (d: DashboardDto) =>
-      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic }, d.key),
+      api.saveDashboard(tenantId, project.key, { key: d.key, name: d.name, description: d.description, widgets: d.widgets, isPublic: d.isPublic, filters: d.filters }, d.key),
     onSuccess: (data) => {
       qc.setQueryData(['dashboards', tenantId, project.key], data);
       setEditing(false);
@@ -137,9 +149,36 @@ export function DashboardsTab() {
             checked={draft.isPublic}
             onChange={(v: boolean) => setDraft({ ...draft, isPublic: v })}
           />
+          <Field label="Area filter" hint="Viewers pick one; every widget shows only its subtree">
+            <Select value={draft.filters.areaType ?? ''} onChange={(e) => setDraft({ ...draft, filters: { ...draft.filters, areaType: e.target.value || null } })}>
+              <option value="">None</option>
+              {types.data?.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <SwitchField
+            label="Period filter"
+            description="Viewers choose the time window of charts and KPIs"
+            checked={draft.filters.period}
+            onChange={(v: boolean) => setDraft({ ...draft, filters: { ...draft.filters, period: v } })}
+          />
         </div>
       )}
-      {!editing && current.description && <p className="text-sm text-zinc-600">{current.description}</p>}
+      {!editing && (current.description || current.filters.areaType || current.filters.period) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-zinc-600">{current.description}</p>
+          <DashboardFilterBar
+            filters={current.filters}
+            params={params}
+            onChange={setParams}
+            areas={areas.data}
+            areaLabel={`All ${(types.data?.find((t) => t.key === areaType)?.plural ?? 'areas').toLowerCase()}`}
+          />
+        </div>
+      )}
       {!editing && current.isPublic && project.visibility === 'public' && (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-zinc-600">Public link:</span>
@@ -149,7 +188,9 @@ export function DashboardsTab() {
         </div>
       )}
       <div className="grid grid-cols-12 gap-4">
-        {shown.widgets.map((w, i) => (
+        {shown.widgets.map((raw, i) => {
+          const w = !editing && raw.query ? { ...raw, query: applyParams(raw.query, params, shown.filters) } : raw;
+          return (
           <WidgetView
             key={`${shown.key}-${w.id}`}
             widget={w}
@@ -168,7 +209,8 @@ export function DashboardsTab() {
               ) : undefined
             }
           />
-        ))}
+          );
+        })}
       </div>
       {widgetDialog && draft && (
         <WidgetEditor

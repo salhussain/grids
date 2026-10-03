@@ -3,7 +3,7 @@ import { startTestDatabases, type TestDatabases } from '@grids/db/testing';
 import { JobInput, uuidv7 } from '@grids/schema';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { drainQueue, enqueueRun, freshness, nextRun, parseCsv, scheduleDue, syncSchedule, upsertEntities } from '../src/index.js';
+import { drainQueue, enqueueRun, freshness, nextRun, parseCsv, parseFile, scheduleDue, syncSchedule, upsertEntities } from '../src/index.js';
 
 let dbs: TestDatabases;
 let cell: Kysely<CellDB>;
@@ -192,5 +192,45 @@ describe('model', () => {
     expect(freshness('2026-10-02T09:00:00Z', 5, now).status).toBe('stale');
     expect(freshness(null, 5, now).status).toBe('unknown');
     expect(parseCsv('a,b\n1,"x, ""y"""\n\n2,z\n')).toEqual([{ a: '1', b: 'x, "y"' }, { a: '2', b: 'z' }]);
+  });
+
+  it('parses uploaded files by format, with delimiter detection and a BOM', () => {
+    const csv = parseFile('﻿code;name\r\nA1;Pump\r\n', 'auto', { name: 'assets.csv', contentType: 'text/csv' });
+    expect(csv).toEqual({ kind: 'csv', body: [{ code: 'A1', name: 'Pump' }] });
+    expect(parseFile('{"items":[{"a":1}]}', 'auto', { name: 'x.json', contentType: 'application/octet-stream' }).kind).toBe('json');
+    expect(parseFile('{"a":1}\n\n{"a":2}\n', 'auto', { name: 'x.jsonl', contentType: '' }).body).toEqual([{ a: 1 }, { a: 2 }]);
+    expect(() => parseFile('{nope', 'json', { name: 'x', contentType: '' })).toThrow();
+  });
+
+  it('parses the latest upload of a file in a job', async () => {
+    const jobId = uuidv7();
+    const file = (name: string, text: string) =>
+      tx((t) =>
+        t
+          .insertInto('project_file')
+          .values({ id: uuidv7(), tenant_id: tenantId, project_id: projectId, key: 'countries', name, content_type: 'text/csv', size: text.length, sha256: '-', content: Buffer.from(text) })
+          .execute(),
+      );
+    const steps = JobInput.parse({
+      key: 'country_import',
+      name: 'x',
+      steps: [
+        { id: 'read', type: 'file.parse', file: 'countries' },
+        { id: 'load', type: 'entity.upsert', entityType: 'country', code: 'iso', name: 'name' },
+      ],
+    }).steps;
+    await tx((t) =>
+      t.insertInto('job').values({ id: jobId, tenant_id: tenantId, project_id: projectId, key: 'country_import', name: 'Country import', max_retries: 0, steps: JSON.stringify(steps) }).execute(),
+    );
+    const run = async () => {
+      const id = await tx((t) => enqueueRun(t, { tenantId, projectId, jobId, trigger: 'manual' }));
+      await drainQueue(cell, { worker: 'test' });
+      return tx((t) => t.selectFrom('run').select(['status', 'error', 'stats']).where('id', '=', id).executeTakeFirstOrThrow());
+    };
+    expect(await run()).toMatchObject({ status: 'failed', error: 'read: no file has been uploaded as "countries"' });
+    await file('old.csv', 'iso,name\nXX,Old\n');
+    await new Promise((r) => setTimeout(r, 5));
+    await file('new.csv', 'iso\tname\nFJ\tFiji\nTO\tTonga\n');
+    expect(await run()).toMatchObject({ status: 'succeeded', stats: { rows_parsed: 2, entities_created: 2 } });
   });
 });

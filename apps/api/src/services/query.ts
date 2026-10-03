@@ -2,8 +2,11 @@ import { sql, type RawBuilder, type Transaction } from 'kysely';
 import { freshness, worstFreshness } from '@grids/data';
 import type { CellDB } from '@grids/db';
 import {
+  applyParams,
+  DashboardFilters,
   uuidv7,
   Widget,
+  type DashboardParams,
   type DashboardDto,
   type Freshness,
   type PublicProjectDto,
@@ -14,6 +17,7 @@ import type { z } from 'zod';
 import type { DashboardInput } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
+import type { EventBus } from './events.js';
 import type { ProjectService } from './projects.js';
 import { iso, isUniqueViolation } from './util.js';
 import { DEFAULT_THEME, Theme } from '@grids/schema';
@@ -47,10 +51,46 @@ const round = (v: unknown) => (v === null || v === undefined ? null : Math.round
  * aggregations/intervals reach SQL as raw text.
  */
 export class QueryService {
+  /** Result cache: tenant|project|scope|spec → result (insertion-ordered for LRU eviction). */
+  private readonly cache = new Map<string, { at: number; result: QueryResult }>();
+
   constructor(
     private readonly ctx: ServiceContext,
     private readonly projects: ProjectService,
-  ) {}
+    private readonly events?: EventBus,
+    private readonly cacheOpts = { ttlMs: 30_000, maxEntries: 2_000 },
+  ) {
+    // Change events (from any API instance or worker) drop the project's results;
+    // after a listener gap everything goes, since events may have been missed.
+    events?.onAny((e) => this.invalidate(e.tenantId, e.projectId));
+    events?.onGap(() => this.cache.clear());
+  }
+
+  /** Drops cached results for a project, or the whole tenant. */
+  invalidate(tenantId: string, projectId?: string) {
+    const prefix = projectId ? `${tenantId}|${projectId}|` : `${tenantId}|`;
+    for (const k of this.cache.keys()) if (k.startsWith(prefix)) this.cache.delete(k);
+  }
+
+  /**
+   * Serves a query from the cache while it is younger than the TTL (which also
+   * bounds drift of relative time windows and freshness), else computes it. The
+   * cache is only used while change events are flowing for the tenant's cell, so
+   * results never outlive a data change by more than the notification latency.
+   */
+  private async cached(tenantId: string, projectId: string, rootPath: string | null, spec: QuerySpec, compute: () => Promise<QueryResult>): Promise<QueryResult> {
+    const live = this.events ? await this.events.ensure(tenantId).catch(() => false) : false;
+    if (!live) return compute();
+    const key = `${tenantId}|${projectId}|${rootPath ?? '*'}|${JSON.stringify(spec)}`;
+    const hit = this.cache.get(key);
+    const now = Date.now();
+    if (hit && now - hit.at < this.cacheOpts.ttlMs) return hit.result;
+    const result = await compute();
+    this.cache.delete(key);
+    this.cache.set(key, { at: now, result });
+    if (this.cache.size > this.cacheOpts.maxEntries) this.cache.delete(this.cache.keys().next().value!);
+    return result;
+  }
 
   private range(r: { lastMinutes?: number; lastHours?: number; from?: string; to?: string } | undefined) {
     const now = this.ctx.now();
@@ -99,7 +139,7 @@ export class QueryService {
 
   async query(actor: Actor, tenantId: string, project: string, spec: QuerySpec): Promise<QueryResult> {
     const a = await this.projects.access(actor, tenantId, project);
-    return this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec));
+    return this.cached(tenantId, a.project.id, a.rootPath, spec, () => this.projects.cellTx(tenantId, (tx) => this.run(tx, a.project.id, a.rootPath, spec)));
   }
 
   /** Executes a query inside a tenant transaction. */
@@ -280,7 +320,7 @@ export class QueryService {
 
   // ---------- dashboards ----------
 
-  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; updated_at: Date }): DashboardDto {
+  private toDashboard(d: { id: string; key: string; name: string; description: string; widgets: unknown[]; is_public: boolean; filters: unknown; updated_at: Date }): DashboardDto {
     return {
       id: d.id,
       key: d.key,
@@ -288,6 +328,7 @@ export class QueryService {
       description: d.description,
       widgets: d.widgets.map((w) => Widget.parse(w)),
       isPublic: d.is_public,
+      filters: DashboardFilters.parse(d.filters ?? {}),
       updatedAt: iso(d.updated_at),
     };
   }
@@ -305,12 +346,19 @@ export class QueryService {
     const a = await this.projects.access(actor, tenantId, project, 'manager');
     const ids = input.widgets.map((w) => w.id);
     if (new Set(ids).size !== ids.length) throw badRequest('Widget ids must be unique');
+    if (input.filters.areaType) {
+      const t = await this.projects.cellTx(tenantId, (tx) =>
+        tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.filters.areaType!).executeTakeFirst(),
+      );
+      if (!t) throw badRequest(`Unknown entity type "${input.filters.areaType}" for the area filter`);
+    }
     const values = {
       key: input.key,
       name: input.name,
       description: input.description,
       widgets: JSON.stringify(input.widgets),
       is_public: input.isPublic,
+      filters: JSON.stringify(input.filters),
       updated_at: this.ctx.now(),
     };
     try {
@@ -362,20 +410,61 @@ export class QueryService {
     };
   }
 
-  /** Runs one widget's stored query for anonymous viewers (no arbitrary queries). */
-  async publicWidget(tenantSlug: string, projectKey: string, dashboardKey: string, widgetId: string): Promise<QueryResult> {
+  private async areaExists(tx: Tx, projectId: string, typeKey: string, id: string) {
+    return !!(await tx
+      .selectFrom('entity as e')
+      .innerJoin('entity_type as t', 't.id', 'e.type_id')
+      .select('e.id')
+      .where('e.project_id', '=', projectId)
+      .where('t.key', '=', typeKey)
+      .where('e.id', '=', id)
+      .executeTakeFirst());
+  }
+
+  /** Choices for a public dashboard's area filter. */
+  async publicAreas(tenantSlug: string, projectKey: string, dashboardKey: string): Promise<{ id: string; name: string }[]> {
     const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
     return this.projects.cellTx(tenant.id, async (tx) => {
+      const d = await tx.selectFrom('dashboard').select(['is_public', 'filters']).where('project_id', '=', project.id).where('key', '=', dashboardKey).executeTakeFirst();
+      if (!d?.is_public) throw notFound('Dashboard');
+      const { areaType } = DashboardFilters.parse(d.filters ?? {});
+      if (!areaType) return [];
+      return tx
+        .selectFrom('entity as e')
+        .innerJoin('entity_type as t', 't.id', 'e.type_id')
+        .select(['e.id', 'e.name'])
+        .where('e.project_id', '=', project.id)
+        .where('t.key', '=', areaType)
+        .orderBy('e.name')
+        .limit(1000)
+        .execute();
+    });
+  }
+
+  /** Ids of a public project, for anonymous event streams. */
+  async publicTarget(tenantSlug: string, projectKey: string) {
+    const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
+    return { tenantId: tenant.id, projectId: project.id };
+  }
+
+  /** Runs one widget's stored query for anonymous viewers (no arbitrary queries). */
+  async publicWidget(tenantSlug: string, projectKey: string, dashboardKey: string, widgetId: string, params: DashboardParams = {}): Promise<QueryResult> {
+    const { tenant, project } = await this.publicProject(tenantSlug, projectKey);
+    const spec = await this.projects.cellTx(tenant.id, async (tx) => {
       const d = await tx
         .selectFrom('dashboard')
-        .select(['widgets', 'is_public'])
+        .select(['widgets', 'is_public', 'filters'])
         .where('project_id', '=', project.id)
         .where('key', '=', dashboardKey)
         .executeTakeFirst();
       if (!d?.is_public) throw notFound('Dashboard');
       const w = (d.widgets as unknown[]).map((x) => Widget.parse(x)).find((x) => x.id === widgetId);
       if (!w?.query) throw notFound('Widget');
-      return this.run(tx, project.id, null, w.query);
+      const filters = DashboardFilters.parse(d.filters ?? {});
+      // Anonymous viewers may only pick areas of the dashboard's area type in this project.
+      if (params.area && filters.areaType && !(await this.areaExists(tx, project.id, filters.areaType, params.area))) throw notFound('Area');
+      return applyParams(w.query, params, filters);
     });
+    return this.cached(tenant.id, project.id, null, spec, () => this.projects.cellTx(tenant.id, (tx) => this.run(tx, project.id, null, spec)));
   }
 }

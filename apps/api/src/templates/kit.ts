@@ -100,6 +100,7 @@ export async function job(tx: Tx, c: TemplateCtx, raw: JobIn) {
       max_retries: j.maxRetries,
       timeout_seconds: j.timeoutSeconds,
       freshness_minutes: j.freshnessMinutes,
+      run_on_upload: j.runOnUpload,
     })
     .execute();
   await syncSchedule(tx, { id, tenantId: c.tenantId, schedule: j.schedule, timezone: j.timezone, enabled: j.enabled });
@@ -110,7 +111,7 @@ export async function dashboard(tx: Tx, c: TemplateCtx, raw: DashboardIn, sort =
   const d = DashboardInput.parse(raw);
   await tx
     .insertInto('dashboard')
-    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key: d.key, name: d.name, description: d.description, widgets: JSON.stringify(d.widgets), is_public: d.isPublic, sort })
+    .values({ id: uuidv7(), tenant_id: c.tenantId, project_id: c.projectId, key: d.key, name: d.name, description: d.description, widgets: JSON.stringify(d.widgets), is_public: d.isPublic, filters: JSON.stringify(d.filters), sort })
     .execute();
 }
 

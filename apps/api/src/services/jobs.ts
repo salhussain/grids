@@ -1,7 +1,12 @@
 import { cronProblem, enqueueRun, freshness, syncSchedule } from '@grids/data';
+import { createHash } from 'node:crypto';
+import { sql } from 'kysely';
 import {
+  FILE_MAX_BYTES,
   JobStep,
   uuidv7,
+  type FileDto,
+  type UploadResult,
   type DatasetDto,
   type JobDto,
   type Page,
@@ -13,6 +18,8 @@ import type { JobInput, RunQuery } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import type { ProjectService } from './projects.js';
+
+type Tx = Parameters<Parameters<ProjectService['cellTx']>[1]>[0];
 import { iso, isoOrNull, isUniqueViolation } from './util.js';
 
 type RunRow = {
@@ -109,6 +116,7 @@ export class JobService {
           maxRetries: j.max_retries,
           timeoutSeconds: j.timeout_seconds,
           freshnessMinutes: j.freshness_minutes,
+          runOnUpload: j.run_on_upload,
           nextRunAt: isoOrNull(schedules.get(j.id) ?? null),
           lastRun: runs[0] ? toRun(runs[0] as RunRow) : null,
           freshness: freshness(lastSuccess.get(j.id) ?? null, j.freshness_minutes, this.ctx.now()),
@@ -126,6 +134,7 @@ export class JobService {
     }
     const ids = input.steps.map((s) => s.id);
     if (new Set(ids).size !== ids.length) throw badRequest('Step ids must be unique');
+    if (input.runOnUpload && !input.steps.some((s) => s.type === 'file.parse')) throw badRequest('Only jobs that parse a file can run on upload');
     const values = {
       key: input.key,
       name: input.name,
@@ -137,6 +146,7 @@ export class JobService {
       max_retries: input.maxRetries,
       timeout_seconds: input.timeoutSeconds,
       freshness_minutes: input.freshnessMinutes,
+      run_on_upload: input.runOnUpload,
       updated_at: this.ctx.now(),
     };
     try {
@@ -174,11 +184,35 @@ export class JobService {
     const runId = await this.projects.cellTx(tenantId, async (tx) => {
       const job = await tx.selectFrom('job').select(['id']).where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
       if (!job) throw notFound('Job');
-      const busy = await tx.selectFrom('run').select('id').where('job_id', '=', job.id).where('status', 'in', ['queued', 'running']).executeTakeFirst();
-      if (busy) throw conflict('Already running', 'This job already has a run queued or in progress.');
-      return enqueueRun(tx, { tenantId, projectId: a.project.id, jobId: job.id, trigger: 'manual', triggeredBy: actor.id });
+      return this.enqueueIdle(tx, tenantId, a.project.id, job.id, 'manual', actor.id);
     });
     return (await this.run(actor, tenantId, project, runId)) as RunDto;
+  }
+
+  /**
+   * Re-runs a finished run's job with the current definition. A run's writes are
+   * all-or-nothing (one transaction), so a failed run left no partial data and
+   * re-running it whole is equivalent to resuming from the failed step.
+   */
+  async rerun(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDto> {
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const id = await this.projects.cellTx(tenantId, async (tx) => {
+      const r = await tx.selectFrom('run').select(['job_id', 'status']).where('id', '=', runId).where('project_id', '=', a.project.id).executeTakeFirst();
+      if (!r) throw notFound('Run');
+      if (r.status === 'queued' || r.status === 'running') throw conflict('Run in progress', 'Wait for this run to finish, or cancel it first.');
+      const next = await this.enqueueIdle(tx, tenantId, a.project.id, r.job_id, 'rerun', actor.id);
+      await tx.insertInto('run_log').values({ tenant_id: tenantId, run_id: next, level: 'info', step: null, message: `Re-run of ${runId}` }).execute();
+      return next;
+    });
+    await audit(this.ctx, actor.id, tenantId, 'job.rerun', { project: a.project.key, run: runId });
+    return (await this.run(actor, tenantId, project, id)) as RunDto;
+  }
+
+  /** Queues a run unless the job already has one queued or in progress. */
+  private async enqueueIdle(tx: Parameters<Parameters<ProjectService['cellTx']>[1]>[0], tenantId: string, projectId: string, jobId: string, trigger: string, actorId: string | null) {
+    const busy = await tx.selectFrom('run').select('id').where('job_id', '=', jobId).where('status', 'in', ['queued', 'running']).executeTakeFirst();
+    if (busy) throw conflict('Already running', 'This job already has a run queued or in progress.');
+    return enqueueRun(tx, { tenantId, projectId, jobId, trigger, triggeredBy: actorId });
   }
 
   async cancel(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDetail> {
@@ -231,6 +265,103 @@ export class JobService {
       const logs = await tx.selectFrom('run_log').select(['at', 'level', 'step', 'message']).where('run_id', '=', runId).orderBy('id').limit(1000).execute();
       return { ...toRun(r as RunRow), logs: logs.map((l) => ({ ...l, at: iso(l.at) })) };
     });
+  }
+
+  // ---------- files ----------
+
+  async files(actor: Actor, tenantId: string, project: string): Promise<FileDto[]> {
+    const a = await this.projects.access(actor, tenantId, project);
+    return this.projects.cellTx(tenantId, (tx) => this.fileList(tx, a.project.id));
+  }
+
+  private async fileList(tx: Tx, projectId: string, only?: string): Promise<FileDto[]> {
+    let q = tx
+      .selectFrom('project_file as f')
+      .select(['f.id', 'f.key', 'f.name', 'f.content_type', 'f.size', 'f.sha256', 'f.uploaded_by', 'f.uploaded_at', sql<string>`count(*) over (partition by f.key)`.as('versions')])
+      .where('f.project_id', '=', projectId)
+      .orderBy('f.key')
+      .orderBy('f.uploaded_at', 'desc');
+    if (only) q = q.where('f.key', '=', only);
+    const rows = await q.execute();
+    const latest = rows.filter((r, i) => i === 0 || rows[i - 1]!.key !== r.key);
+    const jobs = await this.parsingJobs(tx, projectId);
+    const names = await this.projects.userNames(latest.map((r) => r.uploaded_by));
+    return latest.map((r) => ({
+      id: r.id,
+      key: r.key,
+      name: r.name,
+      contentType: r.content_type,
+      size: r.size,
+      sha256: r.sha256,
+      uploadedBy: r.uploaded_by ? (names.get(r.uploaded_by) ?? null) : null,
+      uploadedAt: iso(r.uploaded_at),
+      versions: Number(r.versions),
+      jobs: jobs.filter((j) => j.files.includes(r.key)).map(({ key, name, runOnUpload }) => ({ key, name, runOnUpload })),
+    }));
+  }
+
+  /** Jobs with their file.parse inputs. */
+  private async parsingJobs(tx: Tx, projectId: string) {
+    const jobs = await tx.selectFrom('job').select(['id', 'key', 'name', 'steps', 'enabled', 'run_on_upload']).where('project_id', '=', projectId).orderBy('name').execute();
+    return jobs
+      .map((j) => ({
+        id: j.id,
+        key: j.key,
+        name: j.name,
+        enabled: j.enabled,
+        runOnUpload: j.run_on_upload,
+        files: (j.steps as { type?: string; file?: string }[]).filter((s) => s.type === 'file.parse' && s.file).map((s) => s.file!),
+      }))
+      .filter((j) => j.files.length);
+  }
+
+  /**
+   * Stores a new version of a project file (editors) and queues the enabled jobs
+   * that parse it and run on upload (the "file uploaded" trigger).
+   */
+  async upload(actor: Actor, tenantId: string, project: string, key: string, file: { name: string; contentType: string; content: Buffer }): Promise<UploadResult> {
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    if (!/^[a-z][a-z0-9_]*$/.test(key) || key.length > 63) throw badRequest('File keys use lowercase letters, digits and underscores');
+    if (!file.content.length) throw badRequest('The file is empty');
+    if (file.content.length > FILE_MAX_BYTES) throw badRequest(`Files are limited to ${FILE_MAX_BYTES / 1024 / 1024} MB`);
+    const name = [...file.name].filter((ch) => ch >= ' ' && ch !== '/' && ch !== '\\').join('').slice(0, 200) || key;
+    const runs = await this.projects.cellTx(tenantId, async (tx) => {
+      await tx
+        .insertInto('project_file')
+        .values({
+          id: uuidv7(),
+          tenant_id: tenantId,
+          project_id: a.project.id,
+          key,
+          name,
+          content_type: file.contentType.slice(0, 100) || 'application/octet-stream',
+          size: file.content.length,
+          sha256: createHash('sha256').update(file.content).digest('hex'),
+          content: file.content,
+          uploaded_by: actor.id,
+          uploaded_at: this.ctx.now(),
+        })
+        .execute();
+      const queued: { id: string; job: string }[] = [];
+      for (const j of await this.parsingJobs(tx, a.project.id)) {
+        if (!j.enabled || !j.runOnUpload || !j.files.includes(key)) continue;
+        const busy = await tx.selectFrom('run').select('id').where('job_id', '=', j.id).where('status', '=', 'queued').executeTakeFirst();
+        if (busy) continue; // a queued run will read this upload anyway
+        queued.push({ id: await enqueueRun(tx, { tenantId, projectId: a.project.id, jobId: j.id, trigger: 'upload', triggeredBy: actor.id }), job: j.key });
+      }
+      return queued;
+    });
+    await audit(this.ctx, actor.id, tenantId, 'file.uploaded', { project: a.project.key, file: key, name, size: file.content.length, runs: runs.length });
+    const [dto] = await this.projects.cellTx(tenantId, (tx) => this.fileList(tx, a.project.id, key));
+    return { file: dto!, runs };
+  }
+
+  async deleteFile(actor: Actor, tenantId: string, project: string, key: string): Promise<FileDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    const n = await this.projects.cellTx(tenantId, (tx) => tx.deleteFrom('project_file').where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst());
+    if (!n.numDeletedRows) throw notFound('File');
+    await audit(this.ctx, actor.id, tenantId, 'file.deleted', { project: a.project.key, file: key });
+    return this.files(actor, tenantId, project);
   }
 
   // ---------- datasets ----------
