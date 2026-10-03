@@ -193,7 +193,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   />
                   <span className="flex-1">{item.label}</span>
                   {!!item.badge && (
-                    <span className="num min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
+                    <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
                       {item.badge}
                     </span>
                   )}
@@ -205,7 +205,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
       <div className="border-t border-white/10 px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white">
+          <div className="flex size-8 shrink-0 items-center justify-center bg-accent-600 text-xs font-semibold text-white">
             {(me.displayName ?? me.email ?? '?').slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">

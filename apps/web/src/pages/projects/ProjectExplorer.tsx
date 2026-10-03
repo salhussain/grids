@@ -42,7 +42,7 @@ export function ProjectExplorer() {
             <LayoutGrid className="size-4" /> Studio
           </Link>
           <Link to="/o/$tenantId" params={{ tenantId }} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm text-zinc-600 hover:bg-zinc-100 hover:text-ink lg:flex" title={`Back to ${ws.tenant.name}`}>
-            <span className="flex size-6 items-center justify-center rounded-full bg-zinc-200 text-[11px] font-semibold text-zinc-700">{(me.displayName ?? me.email ?? '?').slice(0, 1).toUpperCase()}</span>
+            <span className="flex size-6 items-center justify-center bg-zinc-200 text-[11px] font-semibold text-zinc-700">{(me.displayName ?? me.email ?? '?').slice(0, 1).toUpperCase()}</span>
             <span className="max-w-32 truncate">{me.displayName ?? me.email}</span>
             <LogOut className="size-4 rotate-180 text-zinc-400" />
           </Link>

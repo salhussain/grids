@@ -178,6 +178,12 @@ const to: Catalog = {
       preferences: 'Ngaahi filí',
       account: 'ʻAkauni mo e malu',
       yourOrgs: 'Hoʻo ngaahi kautaha',
+      search: 'Kumi pe ʻalu ki',
+      searchPlaceholder: 'Kumi ʻa e ngaahi peesi mo e ngaahi poloseki',
+      noMatches: 'ʻOku ʻikai ha meʻa',
+      goTo: 'ʻAlu ki',
+      lightMode: 'Liliu ki he fōtunga maama',
+      darkMode: 'Liliu ki he fōtunga fakapoʻuli',
     },
     prefs: {
       title: 'Ngaahi filí',

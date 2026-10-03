@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { FolderKanban, KeyRound, LifeBuoy, Network, Users } from 'lucide-react';
+import { ArrowRight, FolderKanban, KeyRound, LifeBuoy, Network, Users } from 'lucide-react';
 import { PageHeader, Panel, Stat, Tag } from '@grids/ui';
 import { api } from '../api';
 import { useT } from '../i18n';
 import { useCan, useMe, useWorkspace } from '../session';
+import { FreshnessBadge } from '../viz/Freshness';
+import { iconOf } from './projects/context';
 
 export function HomePage() {
   const ws = useWorkspace();
@@ -23,6 +25,7 @@ export function HomePage() {
     queryFn: () => api.tickets(id, { status: 'active', pageSize: 5 }),
     enabled: can('support.view'),
   });
+  const projects = useQuery({ queryKey: ['projects', id, false], queryFn: () => api.projects(id, false) });
   const name = (me.displayName ?? me.email ?? '').split(' ')[0];
 
   return (
@@ -57,6 +60,38 @@ export function HomePage() {
         />
         <Stat label={t('web.home.tickets')} value={tickets.data?.total ?? '–'} />
       </div>
+      {!!projects.data?.length && (
+        <Panel
+          className="mb-6"
+          title={t('web.home.projects')}
+          flush
+          actions={
+            <Link to="/o/$tenantId/projects" params={{ tenantId: id }} aria-label={t('web.nav.projects')} className="flex size-8 items-center justify-center text-zinc-500 hover:bg-zinc-100 hover:text-ink">
+              <ArrowRight className="size-4 rtl:rotate-180" />
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-zinc-200">
+            {projects.data.slice(0, 5).map((p) => {
+              const Icon = iconOf(p.icon);
+              return (
+                <li key={p.id}>
+                  <Link to="/o/$tenantId/p/$project" params={{ tenantId: id, project: p.key }} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50">
+                    <span className="flex size-8 shrink-0 items-center justify-center text-white" style={{ background: p.color }}>
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{p.name}</span>
+                      {p.description && <span className="block truncate text-xs text-zinc-500">{p.description}</span>}
+                    </span>
+                    <FreshnessBadge value={p.freshness} compact />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      )}
       <div className="grid gap-6 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title={t('web.home.getStarted')}>
           <ul className="grid gap-px border border-zinc-200 bg-zinc-200 sm:grid-cols-2">

@@ -1,0 +1,668 @@
+<title>Grids Public Dashboard Mockup</title>
+<meta name="description" content="Clickable mockup of the map-first public Grids view: overlays on a map, drill-down by place, and a dashboard panel for whatever is selected." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  /* Layout: map-first, like Tupaia. Full-height map on the left with floating overlay picker,
+     breadcrumbs and legend; a dashboard panel on the right for the selected place.
+     Phones stack the map above the panel. Same tokens as the workspace mockup. */
+  :root {
+    --brand: #0f62fe;
+    --brand-soft: color-mix(in oklab, var(--brand) 9%, white);
+    --brand-ink: color-mix(in oklab, var(--brand) 78%, black);
+    --on-brand: #ffffff;
+
+    --canvas: #efeff1;
+    --sheet: #ffffff;
+    --raise: #f7f7f8;
+    --sea: #e9ecef;
+    --ink: #121316;
+    --ink-2: #4a4c55;
+    --ink-3: #82848d;
+    --line: #e4e4e8;
+    --line-2: #d3d4da;
+    --hover: #f3f3f5;
+    --grid: rgb(18 19 22 / .05);
+    --shadow: 0 1px 2px rgb(16 18 24 / .06), 0 10px 30px -12px rgb(16 18 24 / .22);
+
+    --ok: #198038; --ok-soft: #e8f5ec;
+    --warn: #b28600; --warn-soft: #fcf4d6;
+    --bad: #da1e28; --bad-soft: #fdecec;
+    /* Sequential (one hue, light → dark) for choropleths */
+    --s1: #d9fbfb; --s2: #9ef0f0; --s3: #3ddbd9; --s4: #009d9a; --s5: #005d5d;
+
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b);
+      --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+      --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --sea: #101114; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88;
+      --line: #26272c; --line-2: #34363c; --hover: #202126; --grid: rgb(255 255 255 / .04);
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 32px -12px rgb(0 0 0 / .7);
+      --ok: #42be65; --ok-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --bad: #ff6b72; --bad-soft: #2d1416;
+      --s1: #022b30; --s2: #004144; --s3: #005d5d; --s4: #009d9a; --s5: #3ddbd9;
+    }
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b);
+    --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+    --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --sea: #101114; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88;
+    --line: #26272c; --line-2: #34363c; --hover: #202126; --grid: rgb(255 255 255 / .04);
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 32px -12px rgb(0 0 0 / .7);
+    --ok: #42be65; --ok-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --bad: #ff6b72; --bad-soft: #2d1416;
+    --s1: #022b30; --s2: #004144; --s3: #005d5d; --s4: #009d9a; --s5: #3ddbd9;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .app { display: grid; grid-template-rows: 56px minmax(0, 1fr); height: 100%; }
+
+  /* Header */
+  .bar { display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--sheet); border-bottom: 1px solid var(--line); z-index: 30; min-width: 0; }
+  .org-mark { width: 28px; height: 28px; display: grid; place-items: center; background: var(--brand); color: var(--on-brand); flex: none; }
+  .titles { min-width: 0; line-height: 1.2; }
+  .titles .org { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+  .titles .proj { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search { position: relative; flex: 1; max-width: 380px; margin-left: 12px; }
+  .search .field { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line-2); background: var(--raise); color: var(--ink-3); }
+  .search .field:focus-within { border-color: var(--brand); background: var(--sheet); }
+  .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); }
+  .results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px 0; list-style: none; background: var(--sheet); border: 1px solid var(--line-2); box-shadow: var(--shadow); z-index: 40; max-height: 320px; overflow: auto; }
+  .results li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; }
+  .results li[aria-selected='true'], .results li:hover { background: var(--hover); }
+  .results .eyebrow { margin-left: auto; }
+  .bar .right { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--sheet); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--ink-3); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  .btn.ghost { border-color: transparent; background: none; color: var(--ink-2); }
+  .btn.ghost:hover { background: var(--hover); color: var(--ink); }
+  .icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line-2); background: var(--sheet); color: var(--ink-2); cursor: pointer; position: relative; flex: none; }
+  .icon-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+  .theme svg { position: absolute; transition: opacity .35s, transform .45s; }
+  .theme .sun { opacity: 0; transform: rotate(-90deg) scale(.6); }
+  [data-current='dark'] .sun { opacity: 1; transform: none; }
+  [data-current='dark'] .moon { opacity: 0; transform: rotate(90deg) scale(.6); }
+
+  /* Body */
+  .body { display: grid; grid-template-columns: minmax(0, 1fr) 460px; min-height: 0; }
+  .body.collapsed { grid-template-columns: minmax(0, 1fr) 0; }
+
+  /* Map */
+  .mapwrap { position: relative; min-width: 0; min-height: 0; background: var(--sea); overflow: hidden; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .area { stroke: var(--line-2); stroke-width: 1.25; cursor: pointer; transition: fill .3s, opacity .3s; }
+  .area:hover { filter: brightness(.96); }
+  .area.dim { opacity: .45; }
+  .area.sel { stroke: var(--ink); stroke-width: 2; }
+  .area-label { font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; font-weight: 500; fill: var(--ink-2); paint-order: stroke; stroke: var(--sheet); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+  .pt { stroke: var(--sheet); stroke-width: 1.5; cursor: pointer; transition: opacity .3s; }
+  .pt.dim { opacity: .15; }
+  .pt.sel { stroke: var(--ink); stroke-width: 2.5; }
+  .ring { fill: none; stroke: var(--ink); stroke-width: 1.5; pointer-events: none; }
+
+  .float { position: absolute; z-index: 5; background: var(--sheet); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
+  .crumbs { left: 16px; top: 16px; display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 36px; max-width: calc(100% - 84px); overflow: hidden; }
+  .crumbs button { border: 0; background: none; padding: 4px 6px; cursor: pointer; color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+  .crumbs button:hover { color: var(--ink); background: var(--hover); }
+  .crumbs button[aria-current='page'] { color: var(--ink); font-weight: 600; cursor: default; background: none; overflow: hidden; text-overflow: ellipsis; }
+  .crumbs .chev { color: var(--ink-3); flex: none; }
+
+  .overlay { left: 16px; top: 64px; width: 300px; max-width: calc(100% - 32px); }
+  .ov-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: none; cursor: pointer; text-align: left; }
+  .ov-head .ic { width: 30px; height: 30px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-ink); flex: none; }
+  .ov-head .t { font-weight: 600; font-size: 13.5px; line-height: 1.25; display: block; }
+  .ov-head .chev { margin-left: auto; color: var(--ink-3); transition: transform .2s; flex: none; }
+  .overlay[data-open='true'] .ov-head .chev { transform: rotate(180deg); }
+  .ov-list { border-top: 1px solid var(--line); max-height: 340px; overflow: auto; padding: 4px 0 6px; }
+  .ov-list .eyebrow { padding: 10px 14px 4px; display: block; }
+  .ov-list button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 7px 14px; text-align: left; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+  .ov-list button:hover { background: var(--hover); color: var(--ink); }
+  .ov-list button[aria-pressed='true'] { color: var(--ink); font-weight: 500; }
+  .ov-list .radio { width: 14px; height: 14px; border: 1.5px solid var(--line-2); border-radius: 50%; flex: none; display: grid; place-items: center; }
+  .ov-list button[aria-pressed='true'] .radio { border-color: var(--brand); }
+  .ov-list button[aria-pressed='true'] .radio::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+  .ov-period { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+  .ov-period button { width: 26px; height: 26px; border: 1px solid var(--line-2); background: var(--sheet); cursor: pointer; display: grid; place-items: center; color: var(--ink-2); }
+  .ov-period button:disabled { opacity: .35; cursor: default; }
+  .ov-period .p { flex: 1; text-align: center; font-family: var(--mono); font-size: 12px; }
+
+  .legend { left: 16px; bottom: 16px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); max-width: calc(100% - 84px); }
+  .legend .eyebrow { display: block; margin-bottom: 6px; }
+  .legend .rows { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .legend .rows span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; display: inline-block; flex: none; }
+  .legend .ramp { display: flex; gap: 2px; flex-wrap: wrap; }
+  .legend .ramp div { display: grid; gap: 4px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+  .legend .ramp i { width: 44px; height: 10px; }
+
+  .zoom { right: 16px; bottom: 16px; display: grid; }
+  .zoom button { width: 34px; height: 34px; border: 0; background: none; cursor: pointer; display: grid; place-items: center; color: var(--ink-2); font-size: 16px; }
+  .zoom button + button { border-top: 1px solid var(--line); }
+  .zoom button:hover { background: var(--hover); color: var(--ink); }
+  .panel-toggle { right: 16px; top: 16px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); }
+  .panel-toggle svg { transition: transform .25s; }
+  .collapsed .panel-toggle svg { transform: rotate(180deg); }
+
+  .tip { position: absolute; z-index: 8; pointer-events: none; background: var(--ink); color: var(--sheet); padding: 8px 10px; font-size: 12px; line-height: 1.4; white-space: nowrap; transform: translate(-50%, calc(-100% - 14px)); box-shadow: var(--shadow); }
+  .tip b { display: block; font-size: 13px; font-weight: 600; }
+  .tip .v { font-family: var(--mono); }
+
+  /* Dashboard panel */
+  .panel { background: var(--sheet); border-left: 1px solid var(--line); overflow-y: auto; overflow-x: hidden; min-width: 0; min-height: 0; }
+  .collapsed .panel { border-left: 0; }
+  .p-head { position: relative; padding: 20px 20px 16px; border-bottom: 1px solid var(--line); overflow: hidden; }
+  .p-head::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 22px 22px; mask-image: linear-gradient(to bottom left, #000, transparent 70%); -webkit-mask-image: linear-gradient(to bottom left, #000, transparent 70%); pointer-events: none; }
+  .p-head > * { position: relative; }
+  .p-head h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; text-wrap: balance; }
+  .p-head .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink-3); }
+  .p-head .facts b { color: var(--ink-2); font-weight: 500; }
+  .dash-sel { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: color-mix(in srgb, var(--sheet) 92%, transparent); backdrop-filter: blur(8px); z-index: 3; }
+  .select { height: 32px; border: 1px solid var(--line-2); background: var(--sheet); padding: 0 30px 0 10px; font-size: 13px; border-radius: 0; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%); background-position: calc(100% - 15px) 14px, calc(100% - 11px) 14px; background-size: 4px 4px; background-repeat: no-repeat; min-width: 0; }
+  .dash-sel .select { flex: 1; font-weight: 500; }
+  .tiles { display: grid; gap: 12px; padding: 16px 20px 28px; }
+  .tile { border: 1px solid var(--line); background: var(--sheet); min-width: 0; animation: rise .3s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+  .tile-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
+  .tile-h h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+  .tile-h .note { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+  .tile-h .expand { margin-left: auto; width: 26px; height: 26px; border: 0; background: none; color: var(--ink-3); cursor: pointer; display: grid; place-items: center; }
+  .tile-h .expand:hover { background: var(--hover); color: var(--ink); }
+  .tile-b { padding: 10px 14px 14px; }
+  .kpi2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi2 > div { padding: 14px; display: grid; gap: 2px; min-width: 0; align-content: start; }
+  .kpi2 > div + div { border-left: 1px solid var(--line); }
+  .kpi2 .val { font-family: var(--mono); font-size: 26px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .kpi2 .val small { font-size: 13px; color: var(--ink-3); letter-spacing: 0; }
+  .kpi2 .sub { font-size: 12px; color: var(--ink-3); }
+  .meter { height: 4px; display: flex; gap: 2px; margin-top: 8px; background: var(--raise); }
+  .meter i { display: block; height: 100%; }
+  .delta { font-family: var(--mono); font-size: 11px; padding: 1px 5px; }
+  .delta.up { color: var(--ok); background: var(--ok-soft); }
+
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .axis text { fill: var(--ink-3); font-family: var(--mono); font-size: 10px; }
+  .gridl { stroke: var(--line); }
+  .series { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; }
+  .dotpt { fill: var(--brand); stroke: var(--sheet); stroke-width: 2; }
+  .lbl { fill: var(--ink-2); font-size: 12px; }
+  .val-t { fill: var(--ink); font-family: var(--mono); font-size: 11px; }
+  .bar { fill: var(--brand); }
+  .barrow { cursor: pointer; }
+  .barrow:hover .bar { fill: var(--brand-ink); }
+  .barrow:hover .lbl { fill: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: var(--mono); font-weight: 400; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--raise); white-space: nowrap; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td:first-child { white-space: normal; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover { background: var(--hover); }
+  .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; font-size: 11.5px; white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+
+  .history { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; }
+  .history i { aspect-ratio: 1; display: block; }
+  .history-x { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin-top: 6px; font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); text-align: center; }
+  .dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 13px; }
+  .dl dt { color: var(--ink-3); }
+  .dl dd { margin: 0; text-align: right; }
+
+  .p-foot { padding: 14px 20px 20px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); display: grid; gap: 6px; }
+  .p-foot .row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+
+  /* Expanded tile + share */
+  .scrim { position: fixed; inset: 0; z-index: 50; background: rgb(10 11 14 / .4); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 16px; animation: fade .15s; }
+  @keyframes fade { from { opacity: 0; } }
+  .modal { width: 100%; max-width: 820px; max-height: calc(100vh - 32px); overflow: auto; background: var(--sheet); border: 1px solid var(--line-2); box-shadow: 0 24px 60px -20px rgb(0 0 0 / .45); animation: pop .18s ease; }
+  @keyframes pop { from { transform: translateY(6px) scale(.98); opacity: 0; } }
+  .modal-h { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .modal-h h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .modal-h .tools { margin-left: auto; display: flex; gap: 6px; }
+  .modal-b { padding: 20px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); }
+  .seg button { border: 0; background: none; height: 32px; padding: 0 12px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button[aria-pressed='true'] { background: var(--ink); color: var(--sheet); }
+  .copy-row { display: flex; }
+  .copy-row input { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line-2); border-right: 0; background: var(--raise); padding: 0 10px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); border-radius: 0; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 10px 14px; font-size: 13px; z-index: 60; box-shadow: var(--shadow); animation: fade .2s; max-width: calc(100% - 32px); }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100%; }
+    .body, .body.collapsed { grid-template-columns: minmax(0, 1fr); }
+    .mapwrap { height: 62vh; min-height: 400px; }
+    .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+    .panel-toggle { display: none; }
+    .overlay { width: auto; right: 16px; }
+    .crumbs { max-width: calc(100% - 32px); }
+    .legend { left: 12px; bottom: 12px; max-width: calc(100% - 70px); }
+    .search { display: none; }
+    .hide-sm { display: none !important; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <span class="org-mark" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M4 4h10v10H4zM18 4h10v10H18zM4 18h10v10H4zM18 18h10v10H18z"/></svg></span>
+    <div class="titles"><div class="org">Kestrel District Health</div><div class="proj">Rural water points</div></div>
+    <div class="search" id="search">
+      <label class="field"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search-in" placeholder="Search areas and water points" aria-label="Search areas and water points" autocomplete="off" /></label>
+      <ul class="results" id="results" role="listbox" hidden></ul>
+    </div>
+    <div class="right">
+      <select class="select hide-sm" aria-label="Language" style="height:34px"><option>English</option><option>Français</option><option>Gagana Sāmoa</option></select>
+      <button type="button" class="btn" id="share" title="Share"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><span class="hide-sm">Share</span></button>
+      <button type="button" class="icon-btn theme" id="theme" aria-label="Switch to dark mode" title="Switch to dark mode">
+        <svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button type="button" class="btn primary hide-sm">Sign in</button>
+    </div>
+  </header>
+
+  <div class="body" id="body">
+    <div class="mapwrap" id="mapwrap">
+      <svg id="map" role="img" aria-label="Map of the district"></svg>
+      <nav class="float crumbs" id="crumbs" aria-label="Location"></nav>
+      <div class="float overlay" id="overlay" data-open="false"></div>
+      <div class="float legend" id="legend"></div>
+      <div class="float zoom"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button><button type="button" id="zfit" aria-label="Show whole district" title="Show whole district"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
+      <button type="button" class="float panel-toggle" id="ptoggle" aria-label="Hide dashboard panel" title="Hide dashboard panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></button>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <aside class="panel" id="panel" aria-label="Dashboard"></aside>
+  </div>
+</div>
+
+<div class="scrim" id="modal" hidden></div>
+
+<script>
+  /* ---------- Example data (illustrative) ---------- */
+  const K = 0.625; // the map is 100 × 62.5 units
+  const AREAS = [
+    { id: 'coastal', name: 'Coastal', pts: [[8, 30], [24, 18], [40, 22], [46, 40], [38, 56], [18, 58], [6, 46]], lx: 24, ly: 38 },
+    { id: 'north', name: 'North', pts: [[40, 22], [56, 10], [74, 14], [76, 32], [60, 38], [46, 40]], lx: 59, ly: 25 },
+    { id: 'east', name: 'East', pts: [[74, 14], [90, 24], [94, 44], [80, 50], [66, 46], [60, 38], [76, 32]], lx: 81, ly: 34 },
+    { id: 'central', name: 'Central', pts: [[46, 40], [60, 38], [66, 46], [62, 62], [46, 64], [38, 56]], lx: 52, ly: 51 },
+    { id: 'south', name: 'South', pts: [[18, 58], [38, 56], [46, 64], [44, 82], [28, 86], [14, 74]], lx: 30, ly: 72 },
+    { id: 'highlands', name: 'Highlands', pts: [[62, 62], [66, 46], [80, 50], [94, 44], [90, 70], [74, 84], [44, 82], [46, 64]], lx: 72, ly: 67 },
+  ];
+  AREAS.forEach((a) => { a.pts = a.pts.map(([x, y]) => [x, y * K]); a.ly *= K; });
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const TYPES = ['Borehole', 'Borehole', 'Tap stand', 'Tap stand', 'Spring'];
+  const AREA_OK = { coastal: .86, north: .9, east: .8, central: .93, south: .66, highlands: .7 };
+  const AREA_N = { coastal: 64, north: 52, east: 55, central: 41, south: 58, highlands: 48 };
+  const AREA_POP = { coastal: 15800, north: 14200, east: 15100, central: 11900, south: 16400, highlands: 13600 };
+  const PLACES = ['Tavita', 'Mango Hill', 'Riverside', 'Old Mission', 'Kalo Bay', 'Fale Road', 'Upper Ridge', 'Lagoon', 'Seaview', 'Market', 'School', 'Church Hill', 'Palm Grove', 'Stony Creek'];
+  const inPoly = (x, y, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, yi] = pts[i], [xj, yj] = pts[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+  const POINTS = [];
+  for (const a of AREAS) {
+    let n = 0;
+    while (n < AREA_N[a.id]) {
+      const x = 4 + rnd() * 92, y = (8 + rnd() * 80) * K;
+      if (!inPoly(x, y, a.pts)) continue;
+      const r = rnd(), ok = AREA_OK[a.id];
+      const status = r < ok ? 'ok' : r < ok + (1 - ok) * .4 ? 'warn' : 'bad';
+      const type = TYPES[Math.floor(rnd() * TYPES.length)];
+      const history = Array.from({ length: 12 }, (_, m) => (m === 11 ? status : rnd() < ok + .05 ? 'ok' : rnd() < .5 ? 'warn' : 'bad'));
+      POINTS.push({ id: `${a.id}-${n}`, x, y, area: a.id, type, status, history, name: `${PLACES[(n * 5 + a.name.length) % PLACES.length]} ${type.toLowerCase()} ${n + 1}`, served: 80 + Math.floor(rnd() * 420), checked: 2 + Math.floor(rnd() * 110), depth: type === 'Borehole' ? 30 + Math.floor(rnd() * 60) : null, built: 1998 + Math.floor(rnd() * 26) });
+      n++;
+    }
+  }
+  const MONTHS = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+  const STATUS = { ok: ['Functional', 'var(--ok)'], warn: ['Needs repair', 'var(--warn)'], bad: ['Not functional', 'var(--bad)'] };
+  const RAMP = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+
+  const ptsIn = (areaId) => POINTS.filter((p) => !areaId || p.area === areaId);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const count = (l, s) => l.filter((p) => p.status === s).length;
+  const funcPct = (areaId) => { const l = ptsIn(areaId); return pct(count(l, 'ok'), l.length); };
+  const perPoint = (areaId) => Math.round(AREA_POP[areaId] / Math.max(1, count(ptsIn(areaId), 'ok')));
+  const trendFor = (areaId) => { const end = funcPct(areaId); return [-7, -6, -6, -4, -5, -3, -2, -3, -1, 0, -1, 0].map((d) => end + d); };
+
+  /* ---------- Overlays ---------- */
+  const OVERLAYS = [
+    { group: 'Functionality', id: 'status', name: 'Water point status', kind: 'points', note: 'At last check' },
+    { group: 'Functionality', id: 'func', name: 'Functional water points', kind: 'area', unit: '%', value: funcPct, bins: [60, 70, 80, 90], note: '% of water points per area' },
+    { group: 'Access', id: 'pop', name: 'People per working water point', kind: 'area', unit: '', value: perPoint, bins: [250, 300, 350, 450], invert: true, note: 'People per point · fewer is better' },
+    { group: 'Monitoring', id: 'age', name: 'Days since last check', kind: 'points', note: 'Checks are due every 90 days' },
+  ];
+  const AGE = [[30, 'var(--s5)', 'Under 30 days'], [90, 'var(--s3)', '30–90 days'], [Infinity, 'var(--s1)', 'Over 90 days (overdue)']];
+  const ageColor = (d) => AGE.find(([m]) => d < m)[1];
+  let overlay = OVERLAYS[0];
+  let periodIdx = 11;
+
+  /* ---------- Selection ---------- */
+  let sel = { area: null, point: null };
+  const areaOf = (id) => AREAS.find((a) => a.id === id);
+  const pointOf = (id) => POINTS.find((p) => p.id === id);
+
+  /* ---------- Map ---------- */
+  const svg = document.getElementById('map');
+  const wrap = document.getElementById('mapwrap');
+  const tip = document.getElementById('tip');
+  const DISTRICT = { x: 4, y: 5, w: 92, h: 50 };
+  let vb = { ...DISTRICT }, anim = 0;
+
+  function fit(box) {
+    const r = wrap.getBoundingClientRect();
+    const aspect = (r.width || 1) / (r.height || 1);
+    let { x, y, w, h } = box;
+    const pad = .12;
+    x -= w * pad; y -= h * pad; w *= 1 + 2 * pad; h *= 1 + 2 * pad;
+    if (w / h > aspect) { const nh = w / aspect; y -= (nh - h) / 2; h = nh; } else { const nw = h * aspect; x -= (nw - w) / 2; w = nw; }
+    return { x, y, w, h };
+  }
+  const bbox = (pts) => { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; };
+  function flyTo(box, instant, prefit) {
+    const target = prefit ? box : fit(box);
+    if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { vb = { ...target }; applyVb(); return; }
+    const from = { ...vb }, t0 = performance.now();
+    cancelAnimationFrame(anim);
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / 650), e = 1 - Math.pow(1 - t, 3);
+      for (const k of ['x', 'y', 'w', 'h']) vb[k] = from[k] + (target[k] - from[k]) * e;
+      applyVb();
+      if (t < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  }
+  // Keep marks and labels the same size on screen at every zoom.
+  function applyVb() {
+    svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+    const px = vb.w / (wrap.getBoundingClientRect().width || 800);
+    svg.querySelectorAll('.pt').forEach((c) => c.setAttribute('r', (c.dataset.big ? 5 : 4) * px));
+    svg.querySelectorAll('.ring').forEach((c) => c.setAttribute('r', 11 * px));
+    svg.querySelectorAll('.area-label').forEach((t) => { t.style.fontSize = 11 * px + 'px'; t.style.strokeWidth = 3 * px + 'px'; });
+  }
+  function binColor(v, ov) {
+    let i = ov.bins.findIndex((b) => v < b);
+    if (i < 0) i = ov.bins.length;
+    return RAMP[ov.invert ? 4 - i : i];
+  }
+  function renderMap() {
+    const poly = (a) => a.pts.map((p) => p.join(',')).join(' ');
+    const areaFill = (a) => (overlay.kind === 'area' ? binColor(overlay.value(a.id), overlay) : 'var(--sheet)');
+    const showPts = overlay.kind === 'points' || sel.area;
+    const ptFill = (p) => (overlay.id === 'age' ? ageColor(p.checked) : STATUS[p.status][1]);
+    svg.innerHTML = `
+      <defs><pattern id="mg" width="2" height="2" patternUnits="userSpaceOnUse"><path d="M2 0H0V2" fill="none" stroke="var(--grid)" stroke-width=".06"/></pattern></defs>
+      <rect x="-300" y="-300" width="700" height="700" fill="url(#mg)" data-bg="1"/>
+      ${AREAS.map((a) => `<polygon class="area ${sel.area && sel.area !== a.id ? 'dim' : ''} ${sel.area === a.id ? 'sel' : ''}" data-area="${a.id}" points="${poly(a)}" fill="${areaFill(a)}" vector-effect="non-scaling-stroke"/>`).join('')}
+      ${showPts ? POINTS.map((p) => `<circle class="pt ${sel.area && p.area !== sel.area ? 'dim' : ''} ${sel.point === p.id ? 'sel' : ''}" data-pt="${p.id}" ${p.status !== 'ok' || overlay.id === 'age' ? 'data-big="1"' : ''} cx="${p.x}" cy="${p.y}" fill="${ptFill(p)}" vector-effect="non-scaling-stroke"/>`).join('') : ''}
+      ${sel.point ? `<circle class="ring" cx="${pointOf(sel.point).x}" cy="${pointOf(sel.point).y}" vector-effect="non-scaling-stroke"/>` : ''}
+      ${AREAS.map((a) => `<text class="area-label" x="${a.lx}" y="${a.ly}" text-anchor="middle">${a.name}</text>`).join('')}`;
+    applyVb();
+  }
+  svg.addEventListener('click', (e) => {
+    const pt = e.target.closest('[data-pt]');
+    if (pt) return select({ area: pointOf(pt.dataset.pt).area, point: pt.dataset.pt });
+    const ar = e.target.closest('[data-area]');
+    if (ar) return select({ area: ar.dataset.area, point: null });
+    if (e.target.dataset.bg) select({ area: null, point: null });
+  });
+  svg.addEventListener('pointermove', (e) => {
+    const r = wrap.getBoundingClientRect();
+    const pt = e.target.closest('[data-pt]'), ar = e.target.closest('[data-area]');
+    if (!pt && !ar) return (tip.hidden = true);
+    tip.hidden = false;
+    tip.style.left = e.clientX - r.left + 'px';
+    tip.style.top = e.clientY - r.top + 'px';
+    if (pt) {
+      const p = pointOf(pt.dataset.pt);
+      tip.innerHTML = `<b>${p.name}</b>${overlay.id === 'age' ? `Checked <span class="v">${p.checked}</span> days ago` : `<span style="color:${STATUS[p.status][1]}">●</span> ${STATUS[p.status][0]}`} · ${p.type}`;
+    } else {
+      const a = areaOf(ar.dataset.area);
+      const v = overlay.kind === 'area' ? `<span class="v">${overlay.value(a.id).toLocaleString('en')}${overlay.unit}</span> ${overlay.id === 'func' ? 'functional' : 'people per working point'}` : `${ptsIn(a.id).length} water points · click to open`;
+      tip.innerHTML = `<b>${a.name}</b>${v}`;
+    }
+  });
+  svg.addEventListener('pointerleave', () => (tip.hidden = true));
+  const zoomBy = (f) => { const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2; flyTo({ x: cx - (vb.w * f) / 2, y: cy - (vb.h * f) / 2, w: vb.w * f, h: vb.h * f }, false, true); };
+  document.getElementById('zin').addEventListener('click', () => zoomBy(.6));
+  document.getElementById('zout').addEventListener('click', () => zoomBy(1.6));
+  document.getElementById('zfit').addEventListener('click', () => select({ area: null, point: null }));
+  addEventListener('resize', () => { vb = fit(currentBox()); applyVb(); });
+  function currentBox() {
+    if (sel.point) { const p = pointOf(sel.point); return { x: p.x - 14, y: p.y - 9, w: 28, h: 18 }; }
+    if (sel.area) return bbox(areaOf(sel.area).pts);
+    return DISTRICT;
+  }
+
+  /* ---------- Breadcrumbs ---------- */
+  function renderCrumbs() {
+    const parts = [['Kestrel District', { area: null, point: null }]];
+    if (sel.area) parts.push([areaOf(sel.area).name, { area: sel.area, point: null }]);
+    if (sel.point) parts.push([pointOf(sel.point).name, null]);
+    const el = document.getElementById('crumbs');
+    el.innerHTML = parts.map(([l], i) => `${i ? '<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>' : ''}<button type="button" data-i="${i}" ${i === parts.length - 1 ? 'aria-current="page"' : ''}>${l}</button>`).join('');
+    el.querySelectorAll('button:not([aria-current])').forEach((b) => b.addEventListener('click', () => select(parts[+b.dataset.i][1])));
+  }
+
+  /* ---------- Overlay picker + legend ---------- */
+  const ovEl = document.getElementById('overlay');
+  function renderOverlay() {
+    const open = ovEl.dataset.open === 'true';
+    let last = '';
+    ovEl.innerHTML = `
+      <button type="button" class="ov-head" id="ov-toggle" aria-expanded="${open}">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5M2 17l10 5 10-5"/></svg></span>
+        <span style="min-width:0"><span class="eyebrow" style="display:block">Map overlay</span><span class="t">${overlay.name}</span></span>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="ov-list" ${open ? '' : 'hidden'}>${OVERLAYS.map((o) => { const h = o.group !== last ? `<span class="eyebrow">${(last = o.group)}</span>` : ''; return `${h}<button type="button" data-ov="${o.id}" aria-pressed="${o === overlay}"><span class="radio"></span>${o.name}</button>`; }).join('')}</div>
+      <div class="ov-period"><button type="button" id="pprev" aria-label="Previous month" ${periodIdx === 0 ? 'disabled' : ''}>‹</button><span class="p">${MONTHS[periodIdx]} ${periodIdx < 2 ? 2025 : 2026}</span><button type="button" id="pnext" aria-label="Next month" ${periodIdx === 11 ? 'disabled' : ''}>›</button></div>`;
+    ovEl.querySelector('#ov-toggle').addEventListener('click', () => { ovEl.dataset.open = String(!open); renderOverlay(); });
+    ovEl.querySelectorAll('[data-ov]').forEach((b) => b.addEventListener('click', () => { overlay = OVERLAYS.find((o) => o.id === b.dataset.ov); ovEl.dataset.open = 'false'; renderOverlay(); renderMap(); renderLegend(); }));
+    ovEl.querySelector('#pprev').addEventListener('click', () => { periodIdx--; renderOverlay(); toast('In the app, the map switches to that month’s data'); });
+    ovEl.querySelector('#pnext').addEventListener('click', () => { periodIdx++; renderOverlay(); });
+  }
+  function renderLegend() {
+    const el = document.getElementById('legend');
+    const l = ptsIn(sel.area);
+    if (overlay.id === 'status') el.innerHTML = `<span class="eyebrow">${overlay.note}</span><div class="rows">${Object.entries(STATUS).map(([k, [n, c]]) => `<span><i style="background:${c};border-radius:50%"></i>${n} <span class="mono" style="color:var(--ink-3)">${count(l, k)}</span></span>`).join('')}</div>`;
+    else if (overlay.id === 'age') el.innerHTML = `<span class="eyebrow">${overlay.note}</span><div class="rows">${AGE.map(([, c, n]) => `<span><i style="background:${c};border-radius:50%;box-shadow:0 0 0 1px var(--line-2)"></i>${n}</span>`).join('')}</div>`;
+    else {
+      const b = overlay.bins, labels = [`<${b[0]}`, `${b[0]}–${b[1]}`, `${b[1]}–${b[2]}`, `${b[2]}–${b[3]}`, `${b[3]}+`];
+      el.innerHTML = `<span class="eyebrow">${overlay.note}</span><div class="ramp">${labels.map((lab, i) => `<div><i style="background:${RAMP[overlay.invert ? 4 - i : i]}"></i>${lab}${overlay.unit}</div>`).join('')}</div>`;
+    }
+  }
+
+  /* ---------- Panel ---------- */
+  const panel = document.getElementById('panel');
+  let tiles = {};
+
+  function trendChart(data, W = 400, H = 170) {
+    const L = 30, R = 10, T = 12, B = 22, lo = Math.floor(Math.min(...data) / 10) * 10 - 5, hi = Math.min(100, Math.ceil(Math.max(...data) / 10) * 10 + 5);
+    const x = (i) => L + (i / (data.length - 1)) * (W - L - R), y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const d = data.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join('');
+    const ticks = [lo, Math.round((lo + hi) / 2), hi];
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Functional share by month, ${data[0]}% to ${data.at(-1)}%">
+      <defs><linearGradient id="tf${W}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--brand)" stop-opacity=".16"/><stop offset="1" stop-color="var(--brand)" stop-opacity="0"/></linearGradient></defs>
+      <g class="axis">${ticks.map((t) => `<line class="gridl" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 3.5}" text-anchor="end">${t}</text>`).join('')}${MONTHS.map((m, i) => (i % 3 === 2 ? `<text x="${x(i)}" y="${H - 5}" text-anchor="middle">${m}</text>` : '')).join('')}</g>
+      <path d="${d}L${x(data.length - 1)} ${y(lo)}L${L} ${y(lo)}Z" fill="url(#tf${W})"/><path class="series" d="${d}"/>
+      ${data.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="9" fill="transparent"><title>${MONTHS[i]}: ${v}%</title></circle>`).join('')}
+      <circle class="dotpt" cx="${x(data.length - 1)}" cy="${y(data.at(-1))}" r="4"/>
+      <text x="${x(data.length - 1) - 7}" y="${y(data.at(-1)) - 9}" text-anchor="end" class="val-t" style="font-weight:500">${data.at(-1)}%</text>
+    </svg></div>`;
+  }
+  function barList(rows, { W = 400, target, click } = {}) {
+    const rh = 32, L = 92, R = 40, H = rows.length * rh;
+    const x = (v) => (v / 100) * (W - L - R);
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H + (target ? 14 : 0)}" role="img" aria-label="Bar chart of share functional">
+      ${rows.map(([id, n, v], i) => `<g class="${click ? 'barrow' : ''}" ${click ? `data-area="${id}"` : ''}><title>${n}: ${v}%</title><rect x="0" y="${i * rh}" width="${W}" height="${rh}" fill="transparent"/>
+        <text class="lbl" x="0" y="${i * rh + 20}">${n}</text><rect x="${L}" y="${i * rh + 10}" width="${W - L - R}" height="13" fill="var(--raise)"/>
+        <rect class="bar" x="${L}" y="${i * rh + 10}" width="${x(v)}" height="13"/><text class="val-t" x="${W}" y="${i * rh + 20}" text-anchor="end">${v}%</text></g>`).join('')}
+      ${target ? `<line x1="${L + x(target)}" x2="${L + x(target)}" y1="4" y2="${H - 4}" stroke="var(--ink-3)" stroke-dasharray="2 3"/><text x="${L + x(target)}" y="${H + 11}" text-anchor="middle" style="fill:var(--ink-3);font-family:var(--mono);font-size:9.5px">${target}% target</text>` : ''}
+    </svg></div>`;
+  }
+  const tile = (id, title, note, body, expandable = true) => `<section class="tile"><div class="tile-h"><h3>${title}</h3>${note ? `<span class="note">· ${note}</span>` : ''}${expandable ? `<button class="expand" data-expand="${id}" aria-label="Expand ${title}" title="Expand"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>` : ''}</div><div class="tile-b">${body}</div></section>`;
+  const panelFoot = () => `<div class="p-foot"><div class="row"><span>Source: monthly functionality checks</span><span>Licence: CC BY 4.0</span></div><div class="row"><span>© 2026 Kestrel District Health</span><span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" fill="var(--brand)"/><path d="M9 9h6v6H9zM17 9h6v6h-6zM9 17h6v6H9zM17 17h6v6h-6z" fill="#fff"/></svg>Powered by Grids</span></div></div>`;
+
+  function renderPanel() {
+    tiles = {};
+    if (sel.point) return renderPointPanel();
+    const a = sel.area ? areaOf(sel.area) : null;
+    const l = ptsIn(sel.area), ok = count(l, 'ok'), warn = count(l, 'warn'), bad = count(l, 'bad');
+    const pop = a ? AREA_POP[a.id] : Object.values(AREA_POP).reduce((s, v) => s + v, 0);
+    const m = (n, c) => `<i style="width:${pct(n, l.length)}%;background:${c}"></i>`;
+    const byArea = AREAS.map((x) => [x.id, x.name, funcPct(x.id)]).sort((p, q) => q[2] - p[2]);
+    const byType = ['Borehole', 'Tap stand', 'Spring'].map((t) => { const tl = l.filter((p) => p.type === t); return [t, t + 's', pct(count(tl, 'ok'), tl.length)]; });
+    const worst = l.filter((p) => p.status !== 'ok').sort((p, q) => (p.status === q.status ? q.served - p.served : p.status === 'bad' ? -1 : 1)).slice(0, 6);
+    tiles.bars = { title: a ? 'Functional by type' : 'Functional by area', rows: a ? byType : byArea };
+    tiles.trend = { title: 'Functional over time', data: trendFor(sel.area) };
+    tiles.list = { title: 'Out of service, most people affected', rows: worst };
+
+    panel.innerHTML = `
+      <div class="p-head">
+        <span class="eyebrow">${a ? 'Area' : 'District'}</span>
+        <h1>${a ? a.name : 'Kestrel District'}</h1>
+        <div class="facts"><span><b>${l.length}</b> water points</span><span><b>${(pop / 1000).toFixed(1)}k</b> people</span>${a ? '' : '<span><b>6</b> areas</span>'}<span>Updated <b>2 Oct 2026</b></span></div>
+      </div>
+      <div class="dash-sel"><select class="select" aria-label="Dashboard"><option>Water access</option><option>Repairs and maintenance</option><option>Water quality</option></select><button class="btn ghost" id="export" style="height:32px">Export</button></div>
+      <div class="tiles">
+        <section class="tile"><div class="kpi2">
+          <div><span class="eyebrow">Functional</span><span class="val">${pct(ok, l.length)}<small>%</small></span><span class="sub">${ok} of ${l.length} <span class="delta up">+1 pt</span></span><div class="meter">${m(ok, 'var(--ok)')}${m(warn, 'var(--warn)')}${m(bad, 'var(--bad)')}</div></div>
+          <div><span class="eyebrow">Out of service</span><span class="val">${bad}</span><span class="sub">${warn} more need repair</span></div>
+        </div></section>
+        ${tile('bars', tiles.bars.title, a ? '' : 'click to open', barList(tiles.bars.rows, { target: 80, click: !a }))}
+        ${tile('trend', 'Functional over time', 'last 12 months', trendChart(tiles.trend.data))}
+        ${tile('list', tiles.list.title, '', `<div style="margin:0 -14px -14px;overflow-x:auto"><table><thead><tr><th>Water point</th><th>Status</th><th class="num">People</th></tr></thead><tbody>${worst.map((p) => `<tr class="click" data-pt="${p.id}"><td><div style="font-weight:500">${p.name}</div><div style="font-size:11.5px;color:var(--ink-3)">${areaOf(p.area).name}</div></td><td><span class="chip ${p.status}"><i></i>${STATUS[p.status][0]}</span></td><td class="num">${p.served}</td></tr>`).join('')}</tbody></table></div>`)}
+      </div>
+      ${panelFoot()}`;
+    wirePanel();
+  }
+
+  function renderPointPanel() {
+    const p = pointOf(sel.point), a = areaOf(p.area);
+    panel.innerHTML = `
+      <div class="p-head">
+        <span class="eyebrow">${p.type} · ${a.name}</span>
+        <h1>${p.name}</h1>
+        <div class="facts"><span class="chip ${p.status}"><i></i>${STATUS[p.status][0]}</span><span>Checked <b>${p.checked} days ago</b></span></div>
+      </div>
+      <div class="dash-sel"><select class="select" aria-label="Dashboard"><option>Water point profile</option></select><button class="btn ghost" id="export" style="height:32px">Export</button></div>
+      <div class="tiles">
+        <section class="tile"><div class="kpi2">
+          <div><span class="eyebrow">People served</span><span class="val">${p.served}</span><span class="sub">Estimated</span></div>
+          <div><span class="eyebrow">Working months</span><span class="val">${p.history.filter((h) => h === 'ok').length}<small>/12</small></span><span class="sub">In the last year</span></div>
+        </div></section>
+        ${tile('hist', 'Status at each monthly check', '', `<div class="history" role="img" aria-label="Status for each of the last 12 months">${p.history.map((h, i) => `<i title="${MONTHS[i]}: ${STATUS[h][0]}" style="background:${STATUS[h][1]}"></i>`).join('')}</div><div class="history-x">${MONTHS.map((mo) => `<span>${mo[0]}</span>`).join('')}</div>`, false)}
+        ${p.status !== 'ok' ? tile('fault', 'Reported fault', '', `<p style="margin:0;font-size:13px;color:var(--ink-2)">${p.status === 'bad' ? 'No water at last check. Handpump rod broken; parts ordered.' : 'Low flow reported. Leak at the apron; repair scheduled.'}</p>`, false) : ''}
+        ${tile('facts', 'Details', '', `<dl class="dl"><dt>Type</dt><dd>${p.type}</dd>${p.depth ? `<dt>Depth</dt><dd class="mono">${p.depth} m</dd>` : ''}<dt>Built</dt><dd class="mono">${p.built}</dd><dt>Area</dt><dd>${a.name}</dd><dt>Managed by</dt><dd>${a.name} water committee</dd></dl>`, false)}
+      </div>
+      ${panelFoot()}`;
+    wirePanel();
+  }
+  function wirePanel() {
+    panel.querySelectorAll('[data-area]').forEach((g) => g.addEventListener('click', () => select({ area: g.dataset.area, point: null })));
+    panel.querySelectorAll('tr[data-pt]').forEach((r) => r.addEventListener('click', () => select({ area: pointOf(r.dataset.pt).area, point: r.dataset.pt })));
+    panel.querySelectorAll('[data-expand]').forEach((b) => b.addEventListener('click', () => expand(b.dataset.expand)));
+    panel.querySelector('#export').addEventListener('click', () => toast('In the app, this exports the dashboard as PDF or CSV'));
+    panel.scrollTop = 0;
+  }
+
+  /* ---------- Expanded tile: chart or table ---------- */
+  const modal = document.getElementById('modal');
+  const closeBtn = '<button class="icon-btn" id="m-close" aria-label="Close" style="border-color:transparent"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+  function expand(id, view = 'chart') {
+    const t = tiles[id];
+    if (!t) return;
+    let chart = null, table;
+    if (id === 'bars') { chart = barList(t.rows, { W: 720, target: 80 }); table = `<table><thead><tr><th>${sel.area ? 'Type' : 'Area'}</th><th class="num">Functional</th></tr></thead><tbody>${t.rows.map(([, n, v]) => `<tr><td>${n}</td><td class="num">${v}%</td></tr>`).join('')}</tbody></table>`; }
+    if (id === 'trend') { chart = trendChart(t.data, 720, 300); table = `<table><thead><tr><th>Month</th><th class="num">Functional</th></tr></thead><tbody>${t.data.map((v, i) => `<tr><td>${MONTHS[i]} ${i < 2 ? 2025 : 2026}</td><td class="num">${v}%</td></tr>`).join('')}</tbody></table>`; }
+    if (id === 'list') { view = 'table'; table = `<table><thead><tr><th>Water point</th><th>Area</th><th>Type</th><th>Status</th><th class="num">People</th></tr></thead><tbody>${t.rows.map((p) => `<tr><td>${p.name}</td><td>${areaOf(p.area).name}</td><td>${p.type}</td><td><span class="chip ${p.status}"><i></i>${STATUS[p.status][0]}</span></td><td class="num">${p.served}</td></tr>`).join('')}</tbody></table>`; }
+    modal.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+      <div class="modal-h"><div><span class="eyebrow">${sel.area ? areaOf(sel.area).name : 'Kestrel District'}</span><h2 id="m-title">${t.title}</h2></div>
+        <div class="tools">${chart ? `<div class="seg" role="group" aria-label="View"><button aria-pressed="${view === 'chart'}" data-view="chart">Chart</button><button aria-pressed="${view === 'table'}" data-view="table">Table</button></div>` : ''}<button class="btn" id="m-export">Export</button>${closeBtn}</div></div>
+      <div class="modal-b" ${view === 'table' ? 'style="padding:0;overflow-x:auto"' : ''}>${view === 'chart' ? chart : table}</div></div>`;
+    modal.hidden = false;
+    modal.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => expand(id, b.dataset.view)));
+    modal.querySelector('#m-close').addEventListener('click', () => (modal.hidden = true));
+    modal.querySelector('#m-export').addEventListener('click', () => toast('In the app, this downloads PNG or CSV'));
+    modal.querySelector('#m-close').focus();
+  }
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+
+  /* ---------- Search ---------- */
+  const sIn = document.getElementById('search-in'), sRes = document.getElementById('results');
+  let sItems = [], sIdx = 0;
+  function renderResults() {
+    const q = sIn.value.trim().toLowerCase();
+    if (!q) return (sRes.hidden = true);
+    sItems = [...AREAS.filter((a) => a.name.toLowerCase().includes(q)).map((a) => ({ label: a.name, kind: 'Area', go: { area: a.id, point: null } })), ...POINTS.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8).map((p) => ({ label: p.name, kind: areaOf(p.area).name, go: { area: p.area, point: p.id }, dot: STATUS[p.status][1] }))];
+    sIdx = Math.min(sIdx, Math.max(0, sItems.length - 1));
+    sRes.hidden = false;
+    sRes.innerHTML = sItems.length ? sItems.map((it, i) => `<li role="option" data-i="${i}" aria-selected="${i === sIdx}">${it.dot ? `<i style="width:8px;height:8px;border-radius:50%;background:${it.dot};flex:none"></i>` : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/></svg>'}<span>${it.label}</span><span class="eyebrow">${it.kind}</span></li>`).join('') : '<li style="color:var(--ink-3);cursor:default">No places match</li>';
+  }
+  const pick = (i) => { const it = sItems[i]; if (!it) return; sIn.value = ''; sRes.hidden = true; sIn.blur(); select(it.go); };
+  sIn.addEventListener('input', () => { sIdx = 0; renderResults(); });
+  sIn.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { sIdx = Math.min(sItems.length - 1, sIdx + 1); renderResults(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { sIdx = Math.max(0, sIdx - 1); renderResults(); e.preventDefault(); }
+    else if (e.key === 'Enter') pick(sIdx);
+    else if (e.key === 'Escape') { sIn.value = ''; sRes.hidden = true; }
+  });
+  sRes.addEventListener('mousedown', (e) => { const li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); pick(+li.dataset.i); } });
+  sIn.addEventListener('blur', () => setTimeout(() => (sRes.hidden = true), 100));
+
+  /* ---------- Select + render ---------- */
+  function select(s, instant) {
+    sel = s;
+    renderMap(); renderCrumbs(); renderLegend(); renderPanel();
+    flyTo(currentBox(), instant);
+  }
+
+  /* ---------- Panel collapse, share, theme, toast ---------- */
+  const body = document.getElementById('body');
+  document.getElementById('ptoggle').addEventListener('click', (e) => {
+    body.classList.toggle('collapsed');
+    const c = body.classList.contains('collapsed');
+    e.currentTarget.title = c ? 'Show dashboard panel' : 'Hide dashboard panel';
+    e.currentTarget.setAttribute('aria-label', e.currentTarget.title);
+    requestAnimationFrame(() => { vb = fit(currentBox()); applyVb(); });
+  });
+  function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 2400); }
+  document.getElementById('share').addEventListener('click', () => {
+    const where = sel.point || sel.area || 'district';
+    modal.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sh-t" style="max-width:520px"><div class="modal-h"><h2 id="sh-t">Share this view</h2><div class="tools">${closeBtn}</div></div>
+      <div class="modal-b" style="display:grid;gap:16px"><div><label for="sh-link" style="display:block;font-size:13px;font-weight:500;color:var(--ink-2);margin-bottom:6px">Link</label><div class="copy-row"><input id="sh-link" readonly value="https://kestrel.grids.app/water/${where}?overlay=${overlay.id}" /><button class="btn" id="sh-copy">Copy</button></div></div>
+      <div style="font-size:12.5px;color:var(--ink-3)">Opens on the same place and map overlay. Anyone with the link can view; nobody can edit.</div></div></div>`;
+    modal.hidden = false;
+    modal.querySelector('#m-close').addEventListener('click', () => (modal.hidden = true));
+    modal.querySelector('#sh-copy').addEventListener('click', () => { const el = modal.querySelector('#sh-link'); (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject()).then(() => toast('Link copied'), () => { el.select(); toast('Press Ctrl+C to copy'); }); });
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { modal.hidden = true; if (ovEl.dataset.open === 'true') { ovEl.dataset.open = 'false'; renderOverlay(); } } });
+
+  const themeBtn = document.getElementById('theme');
+  const sys = matchMedia('(prefers-color-scheme: dark)');
+  const cur = () => document.documentElement.dataset.theme || (sys.matches ? 'dark' : 'light');
+  const syncTheme = () => { const n = cur() === 'dark' ? 'light' : 'dark'; themeBtn.dataset.current = cur(); themeBtn.title = `Switch to ${n} mode`; themeBtn.setAttribute('aria-label', themeBtn.title); };
+  themeBtn.addEventListener('click', () => { const n = cur() === 'dark' ? 'light' : 'dark'; if ((n === 'dark') === sys.matches) delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = n; syncTheme(); });
+  sys.addEventListener('change', syncTheme);
+  syncTheme();
+
+  renderOverlay();
+  select({ area: null, point: null }, true);
+</script>

@@ -201,7 +201,7 @@ function Submissions({ form, onClose, onOpen }: { form: FormDto; onClose(): void
               type="button"
               aria-pressed={status === x}
               onClick={() => setStatus(x)}
-              className={`rounded-full px-2.5 py-1 text-xs ring-1 ${status === x ? 'bg-ink text-canvas ring-ink' : 'bg-snow text-zinc-600 ring-zinc-200 hover:ring-zinc-400'}`}
+              className={`px-2.5 py-1 text-xs ring-1 ${status === x ? 'bg-ink text-canvas ring-ink' : 'bg-snow text-zinc-600 ring-zinc-200 hover:ring-zinc-400'}`}
             >
               {x ? STATUS_INFO[x].label : 'All'}
             </button>

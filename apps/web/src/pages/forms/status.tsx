@@ -21,7 +21,7 @@ export function StageTrack({ stages, current, status, className }: { stages: str
   const finished = status === 'approved';
   return (
     <ol className={cx('flex flex-wrap items-center gap-1.5 text-xs', className)} aria-label="Approval stages">
-      <li className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-600">
+      <li className="inline-flex items-center gap-1.5 bg-zinc-100 px-2.5 py-1 text-zinc-600">
         <Send className="size-3" /> Submitted
       </li>
       {stages.map((name, i) => {
@@ -34,7 +34,7 @@ export function StageTrack({ stages, current, status, className }: { stages: str
             <span className="h-px w-3 bg-zinc-300" />
             <span
               className={cx(
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1',
+                'inline-flex items-center gap-1.5 px-2.5 py-1',
                 bad
                   ? 'bg-red-50 text-red-800 ring-1 ring-red-200'
                   : back
@@ -74,7 +74,7 @@ export function ReviewTimeline({ reviews }: { reviews: ReviewDto[] }) {
         const d = DECISION[r.decision];
         return (
           <li key={i} className="relative flex gap-3">
-            <span className={cx('relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full ring-4 ring-snow', d.tone)}>
+            <span className={cx('relative z-10 flex size-7 shrink-0 items-center justify-center ring-4 ring-snow', d.tone)}>
               <d.icon className="size-3.5" />
             </span>
             <div className="min-w-0 pt-0.5 text-sm">

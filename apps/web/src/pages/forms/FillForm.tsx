@@ -115,7 +115,7 @@ export function FillForm({
         {backLink}
         <div className="animate-[fadeUp_.35s_ease-out] overflow-hidden rounded-3xl border border-zinc-200 bg-snow text-center shadow-[var(--shadow-raised)]">
           <div className="bg-[radial-gradient(80%_100%_at_50%_0%,color-mix(in_oklab,var(--brand-600)_16%,transparent),transparent)] px-6 pt-12 pb-8">
-            <span className={cx('mx-auto flex size-16 items-center justify-center rounded-full ring-8', s?.status === 'in_review' ? 'bg-sky-50 text-sky-600 ring-sky-50/50' : 'bg-emerald-50 text-emerald-600 ring-emerald-50/50')}>
+            <span className={cx('mx-auto flex size-16 items-center justify-center ring-8', s?.status === 'in_review' ? 'bg-sky-50 text-sky-600 ring-sky-50/50' : 'bg-emerald-50 text-emerald-600 ring-emerald-50/50')}>
               {done === 'offline' ? <CloudOff className="size-8" /> : <CheckCircle2 className="size-8" />}
             </span>
             <h2 className="mt-5 text-2xl font-semibold tracking-tight">
@@ -160,10 +160,10 @@ export function FillForm({
         <h1 className="text-2xl font-semibold tracking-tight">{def.title}</h1>
         {def.description && <p className="mt-1.5 text-sm text-zinc-600">{def.description}</p>}
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-600">
-          <span className="rounded-full bg-zinc-100 px-2.5 py-1">{questionCount} questions</span>
-          <span className="rounded-full bg-zinc-100 px-2.5 py-1">{FORM_LAYOUT_INFO[def.layout].label}</span>
+          <span className="bg-zinc-100 px-2.5 py-1">{questionCount} questions</span>
+          <span className="bg-zinc-100 px-2.5 py-1">{FORM_LAYOUT_INFO[def.layout].label}</span>
           {stages.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-sky-800">
+            <span className="inline-flex items-center gap-1 bg-sky-50 px-2.5 py-1 text-sky-800">
               <GitBranch className="size-3" /> Reviewed by {stages.map((s) => s.name).join(' → ')}
             </span>
           )}

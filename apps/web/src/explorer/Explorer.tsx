@@ -173,23 +173,23 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
 
       {/* Place trail (bottom centre of the map area) */}
       <div className="pointer-events-none absolute bottom-5 left-0 z-20 flex justify-center px-4 transition-[right]" style={{ right }}>
-        <nav aria-label="Place" className={cx(glass, 'pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full py-1.5 ps-1.5 pe-4 text-sm')}>
+        <nav aria-label="Place" className={cx(glass, 'pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto py-1.5 ps-1.5 pe-4 text-sm')}>
           <button
             type="button"
             onClick={() => go(here.data?.ancestors.at(-1)?.id ?? null)}
             disabled={!here.data?.entity}
             aria-label="Up one level"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40"
+            className="flex size-8 shrink-0 items-center justify-center bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40"
           >
             <ArrowUp className="size-4" />
           </button>
-          <button type="button" onClick={() => go(null)} className="shrink-0 rounded-full px-2 py-1 text-zinc-600 hover:text-ink">
+          <button type="button" onClick={() => go(null)} className="shrink-0 px-2 py-1 text-zinc-600 hover:text-ink">
             {title}
           </button>
           {here.data?.ancestors.map((a) => (
             <span key={a.id} className="flex shrink-0 items-center gap-1">
               <ChevronRight className="size-3.5 text-zinc-400" />
-              <button type="button" onClick={() => go(a.id)} className="rounded-full px-2 py-1 text-zinc-600 hover:text-ink">
+              <button type="button" onClick={() => go(a.id)} className="px-2 py-1 text-zinc-600 hover:text-ink">
                 {a.name}
               </button>
             </span>
@@ -197,7 +197,7 @@ export function Explorer({ source, title, subtitle, logo, actions, emptyOverlays
           {here.data?.entity && (
             <span className="flex shrink-0 items-center gap-1">
               <ChevronRight className="size-3.5 text-zinc-400" />
-              <span className="rounded-full px-2 py-1 font-semibold" style={{ color: accent }}>
+              <span className="px-2 py-1 font-semibold" style={{ color: accent }}>
                 {here.data.entity.name}
               </span>
             </span>
@@ -253,7 +253,7 @@ function Legend({ scale }: { scale: NonNullable<ReturnType<typeof scaleFor>> }) 
   if (scale.gradient)
     return (
       <div>
-        <div className="h-2 w-full rounded-full" style={{ background: `linear-gradient(to right, ${scale.gradient.stops.join(', ')})` }} />
+        <div className="h-2 w-full" style={{ background: `linear-gradient(to right, ${scale.gradient.stops.join(', ')})` }} />
         <div className="mt-1.5 flex justify-between text-xs text-zinc-500 tabular-nums">
           <span>{scale.gradient.min}</span>
           <span className="flex items-center gap-1.5">
@@ -266,12 +266,12 @@ function Legend({ scale }: { scale: NonNullable<ReturnType<typeof scaleFor>> }) 
   return (
     <div className="flex flex-wrap gap-1.5 text-xs">
       {scale.legend.map((l) => (
-        <span key={l.label} className="flex items-center gap-1.5 rounded-full bg-zinc-100 py-0.5 ps-1 pe-2 tabular-nums">
+        <span key={l.label} className="flex items-center gap-1.5 bg-zinc-100 py-0.5 ps-1 pe-2 tabular-nums">
           <span className="size-3 rounded-full" style={{ background: l.color }} />
           {l.label}
         </span>
       ))}
-      <span className="flex items-center gap-1.5 rounded-full bg-zinc-100 py-0.5 ps-1 pe-2 text-zinc-500">
+      <span className="flex items-center gap-1.5 bg-zinc-100 py-0.5 ps-1 pe-2 text-zinc-500">
         <span className="size-3 rounded-full" style={{ background: NO_DATA }} />
         No data
       </span>
@@ -384,7 +384,7 @@ function PlaceSearch({ source, onPick }: { source: ExplorerSource; onPick(h: Sea
                   <span className="block truncate text-sm font-medium">{h.name}</span>
                   {h.path && <span className="block truncate text-xs text-zinc-500">{h.path}</span>}
                 </span>
-                <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{h.type.name}</span>
+                <span className="shrink-0 bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{h.type.name}</span>
               </button>
             </li>
           ))}

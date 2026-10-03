@@ -178,6 +178,12 @@ const es: Catalog = {
       preferences: 'Preferencias',
       account: 'Cuenta y seguridad',
       yourOrgs: 'Tus organizaciones',
+      search: 'Buscar o ir a',
+      searchPlaceholder: 'Buscar páginas y proyectos',
+      noMatches: 'Sin resultados',
+      goTo: 'Ir a',
+      lightMode: 'Cambiar a modo claro',
+      darkMode: 'Cambiar a modo oscuro',
     },
     prefs: {
       title: 'Preferencias',

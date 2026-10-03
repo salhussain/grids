@@ -177,6 +177,12 @@ const ar: Catalog = {
       preferences: 'التفضيلات',
       account: 'الحساب والأمان',
       yourOrgs: 'مؤسساتك',
+      search: 'ابحث أو انتقل إلى',
+      searchPlaceholder: 'ابحث في الصفحات والمشاريع',
+      noMatches: 'لا توجد نتائج',
+      goTo: 'انتقل إلى',
+      lightMode: 'التبديل إلى الوضع الفاتح',
+      darkMode: 'التبديل إلى الوضع الداكن',
     },
     prefs: {
       title: 'التفضيلات',

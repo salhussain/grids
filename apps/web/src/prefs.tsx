@@ -3,7 +3,7 @@ import { LOCALES } from '@grids/i18n';
 import type { LocalizationDto, MeDto } from '@grids/schema';
 import { applyColorMode, cx, Dialog, storedColorMode, useToast } from '@grids/ui';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './api';
 import { localeName, useT } from './i18n';
 
@@ -29,6 +29,48 @@ function useSavePreferences() {
       toast(t('web.prefs.saved'));
     },
   });
+}
+
+const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)');
+
+/**
+ * One-button light/dark switch. Follows the device until clicked and always shows
+ * the mode it switches to; picking the device's own mode goes back to "system".
+ */
+export function ThemeToggle({ me, className }: { me: MeDto; className?: string }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: api.setPreferences,
+    onSuccess: (next) => qc.setQueryData(['me'], next),
+  });
+  const [osDark, setOsDark] = useState(() => systemDark().matches);
+  useEffect(() => {
+    const mq = systemDark();
+    const onChange = (e: MediaQueryListEvent) => setOsDark(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const mode = save.variables?.colorMode ?? me.preferences.colorMode;
+  const dark = mode === 'system' ? osDark : mode === 'dark';
+  const label = dark ? t('web.shell.lightMode') : t('web.shell.darkMode');
+  const icon = 'absolute size-4 transition-[opacity,transform] duration-[400ms] motion-reduce:transition-none';
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={() => {
+        const next = dark === osDark ? (dark ? 'light' : 'dark') : 'system';
+        applyColorMode(next);
+        save.mutate({ colorMode: next });
+      }}
+      className={cx('relative flex size-8 shrink-0 items-center justify-center', className)}
+    >
+      <Sun className={cx(icon, dark ? 'scale-100 rotate-0 opacity-100' : 'scale-60 -rotate-90 opacity-0')} />
+      <Moon className={cx(icon, dark ? 'scale-60 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100')} />
+    </button>
+  );
 }
 
 /** Appearance and language, per person. Languages are limited to the organisation's set. */

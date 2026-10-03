@@ -72,7 +72,8 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
       /* ignore */
     }
   };
-  const row = 'mx-3 mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors';
+  const row =
+    'relative mb-0.5 flex min-h-9 items-center gap-3 px-3 text-sm transition-colors before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:bg-transparent';
 
   const renderGroup = (g: FormGroupDto, depth: number) => {
     if (!admin && !has(g.id)) return null;
@@ -83,13 +84,13 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
     const forms = formsIn.get(g.id) ?? [];
     return (
       <li key={g.id}>
-        <div className={cx(row, 'group/row relative gap-2 py-1.5 pe-1.5', active ? tone.active : tone.hover)} style={{ marginInlineStart: `${12 + depth * 14}px` }}>
+        <div className={cx(row, 'group/row relative gap-2 py-1.5 pe-1.5', active ? tone.active : tone.hover)} style={{ marginInlineStart: `${depth * 14}px` }}>
           <Link to={`${base}/forms`} search={{ group: g.id }} onClick={() => (!isOpen && toggle(g.id), onNavigate?.())} className="flex min-w-0 flex-1 items-center gap-3">
             <Icon className={cx('shrink-0', depth ? 'size-4' : 'size-[18px]')} strokeWidth={1.75} />
             <span className="truncate">{g.name}</span>
           </Link>
           {(subs.length > 0 || forms.length > 0) && (
-            <button type="button" onClick={() => toggle(g.id)} aria-expanded={isOpen} aria-label={isOpen ? `Collapse ${g.name}` : `Expand ${g.name}`} className={cx('rounded p-1', tone.muted, tone.hover)}>
+            <button type="button" onClick={() => toggle(g.id)} aria-expanded={isOpen} aria-label={isOpen ? `Collapse ${g.name}` : `Expand ${g.name}`} className={cx('p-1', tone.muted, tone.hover)}>
               <ChevronRight className={cx('size-3.5 transition-transform', isOpen && 'rotate-90')} />
             </button>
           )}
@@ -113,7 +114,7 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
           onClick={onNavigate}
           aria-current={active ? 'page' : undefined}
           className={cx(row, 'gap-2.5 py-1.5 text-[13px]', active ? tone.active : tone.hover)}
-          style={{ marginInlineStart: `${12 + depth * 14}px` }}
+          style={{ marginInlineStart: `${depth * 14}px` }}
           title={`${f.name} · ${f.project.name}`}
         >
           <span className={cx('size-1.5 shrink-0 rounded-full', active ? 'bg-accent-500' : 'bg-current opacity-40')} />
@@ -125,8 +126,8 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
 
   const loose = formsIn.get(null) ?? [];
   return (
-    <div className="mb-5">
-      <div className={cx('px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] uppercase', tone.muted)}>Forms</div>
+    <div className="mb-4">
+      <div className={cx('px-3 pb-1.5 font-mono text-[10px] tracking-[0.12em] uppercase', tone.muted)}>Forms</div>
       <Link
         to={`${base}/inbox`}
         onClick={onNavigate}
@@ -136,7 +137,7 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
         <Inbox className="size-[18px] shrink-0" strokeWidth={1.75} />
         <span className="flex-1">Submissions</span>
         {toReview + returned > 0 && (
-          <span className="num min-w-5 rounded-full bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${toReview} to review, ${returned} sent back to you`}>
+          <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${toReview} to review, ${returned} sent back to you`}>
             {toReview + returned}
           </span>
         )}
@@ -153,7 +154,7 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
       <ul>
         {(children.get(null) ?? []).map((g) => renderGroup(g, 0))}
         {loose.length > 0 && (menu.data?.groups.length ?? 0) > 0 && (
-          <li className={cx('mx-6 mt-2 mb-1 flex items-center gap-2 text-[11px]', tone.muted)}>
+          <li className={cx('mx-3 mt-2 mb-1 flex items-center gap-2 text-[11px]', tone.muted)}>
             <ClipboardList className="size-3" /> Other
           </li>
         )}
