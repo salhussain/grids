@@ -10,6 +10,7 @@ import {
   uuidv7,
   type AuditPage,
   type LocalizationInput,
+  type OrgInsightsDto,
   type PublicBranding,
   type GrantDto,
   type OrgUnitDto,
@@ -613,5 +614,56 @@ export class WorkspaceService {
       workspace: 'audit.view',
     });
     return this.deps.logs.audit({ tenantId, ...page });
+  }
+
+  /** Activity across the organisation: submissions, data volume, projects, people and tickets. */
+  async insights(actor: Actor, tenantId: string): Promise<OrgInsightsDto> {
+    const policy = await workspacePolicy(this.ctx, actor, tenantId);
+    if (!policy) throw forbidden('You are not an active member of this organisation.');
+    const since = new Date(this.ctx.now().getTime() - 30 * 86_400_000);
+    const prev = new Date(since.getTime() - 30 * 86_400_000);
+    const cell = await withTenant(await this.cell(tenantId), tenantId, async (tx) => {
+      const days = await sql<{ day: string; n: number }>`
+        select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(s.id), 0)::int as n
+        from generate_series(date_trunc('day', ${since}::timestamptz), date_trunc('day', ${this.ctx.now()}::timestamptz), interval '1 day') d
+        left join submission s on date_trunc('day', s.submitted_at) = d
+        group by d order by d
+      `.execute(tx);
+      const one = async (q: ReturnType<typeof sql<{ n: number }>>) => (await q.execute(tx)).rows[0]?.n ?? 0;
+      const projects = await sql<{ status: string; n: number }>`select status, count(*)::int as n from project where archived_at is null group by status`.execute(tx);
+      const stale = await one(sql<{ n: number }>`
+        select count(distinct j.project_id)::int as n from job j
+        where j.enabled and j.freshness_minutes is not null
+          and coalesce((select max(finished_at) from run r where r.job_id = j.id and r.status = 'succeeded'), 'epoch') < now() - make_interval(mins => j.freshness_minutes * 3)
+      `);
+      return {
+        days: days.rows,
+        prev30: await one(sql<{ n: number }>`select count(*)::int as n from submission where submitted_at >= ${prev} and submitted_at < ${since}`),
+        toReview: await one(sql<{ n: number }>`select count(*)::int as n from submission where status = 'in_review'`),
+        entities: await one(sql<{ n: number }>`select count(*)::int as n from entity`),
+        observations30: await one(sql<{ n: number }>`select count(*)::int as n from observation where recorded_at >= ${since}`),
+        projects: projects.rows,
+        stale,
+      };
+    });
+    const members = await sql<{ status: string; n: number }>`select status, count(*)::int as n from membership where tenant_id = ${tenantId} group by status`.execute(this.ctx.db);
+    const invited = await sql<{ n: number }>`
+      select count(*)::int as n from invitation where tenant_id = ${tenantId} and accepted_at is null and revoked_at is null and expires_at > now()
+    `.execute(this.ctx.db);
+    const tickets = await sql<{ audience: string; n: number }>`
+      select audience, count(*)::int as n from support_ticket where tenant_id = ${tenantId} and status in ('open','pending') group by audience
+    `.execute(this.ctx.db);
+    const by = <T extends { n: number }>(rows: T[], key: keyof T, v: string) => rows.find((r) => r[key] === v)?.n ?? 0;
+    return {
+      submissionsByDay: cell.days.map((d) => ({ day: d.day, count: d.n })),
+      submissions30: cell.days.reduce((s, d) => s + d.n, 0),
+      submissionsPrev30: cell.prev30,
+      toReview: cell.toReview,
+      entities: cell.entities,
+      observations30: cell.observations30,
+      projects: { live: by(cell.projects, 'status', 'live'), draft: by(cell.projects, 'status', 'draft'), stale: cell.stale },
+      members: { active: by(members.rows, 'status', 'active'), suspended: by(members.rows, 'status', 'suspended'), invited: invited.rows[0]?.n ?? 0 },
+      tickets: { internalOpen: by(tickets.rows, 'audience', 'organisation'), platformOpen: by(tickets.rows, 'audience', 'platform') },
+    };
   }
 }

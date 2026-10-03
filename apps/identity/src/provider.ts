@@ -18,7 +18,11 @@ export function clients(config: IdentityConfig) {
     redirect_uris: [`${origin}/auth/callback`],
     post_logout_redirect_uris: [`${origin}/`],
   });
-  return [spa('grids-console', 'Grids Console', config.CONSOLE_URL), spa('grids-web', 'Grids Workspace', config.WEB_URL)];
+  return [
+    spa('grids-console', 'Grids Console', config.CONSOLE_URL),
+    spa('grids-web', 'Grids Workspace', config.WEB_URL),
+    spa('grids-portal', 'Grids Portal', config.PORTAL_URL),
+  ];
 }
 
 export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, accounts: Accounts, keys: JWK[]) {

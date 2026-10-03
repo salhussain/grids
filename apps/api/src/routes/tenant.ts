@@ -1,6 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  OrgInsightsDto,
+  OrgTicketUpdate,
   AddDomainInput,
   CreateInvitationInput,
   CreateTicketInput,
@@ -152,6 +154,22 @@ export const tenantRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) =
     '/tickets/:ticketId',
     { schema: { params: Ticket, body: UpdateTicketInput, response: { 200: TicketDetail } } },
     (req) => services.support.update(actorOf(req), req.params.ticketId, req.body),
+  );
+
+  const OrgTicket = T.extend({ ticketId: z.uuid() });
+  app.patch(
+    '/tenants/:tenantId/tickets/:ticketId',
+    { schema: { params: OrgTicket, body: OrgTicketUpdate, response: { 200: TicketDetail } } },
+    (req) => services.support.orgUpdate(actorOf(req), req.params.tenantId, req.params.ticketId, req.body),
+  );
+  app.post(
+    '/tenants/:tenantId/tickets/:ticketId/escalate',
+    { schema: { params: OrgTicket, body: z.object({ note: z.string().trim().max(2000).optional() }), response: { 200: TicketDetail } } },
+    (req) => services.support.escalate(actorOf(req), req.params.tenantId, req.params.ticketId, req.body.note),
+  );
+
+  app.get('/tenants/:tenantId/insights', { schema: { params: T, response: { 200: OrgInsightsDto } } }, (req) =>
+    services.workspace.insights(actorOf(req), req.params.tenantId),
   );
 
   // ----- billing (organisation self-service) -----

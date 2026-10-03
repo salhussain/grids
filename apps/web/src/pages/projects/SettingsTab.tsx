@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
 import { ICONS, iconOf, useProject } from './context';
+import { IconPicker } from './fields';
 import { useTypes } from './EntitiesTab';
 import { PermissionGroupsPanel, usePermissionGroups } from './permissions';
 
@@ -88,7 +89,7 @@ function General() {
   );
 }
 
-function Types() {
+export function Types() {
   const { can } = useProject();
   const types = useTypes();
   const [editing, setEditing] = useState<EntityTypeDto | 'new' | null>(null);
@@ -206,13 +207,9 @@ function TypeDialog({ type, all, onClose }: { type: EntityTypeDto | null; all: E
               ))}
             </Select>
           </Field>
-          <Field label="Icon">
-            <Select value={f.icon} onChange={(e) => setF({ ...f, icon: e.target.value })}>
-              {Object.keys(ICONS).map((k) => (
-                <option key={k}>{k}</option>
-              ))}
-            </Select>
-          </Field>
+          <div className="sm:col-span-3">
+            <IconPicker value={f.icon} color={f.color} onChange={(icon) => setF({ ...f, icon })} />
+          </div>
           <Field label="Colour">
             <input type="color" aria-label="Colour" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="h-9 w-full border border-zinc-300 bg-snow" />
           </Field>
@@ -283,7 +280,7 @@ function TypeDialog({ type, all, onClose }: { type: EntityTypeDto | null; all: E
   );
 }
 
-function Members() {
+export function Members() {
   const { tenantId, project, can } = useProject();
   const ws = useWorkspace();
   const qc = useQueryClient();

@@ -24,6 +24,15 @@ export type ProjectTemplate = z.infer<typeof ProjectTemplate>;
 
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i);
 
+export const PROJECT_STATUSES = ['draft', 'live'] as const;
+export const ProjectStatus = z.enum(PROJECT_STATUSES);
+export type ProjectStatus = z.infer<typeof ProjectStatus>;
+/** A data URL (PNG/JPEG/WebP/SVG) or an https URL. */
+export const ProjectImage = z
+  .string()
+  .max(2_000_000)
+  .regex(/^(data:image\/(png|jpeg|webp|svg\+xml);base64,|https:\/\/)/, 'PNG, JPEG, WebP or SVG image');
+
 export const ProjectInput = z.object({
   key: Slug.optional(),
   name: z.string().trim().min(1).max(80),
@@ -32,6 +41,12 @@ export const ProjectInput = z.object({
   color: Hex.default('#0f62fe'),
   icon: z.string().max(40).default('folder'),
   template: ProjectTemplate.default('blank'),
+  /** Draft projects are only visible to their managers until they go live. */
+  status: ProjectStatus.default('live'),
+  logo: ProjectImage.nullable().default(null),
+  coverImage: ProjectImage.nullable().default(null),
+  /** An organisation member to make project manager (besides the creator). */
+  managerId: z.uuid().nullable().default(null),
 });
 export type ProjectInput = z.input<typeof ProjectInput>;
 /** Partial update: omitted fields stay as they are (no defaults). */
@@ -41,6 +56,9 @@ export const ProjectUpdate = z.object({
   visibility: ProjectVisibility.optional(),
   color: Hex.optional(),
   icon: z.string().max(40).optional(),
+  status: ProjectStatus.optional(),
+  logo: ProjectImage.nullable().optional(),
+  coverImage: ProjectImage.nullable().optional(),
 });
 
 export const Freshness = z.object({
@@ -59,6 +77,9 @@ export const ProjectDto = z.object({
   color: z.string(),
   icon: z.string(),
   template: z.string().nullable(),
+  status: ProjectStatus,
+  logo: z.string().nullable(),
+  coverImage: z.string().nullable(),
   myRole: ProjectRole.nullable(),
   counts: z.object({
     entities: z.number().int(),

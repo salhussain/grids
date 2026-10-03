@@ -129,6 +129,19 @@ export const api = {
   cancelRun: (id: string, p: string, runId: string) =>
     request<S.RunDetail>('POST', `${t(id)}/projects/${p}/runs/${runId}/cancel`),
   datasets: (id: string, p: string) => request<S.DatasetDto[]>('GET', `${t(id)}/projects/${p}/datasets`),
+  saveDataset: (id: string, p: string, input: In<typeof S.DatasetInput>, key?: string) =>
+    request<S.DatasetDto[]>(key ? 'PUT' : 'POST', `${t(id)}/projects/${p}/datasets${key ? `/${key}` : ''}`, input),
+  deleteDataset: (id: string, p: string, key: string) => request<S.DatasetDto[]>('DELETE', `${t(id)}/projects/${p}/datasets/${key}`),
+  uploadDatasetRows: (id: string, p: string, key: string, input: In<typeof S.DatasetRowsInput>) =>
+    request<{ rows: number; added: number }>('PUT', `${t(id)}/projects/${p}/datasets/${key}/rows`, input),
+  overlayGroups: (id: string, p: string) => request<S.OverlayGroupDto[]>('GET', `${t(id)}/projects/${p}/overlay-groups`),
+  saveOverlayGroup: (id: string, p: string, input: In<typeof S.OverlayGroupInput>, groupId?: string) =>
+    request<S.OverlayGroupDto[]>(groupId ? 'PUT' : 'POST', `${t(id)}/projects/${p}/overlay-groups${groupId ? `/${groupId}` : ''}`, input),
+  deleteOverlayGroup: (id: string, p: string, groupId: string) => request<S.OverlayGroupDto[]>('DELETE', `${t(id)}/projects/${p}/overlay-groups/${groupId}`),
+  projectFormGroups: (id: string, p: string) => request<S.FormGroupDto[]>('GET', `${t(id)}/projects/${p}/form-groups`),
+  saveProjectFormGroup: (id: string, p: string, input: In<typeof S.FormGroupInput>, groupId?: string) =>
+    request<S.FormGroupDto[]>(groupId ? 'PUT' : 'POST', `${t(id)}/projects/${p}/form-groups${groupId ? `/${groupId}` : ''}`, input),
+  deleteProjectFormGroup: (id: string, p: string, groupId: string) => request<S.FormGroupDto[]>('DELETE', `${t(id)}/projects/${p}/form-groups/${groupId}`),
   datasetRows: (id: string, p: string, key: string, page: { page: number; pageSize: number }) =>
     request<{ columns: string[]; items: Record<string, unknown>[]; total: number; page: number; pageSize: number }>(
       'GET',
@@ -243,8 +256,13 @@ export const api = {
     request<DomainDto[]>('DELETE', `${t(id)}/domains/${domainId}`),
 
   // support
-  tickets: (id: string, q: { status?: string; page?: number; pageSize?: number } = {}) =>
+  tickets: (id: string, q: { status?: string; audience?: string; page?: number; pageSize?: number } = {}) =>
     request<Page<TicketSummary>>('GET', `${t(id)}/tickets${qs(q)}`),
+  updateOrgTicket: (id: string, ticketId: string, status: S.TicketSummary['status']) =>
+    request<S.TicketDetail>('PATCH', `${t(id)}/tickets/${ticketId}`, { status }),
+  escalateTicket: (id: string, ticketId: string, note?: string) =>
+    request<S.TicketDetail>('POST', `${t(id)}/tickets/${ticketId}/escalate`, { note }),
+  platform: () => request<S.PlatformSettingsDto>('GET', '/public/platform', undefined, { anonymous: true }),
   createTicket: (id: string, input: In<typeof S.CreateTicketInput>) =>
     request<TicketDetail>('POST', `${t(id)}/tickets`, input),
   ticket: (ticketId: string) => request<TicketDetail>('GET', `/tickets/${ticketId}`),
@@ -252,6 +270,7 @@ export const api = {
     request<TicketDetail>('POST', `/tickets/${ticketId}/messages`, { body }),
 
   // activity
+  insights: (id: string) => request<S.OrgInsightsDto>('GET', `${t(id)}/insights`),
   activity: (id: string, page: { page: number; pageSize: number }) =>
     request<AuditPage>('GET', `${t(id)}/activity${qs(page)}`),
 };

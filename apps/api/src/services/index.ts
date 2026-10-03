@@ -14,6 +14,7 @@ import { MemberService } from './members.js';
 import { PlanService } from './plans.js';
 import { Provisioner } from './provisioning.js';
 import { StaffService } from './staff.js';
+import { SettingsService } from './settings.js';
 import { SupportService } from './support.js';
 import { TenantService } from './tenants.js';
 import { WorkspaceService } from './workspace.js';
@@ -26,7 +27,8 @@ export function createServices(
   ctx: ServiceContext,
   opts: { resolveTxt?: TxtResolver; devAutoVerifyDomains?: boolean } = {},
 ) {
-  const provisioner = new Provisioner(ctx);
+  const settings = new SettingsService(ctx);
+  const provisioner = new Provisioner(ctx, () => settings.orgDefaults());
   const identity = new IdentityService(ctx);
   const domains = new DomainService(ctx, {
     resolveTxt: opts.resolveTxt,
@@ -50,6 +52,7 @@ export function createServices(
     events,
     identity,
     email: ctx.email,
+    settings,
     plans: new PlanService(ctx),
     staff: new StaffService(ctx),
     tenants,

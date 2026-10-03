@@ -1,7 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { FormGroupDto, MenuForm } from '@grids/schema';
 import { cx } from '@grids/ui';
-import { ChevronRight, ClipboardList, Inbox, LayoutGrid } from 'lucide-react';
+import { ChevronRight, FolderKanban, Inbox } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useCan, useWorkspace } from '../../session';
 import { iconOf } from '../projects/context';
@@ -56,10 +56,16 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
     return { children, formsIn, has };
   }, [menu.data]);
 
+  const inGroup = (f: MenuForm, groupId: string): boolean => {
+    for (let g: string | null | undefined = f.groupId; g; g = menu.data?.groups.find((x) => x.id === g)?.parentId) if (g === groupId) return true;
+    return false;
+  };
   const toReview = inbox.data?.toReview.length ?? 0;
   const returned = inbox.data?.mine.filter((s) => s.status === 'returned').length ?? 0;
   const anyForms = !!menu.data?.forms.length;
-  if (!anyForms && !admin && !toReview && !inbox.data?.mine.length) return null;
+  const reviewing = toReview > 0 || !!inbox.data?.mine.length;
+  // Only shown when there is something to fill in (or review).
+  if (!anyForms && !reviewing) return null;
 
   const toggle = (id: string) => {
     const next = new Set(open);
@@ -124,42 +130,50 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
     );
   };
 
-  const loose = formsIn.get(null) ?? [];
+  // Project → its form groups → forms (groups without forms are hidden).
+  const projects = [...new Map((menu.data?.forms ?? []).map((f) => [f.project.id, f.project])).values()].sort((a, b) => a.name.localeCompare(b.name));
+  const renderProject = (p: MenuForm['project']) => {
+    const id = `p:${p.id}`;
+    const isOpen = open.has(id);
+    const mine = (menu.data?.forms ?? []).filter((f) => f.project.id === p.id);
+    const tops = (children.get(null) ?? []).filter((g) => (g.projectId === p.id || g.projectId === null) && has(g.id) && mine.some((f) => inGroup(f, g.id)));
+    const loose = mine.filter((f) => !f.groupId || !(menu.data?.groups ?? []).some((g) => g.id === f.groupId));
+    return (
+      <li key={id}>
+        <button type="button" onClick={() => toggle(id)} aria-expanded={isOpen} className={cx(row, 'w-full gap-2 py-1.5 text-start', tone.hover)}>
+          <FolderKanban className="size-[18px] shrink-0" strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+          <ChevronRight className={cx('size-3.5 shrink-0 transition-transform', tone.muted, isOpen && 'rotate-90')} />
+        </button>
+        {isOpen && (
+          <ul>
+            {tops.map((g) => renderGroup(g, 1))}
+            {loose.map((f) => renderForm(f, 1))}
+          </ul>
+        )}
+      </li>
+    );
+  };
   return (
     <div className="mb-4">
       <div className={cx('px-3 pb-1.5 font-mono text-[10px] tracking-[0.12em] uppercase', tone.muted)}>Forms</div>
-      <Link
-        to={`${base}/inbox`}
-        onClick={onNavigate}
-        aria-current={path.startsWith(`${base}/inbox`) ? 'page' : undefined}
-        className={cx(row, path.startsWith(`${base}/inbox`) ? tone.active : tone.hover)}
-      >
-        <Inbox className="size-[18px] shrink-0" strokeWidth={1.75} />
-        <span className="flex-1">Submissions</span>
-        {toReview + returned > 0 && (
-          <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${toReview} to review, ${returned} sent back to you`}>
-            {toReview + returned}
-          </span>
-        )}
-      </Link>
-      <Link
-        to={`${base}/forms`}
-        onClick={onNavigate}
-        aria-current={path === `${base}/forms` && !groupParam ? 'page' : undefined}
-        className={cx(row, path === `${base}/forms` && !groupParam ? tone.active : tone.hover)}
-      >
-        <LayoutGrid className="size-[18px] shrink-0" strokeWidth={1.75} />
-        All forms
-      </Link>
-      <ul>
-        {(children.get(null) ?? []).map((g) => renderGroup(g, 0))}
-        {loose.length > 0 && (menu.data?.groups.length ?? 0) > 0 && (
-          <li className={cx('mx-3 mt-2 mb-1 flex items-center gap-2 text-[11px]', tone.muted)}>
-            <ClipboardList className="size-3" /> Other
-          </li>
-        )}
-        {loose.map((f) => renderForm(f, 0))}
-      </ul>
+      {reviewing && (
+        <Link
+          to={`${base}/inbox`}
+          onClick={onNavigate}
+          aria-current={path.startsWith(`${base}/inbox`) ? 'page' : undefined}
+          className={cx(row, path.startsWith(`${base}/inbox`) ? tone.active : tone.hover)}
+        >
+          <Inbox className="size-[18px] shrink-0" strokeWidth={1.75} />
+          <span className="flex-1">To review</span>
+          {toReview + returned > 0 && (
+            <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${toReview} to review, ${returned} sent back to you`}>
+              {toReview + returned}
+            </span>
+          )}
+        </Link>
+      )}
+      <ul>{projects.map(renderProject)}</ul>
     </div>
   );
 }

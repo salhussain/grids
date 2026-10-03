@@ -5,6 +5,8 @@ const Env = z.object({
   DATABASE_URL_PLATFORM: z.string(),
   CONSOLE_URL: z.string().default('http://localhost:5173'),
   WEB_URL: z.string().default('http://localhost:5174'),
+  /** Public portal: public projects for everyone, more after signing in. */
+  PORTAL_URL: z.string().default('http://localhost:5176'),
   /** OIDC issuer of the Grids identity service (apps/identity). */
   IDENTITY_ISSUER: z.string().default('http://localhost:4100/oidc'),
   /** Base URL of the identity service's internal API. */

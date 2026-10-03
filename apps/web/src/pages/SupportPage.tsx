@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, LifeBuoy, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Building2, LifeBuoy, Plus } from 'lucide-react';
+import type { TicketDetail } from '@grids/schema';
 import { useState } from 'react';
 import {
   Button,
@@ -9,6 +10,7 @@ import {
   ErrorNotice,
   Field,
   Input,
+  Listbox,
   Loading,
   PageHeader,
   Pagination,
@@ -40,9 +42,10 @@ export function SupportPage() {
   const live = useLiveInterval();
   const id = ws.tenant.id;
   const [status, setStatus] = useState<'active' | 'resolved' | 'all'>('active');
-  const [page, setPage] = usePagination([status], 10);
+  const [audience, setAudience] = useState<'all' | 'organisation' | 'platform'>('all');
+  const [page, setPage] = usePagination([status, audience], 10);
   const [open, setOpen] = useState(false);
-  const query = { status: status === 'all' ? undefined : status, ...page };
+  const query = { status: status === 'all' ? undefined : status, audience: audience === 'all' ? undefined : audience, ...page };
   const tickets = useQuery({
     queryKey: ['tickets', id, query],
     queryFn: () => api.tickets(id, query),
@@ -56,7 +59,7 @@ export function SupportPage() {
       <PageHeader
         eyebrow={t('web.nav.help')}
         title={t('web.nav.support')}
-        meta={<span>Questions or problems? The Grids team replies here and by email.</span>}
+        meta={<span>Internal tickets are handled by your organisation’s admins; they can escalate them to the Grids team.</span>}
         actions={
           <>
             <RefreshControl queryKeys={[['tickets', id]]} />
@@ -68,15 +71,30 @@ export function SupportPage() {
           </>
         }
       />
-      <Tabs
-        value={status}
-        onChange={setStatus}
-        tabs={[
-          { id: 'active', label: 'Open' },
-          { id: 'resolved', label: 'Resolved' },
-          { id: 'all', label: 'All' },
-        ]}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <Tabs
+          value={status}
+          onChange={setStatus}
+          tabs={[
+            { id: 'active', label: 'Open' },
+            { id: 'resolved', label: 'Resolved' },
+            { id: 'all', label: 'All' },
+          ]}
+        />
+        <Listbox
+          compact
+          align="end"
+          label="With"
+          className="mb-3 w-56"
+          value={audience}
+          onChange={(v) => setAudience(v as typeof audience)}
+          options={[
+            { value: 'all', label: 'All tickets' },
+            { value: 'organisation', label: 'Within the organisation' },
+            { value: 'platform', label: 'With the Grids team' },
+          ]}
+        />
+      </div>
       <Panel flush>
         {tickets.isPending ? (
           <Loading />
@@ -96,7 +114,7 @@ export function SupportPage() {
           </Empty>
         ) : (
           <>
-            <Table head={['Ticket', 'Category', 'Priority', 'Status', 'Raised by', 'Updated']}>
+            <Table head={['Ticket', 'With', 'Category', 'Priority', 'Status', 'Raised by', 'Updated']}>
               {tickets.data.items.map((t) => (
                 <tr
                   key={t.id}
@@ -117,6 +135,9 @@ export function SupportPage() {
                       <span className="mr-2 font-mono text-xs text-zinc-500">#{t.number}</span>
                       {t.subject}
                     </Link>
+                  </Td>
+                  <Td>
+                    <AudienceBadge audience={t.audience} escalated={!!t.escalatedAt} />
                   </Td>
                   <Td className="text-zinc-600">{humanize(t.category)}</Td>
                   <Td>
@@ -230,6 +251,20 @@ export function TicketPage() {
     refetchInterval: live,
   });
   const [body, setBody] = useState('');
+  const [escalating, setEscalating] = useState(false);
+  const [note, setNote] = useState('');
+  const updated = (d: TicketDetail) => {
+    qc.setQueryData(['ticket', ticketId], d);
+    void qc.invalidateQueries({ queryKey: ['tickets', tenantId] });
+  };
+  const setStatus = useMutation({ mutationFn: (status: TicketDetail['status']) => api.updateOrgTicket(tenantId, ticketId, status), onSuccess: updated });
+  const escalate = useMutation({
+    mutationFn: () => api.escalateTicket(tenantId, ticketId, note || undefined),
+    onSuccess: (d) => {
+      updated(d);
+      setEscalating(false);
+    },
+  });
   const reply = useMutation({
     mutationFn: () => api.replyTicket(ticketId, body),
     onSuccess: (t) => (
@@ -255,6 +290,7 @@ export function TicketPage() {
         title={t.subject}
         meta={
           <>
+            <AudienceBadge audience={t.audience} escalated={!!t.escalatedAt} />
             <Status value={t.status} label={t.status === 'pending' ? 'awaiting you' : undefined} />
             <Status value={t.priority} />
             <span>
@@ -262,7 +298,48 @@ export function TicketPage() {
             </span>
           </>
         }
+        actions={
+          t.audience === 'organisation' && can('support.manage') ? (
+            <>
+              <Listbox
+                compact
+                align="end"
+                label="Status"
+                className="w-36"
+                value={t.status}
+                onChange={(v) => setStatus.mutate(v)}
+                options={(['open', 'pending', 'resolved', 'closed'] as const).map((v) => ({ value: v, label: v[0]!.toUpperCase() + v.slice(1) }))}
+              />
+              <Button variant="secondary" icon={ArrowUpRight} onClick={() => setEscalating(true)}>
+                Escalate to Grids
+              </Button>
+            </>
+          ) : undefined
+        }
       />
+      <ErrorNotice error={setStatus.error ?? escalate.error} />
+      {escalating && (
+        <Dialog
+          open
+          onClose={() => setEscalating(false)}
+          title="Escalate to the Grids team"
+          description="The platform team sees the whole conversation and replies here."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setEscalating(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => escalate.mutate()} loading={escalate.isPending}>
+                Escalate
+              </Button>
+            </>
+          }
+        >
+          <Field label="Note for the Grids team (optional)">
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </Dialog>
+      )}
       <div className="max-w-3xl space-y-4">
         {t.messages.map((m) => (
           <article
@@ -278,7 +355,7 @@ export function TicketPage() {
               <span>
                 <span className="font-medium">{m.author.name}</span>{' '}
                 <span className="text-xs text-zinc-500">
-                  {m.author.isStaff ? 'Grids support' : ''}
+                  {m.author.isStaff ? 'Grids support' : m.author.id !== t.createdBy.id && t.audience === 'organisation' ? 'Organisation support' : ''}
                 </span>
               </span>
               <time className="text-xs text-zinc-500">{relTime(m.createdAt)}</time>
@@ -305,5 +382,17 @@ export function TicketPage() {
         )}
       </div>
     </>
+  );
+}
+
+export function AudienceBadge({ audience, escalated }: { audience: 'organisation' | 'platform'; escalated?: boolean }) {
+  return audience === 'organisation' ? (
+    <span className="inline-flex items-center gap-1 border border-zinc-300 px-1.5 py-0.5 text-xs text-zinc-700">
+      <Building2 className="size-3" /> Organisation
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 border border-accent-600/40 bg-accent-50 px-1.5 py-0.5 text-xs text-accent-800">
+      <LifeBuoy className="size-3" /> Grids team{escalated ? ' · escalated' : ''}
+    </span>
   );
 }

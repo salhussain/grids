@@ -12,3 +12,4 @@ apps/console/.env.local
 test-results/
 apps/web/.env.local
 .claude/settings.local.json
+apps/portal/.env.local

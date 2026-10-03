@@ -46,7 +46,7 @@ export async function buildIdentityApp(deps: IdentityDeps) {
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
         connectSrc: ["'self'"],
-        formAction: ["'self'", config.CONSOLE_URL, config.WEB_URL],
+        formAction: ["'self'", config.CONSOLE_URL, config.WEB_URL, config.PORTAL_URL],
         frameAncestors: ["'none'"],
       },
     },

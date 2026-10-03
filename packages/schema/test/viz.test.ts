@@ -32,3 +32,21 @@ describe('dashboard parameters', () => {
     expect(DashboardParams.safeParse({ hours: 5 }).success).toBe(false);
   });
 });
+
+import { FormDefinition, formTexts, localizeForm } from '../src/forms.js';
+
+describe('form translations', () => {
+  const def = FormDefinition.parse({
+    title: 'Weekly report',
+    sections: [{ key: 'a', title: 'Cases', questions: [{ key: 'kind', type: 'select', label: 'Kind', options: [{ value: 'x', label: 'Ex' }] }] }],
+    translations: { fr: { title: 'Rapport hebdomadaire', 'kind.label': 'Type', 'kind.option.x': 'Iks' } },
+  });
+  it('lists translatable texts and applies a language with fallbacks', () => {
+    expect(formTexts(def).map(([k]) => k)).toEqual(['title', 'section.a', 'kind.label', 'kind.option.x']);
+    const fr = localizeForm(def, 'fr');
+    expect(fr.title).toBe('Rapport hebdomadaire');
+    expect(fr.sections[0]!.title).toBe('Cases'); // not translated: original
+    expect(fr.sections[0]!.questions[0]).toMatchObject({ label: 'Type', options: [{ value: 'x', label: 'Iks' }] });
+    expect(localizeForm(def, 'es')).toBe(def);
+  });
+});

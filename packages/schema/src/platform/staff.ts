@@ -69,6 +69,11 @@ export const STAFF_MODULES = [
     ],
   },
   {
+    id: 'settings',
+    label: 'Platform settings',
+    permissions: [['settings.manage', 'Change platform branding, languages and organisation defaults']],
+  },
+  {
     id: 'staff',
     label: 'Staff & roles',
     permissions: [

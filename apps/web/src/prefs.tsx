@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LOCALES } from '@grids/i18n';
 import type { LocalizationDto, MeDto } from '@grids/schema';
-import { applyColorMode, cx, Dialog, storedColorMode, useToast } from '@grids/ui';
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { applyColorMode, cx, Dialog, Listbox, ModeSwitch, storedColorMode, useToast, type ColorMode } from '@grids/ui';
+import { Globe, Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { localeName, useT } from './i18n';
@@ -70,6 +70,49 @@ export function ThemeToggle({ me, className }: { me: MeDto; className?: string }
       <Sun className={cx(icon, dark ? 'scale-100 rotate-0 opacity-100' : 'scale-60 -rotate-90 opacity-0')} />
       <Moon className={cx(icon, dark ? 'scale-60 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100')} />
     </button>
+  );
+}
+
+/**
+ * Language and appearance, always top right: saved as the person's preferences.
+ * Languages are those the organisation offers (all of them outside a workspace).
+ */
+export function HeaderControls({ me, localization, className }: { me: MeDto; localization: LocalizationDto | null; className?: string }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const save = useMutation({
+    mutationFn: api.setPreferences,
+    onSuccess: (next) => qc.setQueryData(['me'], next),
+  });
+  const [mode, setMode] = useState<ColorMode>(me.preferences.colorMode);
+  const languages = LOCALES.filter((l) => !localization || localization.languages.includes(l.code));
+  const current = me.preferences.locale && languages.some((l) => l.code === me.preferences.locale) ? me.preferences.locale : 'default';
+  return (
+    <div className={cx('flex items-center gap-2', className)}>
+      {languages.length > 1 && (
+        <Listbox
+          compact
+          align="end"
+          label={t('web.prefs.language')}
+          value={current}
+          onChange={(v) => save.mutate({ locale: v === 'default' ? null : v })}
+          className="w-40"
+          options={[
+            { value: 'default', label: t('web.prefs.orgDefault', { name: localeName(localization?.defaultLanguage ?? 'en') }), text: 'default', icon: Globe },
+            ...languages.map((l) => ({ value: l.code as string, label: l.nativeName, text: l.nativeName, icon: Globe })),
+          ]}
+        />
+      )}
+      <ModeSwitch
+        value={mode}
+        labels={{ light: t('common.light'), dark: t('common.dark'), system: t('common.system'), group: t('common.appearance') }}
+        onChange={(m) => {
+          setMode(m);
+          applyColorMode(m);
+          save.mutate({ colorMode: m });
+        }}
+      />
+    </div>
   );
 }
 

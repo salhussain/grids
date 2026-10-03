@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { validate } from '@grids/forms';
-import { FORM_LAYOUT_INFO, uuidv7, type SubmissionDto } from '@grids/schema';
+import { FORM_LAYOUT_INFO, localizeForm, uuidv7, type SubmissionDto } from '@grids/schema';
 import { ApiError, Button, ErrorNotice, Loading, Select, cx } from '@grids/ui';
 import { ArrowLeft, CheckCircle2, CloudOff, CornerUpLeft, GitBranch, ListChecks, Lock, MapPin, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { useI18n } from '../../i18n';
 import { FormRunner, type Answers } from '../projects/FormRenderer';
 import { useOutbox } from './outbox';
 import { useInvalidateSubmissions } from './SubmissionSheet';
@@ -35,6 +36,7 @@ export function FillForm({
   projectName?: string;
 }) {
   const outbox = useOutbox();
+  const { locale } = useI18n();
   const invalidate = useInvalidateSubmissions(tenantId);
   const forms = useQuery({ queryKey: ['forms', tenantId, project], queryFn: () => api.forms(tenantId, project) });
   const prior = useQuery({ queryKey: ['submission', tenantId, project, resubmitId], queryFn: () => api.submission(tenantId, project, resubmitId!), enabled: !!resubmitId });
@@ -84,7 +86,8 @@ export function FillForm({
   if (forms.isPending || (resubmitId && prior.isPending)) return <Loading />;
   if (forms.error) return <ErrorNotice error={forms.error} />;
   if (!form?.published) return <ErrorNotice error={new Error('This form is not published yet.')} />;
-  const def = form.published;
+  // Shown in the person's language when the form has a translation for it.
+  const def = localizeForm(form.published, locale);
   const wf = form.settings.workflow;
   const stages = wf.enabled ? wf.stages : [];
   const lastReturn = prior.data?.reviews.filter((r) => r.decision === 'returned').at(-1);

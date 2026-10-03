@@ -197,6 +197,21 @@ export const DatasetDto = z.object({
 });
 export type DatasetDto = z.infer<typeof DatasetDto>;
 
+/** A dataset made by hand (rows uploaded from CSV/JSON) rather than by a job. */
+export const DatasetInput = z.object({
+  key: Key,
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).default(''),
+  columns: z.array(z.string().trim().min(1).max(63)).max(100).default([]),
+  freshnessMinutes: z.number().int().min(1).max(525_600).nullable().default(null),
+});
+export type DatasetInput = z.input<typeof DatasetInput>;
+export const DatasetRowsInput = z.object({
+  mode: z.enum(['replace', 'append']).default('replace'),
+  rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))).max(50_000),
+});
+export type DatasetRowsInput = z.input<typeof DatasetRowsInput>;
+
 // ---------------------------------------------------------------- files
 
 export const FILE_MAX_BYTES = 20 * 1024 * 1024;

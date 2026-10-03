@@ -145,6 +145,7 @@ try {
 for (const [app, clientId] of [
   ['console', 'grids-console'],
   ['web', 'grids-web'],
+  ['portal', 'grids-portal'],
 ] as const) {
   upsertEnv(resolve(ROOT, `apps/${app}/.env.local`), {
     VITE_API_URL: apiUrl,

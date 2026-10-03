@@ -16,6 +16,8 @@ const Env = z.object({
   API_URL: z.string().default('http://localhost:4000'),
   CONSOLE_URL: z.string().default('http://localhost:5173'),
   WEB_URL: z.string().default('http://localhost:5174'),
+  /** Public portal: public projects for everyone, more after signing in. */
+  PORTAL_URL: z.string().default('http://localhost:5176'),
   /** `platform` = relay through the platform API (default); otherwise an SMTP URL. */
   IDENTITY_MAIL: z.string().default('platform'),
   SMTP_URL: z.string().default('smtp://localhost:1025'),

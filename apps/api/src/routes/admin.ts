@@ -1,6 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  PlatformSettingsDto,
+  PlatformSettingsInput,
   AuditPage,
   AuditQuery,
   BillingOverview,
@@ -307,5 +309,13 @@ export const adminRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) =>
       await s.staff.deleteRole(actorOf(req), req.params.id);
       return reply.status(204).send();
     },
+  );
+
+  // ----- platform settings -----
+  app.get('/platform/settings', { schema: { response: { 200: PlatformSettingsDto } } }, () => s.settings.get());
+  app.put(
+    '/platform/settings',
+    { preHandler: need('settings.manage'), schema: { body: PlatformSettingsInput, response: { 200: PlatformSettingsDto } } },
+    (req) => s.settings.update(actorOf(req), req.body),
   );
 };

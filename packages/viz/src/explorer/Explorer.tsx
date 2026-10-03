@@ -4,10 +4,10 @@ import type { DashboardDto, MapOverlayDto, PlaceNode, SearchHit } from '@grids/s
 import { applyColorMode, cx, Spinner } from '@grids/ui';
 import { ArrowUp, Check, ChevronRight, Layers, Map as MapIcon, Moon, PanelRightClose, PanelRightOpen, Satellite, Search, Sun, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DashboardFilterBar } from '../viz/DashboardFilters';
-import { FreshnessBadge } from '../viz/Freshness';
-import { useScheme } from '../viz/scheme';
-import { WidgetView } from '../viz/WidgetView';
+import { DashboardFilterBar } from '../DashboardFilters';
+import { FreshnessBadge } from '../Freshness';
+import { useScheme } from '../scheme';
+import { WidgetView } from '../WidgetView';
 import { NO_DATA, scaleFor } from './colors';
 import { ExplorerMap, type Basemap, type PlaceCollection, type PlaceFeature } from './ExplorerMap';
 import type { ExplorerSource } from './source';

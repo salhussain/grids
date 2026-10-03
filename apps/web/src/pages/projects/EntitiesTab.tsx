@@ -56,7 +56,7 @@ export function EntitiesTab() {
   if (!types.data?.length)
     return (
       <div className="border border-zinc-200 bg-snow">
-        <Empty icon={Boxes} title="No entity types yet" action={can('manager') ? <Link to={`${base}/settings`} className="text-sm font-medium text-accent-700 hover:underline">Define entity types in Settings</Link> : undefined}>
+        <Empty icon={Boxes} title="No entity types yet" action={can('manager') ? <Link to={`${base}/types`} className="text-sm font-medium text-accent-700 hover:underline">Define entity types</Link> : undefined}>
           Entity types describe the things this project tracks (facilities, assets, people…).
         </Empty>
       </div>

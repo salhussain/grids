@@ -72,7 +72,23 @@ export const TableQuery = Scope.extend({
   desc: z.boolean().default(true),
   limit: z.number().int().min(1).max(500).default(50),
 });
-export const QuerySpec = z.discriminatedUnion('kind', [SeriesQuery, BreakdownQuery, KpiQuery, GeoQuerySpec, TableQuery]);
+/**
+ * Aggregates a dataset's rows: a single value (KPI), grouped by a column (bar/pie),
+ * or bucketed by a date column (line). Rows match the other kinds' shapes.
+ */
+export const DatasetQuery = z.object({
+  kind: z.literal('dataset'),
+  dataset: Key,
+  /** Column to aggregate; omitted = count rows. */
+  value: z.string().max(63).optional(),
+  aggregation: Agg.default('sum'),
+  groupBy: z.string().max(63).optional(),
+  timeColumn: z.string().max(63).optional(),
+  interval: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']).default('day'),
+  filter: z.object({ column: z.string().max(63), equals: z.union([z.string(), z.number(), z.boolean()]) }).optional(),
+  limit: z.number().int().min(1).max(500).default(20),
+});
+export const QuerySpec = z.discriminatedUnion('kind', [SeriesQuery, BreakdownQuery, KpiQuery, GeoQuerySpec, TableQuery, DatasetQuery]);
 export type QuerySpec = z.infer<typeof QuerySpec>;
 export type QuerySpecInput = z.input<typeof QuerySpec>;
 
@@ -162,8 +178,11 @@ export type DashboardParams = z.infer<typeof DashboardParams>;
  */
 export function applyParams(spec: QuerySpec, params: DashboardParams, filters: DashboardFilters): QuerySpec {
   let out: QuerySpec = spec;
-  if (params.entity) out = { ...out, ancestorId: params.entity };
-  if (params.area && filters.areaType) out = { ...out, ancestorId: params.area };
+  // Datasets have no entity scope; only entity-based queries take the place filter.
+  if (out.kind !== 'dataset') {
+    if (params.entity) out = { ...out, ancestorId: params.entity } as QuerySpec;
+    if (params.area && filters.areaType) out = { ...out, ancestorId: params.area } as QuerySpec;
+  }
   const timed = 'range' in out && !('latest' in out && out.latest);
   if (timed && (params.from || params.to)) {
     const to = params.to ? new Date(`${params.to}T00:00:00Z`) : null;
@@ -213,3 +232,18 @@ export const PublicProjectDto = z.object({
   elements: z.array(z.object({ key: z.string(), name: z.string(), unit: z.string() })).default([]),
 });
 export type PublicProjectDto = z.infer<typeof PublicProjectDto>;
+
+/** A public project in the portal's catalogue. */
+export const PublicProjectCard = z.object({
+  tenant: z.object({ slug: z.string(), name: z.string(), logo: z.string().nullable(), primaryColor: z.string() }),
+  project: z.object({
+    key: z.string(),
+    name: z.string(),
+    description: z.string(),
+    color: z.string(),
+    icon: z.string(),
+    logo: z.string().nullable(),
+    coverImage: z.string().nullable(),
+  }),
+});
+export type PublicProjectCard = z.infer<typeof PublicProjectCard>;

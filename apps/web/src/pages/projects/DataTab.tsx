@@ -1,18 +1,15 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DataElementDto } from '@grids/schema';
-import { Button, Dialog, Empty, ErrorNotice, Field, Input, Pagination, Panel, Select, Table, Td, Textarea, dateTime, relTime, usePagination } from '@grids/ui';
-import { Database, Pencil, Plus, Sigma } from 'lucide-react';
+import { Button, Dialog, Empty, ErrorNotice, Field, Input, Pagination, Panel, Select, Table, Td, Textarea, relTime, usePagination } from '@grids/ui';
+import { Pencil, Plus, Sigma } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
-import { FreshnessBadge } from '../../viz/Freshness';
 import { useProject } from './context';
 
 export function DataTab() {
   const { tenantId, project, can } = useProject();
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
-  const datasets = useQuery({ queryKey: ['datasets', tenantId, project.key], queryFn: () => api.datasets(tenantId, project.key) });
   const [editing, setEditing] = useState<DataElementDto | 'new' | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <Panel
@@ -48,31 +45,7 @@ export function DataTab() {
           ))}
         </Table>
       </Panel>
-      <Panel flush title="Datasets" description="Tables materialised by jobs, with their freshness.">
-        <Table head={['Name', 'Rows', 'Columns', 'Materialised', 'Freshness', '']} empty={<Empty icon={Database} title="No datasets yet">Jobs create datasets with a dataset.write step.</Empty>}>
-          {datasets.data?.map((d) => (
-            <tr key={d.key} className="border-t border-zinc-100">
-              <Td>
-                <div className="font-medium">{d.name}</div>
-                <div className="font-mono text-xs text-zinc-500">{d.key}</div>
-              </Td>
-              <Td className="num">{d.rowCount.toLocaleString()}</Td>
-              <Td className="max-w-xs truncate text-xs text-zinc-500">{d.columns.join(', ')}</Td>
-              <Td className="text-xs">{dateTime(d.lastMaterialisedAt)}</Td>
-              <Td>
-                <FreshnessBadge value={d.freshness} compact />
-              </Td>
-              <Td>
-                <Button size="sm" variant="secondary" onClick={() => setOpen(d.key)}>
-                  View rows
-                </Button>
-              </Td>
-            </tr>
-          ))}
-        </Table>
-      </Panel>
       {editing && <ElementDialog element={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
-      {open && <DatasetRows datasetKey={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }
@@ -156,7 +129,7 @@ function ElementDialog({ element, onClose }: { element: DataElementDto | null; o
   );
 }
 
-function DatasetRows({ datasetKey, onClose }: { datasetKey: string; onClose(): void }) {
+export function DatasetRows({ datasetKey, onClose }: { datasetKey: string; onClose(): void }) {
   const { tenantId, project } = useProject();
   const [pg, setPg] = usePagination([], 25);
   const rows = useQuery({

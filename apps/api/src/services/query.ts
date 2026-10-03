@@ -9,6 +9,7 @@ import {
   type DashboardParams,
   type DashboardDto,
   type Freshness,
+  type PublicProjectCard,
   type PublicProjectDto,
   type QueryResult,
   type QuerySpec,
@@ -272,6 +273,47 @@ export class QueryService {
         });
         return { kind: 'geo', rows: [], features: fc, freshness: fresh };
       }
+      case 'dataset': {
+        const ds = await tx
+          .selectFrom('dataset')
+          .select(['id', 'last_materialised_at', 'freshness_minutes'])
+          .where('project_id', '=', projectId)
+          .where('key', '=', spec.dataset)
+          .executeTakeFirst();
+        if (!ds) throw notFound('Dataset');
+        // A column's numeric value: JSON numbers, or strings that look like numbers.
+        const num = (col: string) =>
+          sql`(case when jsonb_typeof(data -> ${col}) = 'number' then (data ->> ${col})::float8 when (data ->> ${col}) ~ '^-?[0-9]+([.][0-9]+)?$' then (data ->> ${col})::float8 end)`;
+        const v = spec.value ? num(spec.value) : null;
+        const agg =
+          !v || spec.aggregation === 'count'
+            ? sql`count(*)::float8`
+            : spec.aggregation === 'distinct'
+              ? sql`count(distinct data ->> ${spec.value!})::float8`
+              : spec.aggregation === 'last'
+                ? sql`(array_agg(${v}))[count(*)]`
+                : sql`${sql.raw(spec.aggregation)}(${v})`;
+        const where = sql`dataset_id = ${ds.id} ${spec.filter ? sql`and data ->> ${spec.filter.column} = ${String(spec.filter.equals)}` : sql``}`;
+        const dsFresh = ds.last_materialised_at ? freshness(ds.last_materialised_at, ds.freshness_minutes, this.ctx.now()) : fresh;
+        if (spec.timeColumn) {
+          const rows = await sql<{ t: Date; value: number | null }>`
+            select date_trunc(${spec.interval}, (data ->> ${spec.timeColumn})::timestamptz) as t, ${agg} as value
+            from dataset_row where ${where} and (data ->> ${spec.timeColumn}) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            group by 1 order by 1 limit 1000
+          `.execute(tx);
+          const key = spec.value ?? 'rows';
+          return { kind: 'series', rows: rows.rows.map((r) => ({ t: iso(r.t), key, value: round(r.value) })), freshness: dsFresh };
+        }
+        if (spec.groupBy) {
+          const rows = await sql<{ label: string; value: number | null }>`
+            select coalesce(data ->> ${spec.groupBy}, '(none)') as label, ${agg} as value
+            from dataset_row where ${where} group by 1 order by 2 desc nulls last, 1 limit ${spec.limit}
+          `.execute(tx);
+          return { kind: 'breakdown', rows: rows.rows.map((r) => ({ label: r.label, value: round(r.value) })), freshness: dsFresh };
+        }
+        const one = await sql<{ value: number | null }>`select ${agg} as value from dataset_row where ${where}`.execute(tx);
+        return { kind: 'kpi', rows: [{ value: round(one.rows[0]?.value), previous: null }], freshness: dsFresh };
+      }
       case 'table': {
         if (spec.source === 'dataset') {
           if (!spec.dataset) throw badRequest('Choose a dataset');
@@ -428,7 +470,7 @@ export class QueryService {
     if (!t || t.status !== 'active') throw notFound('Project');
     return this.projects.cellTx(t.id, async (tx) => {
       const p = await tx.selectFrom('project').selectAll().where('key', '=', projectKey).executeTakeFirst();
-      if (!p || p.visibility !== 'public' || p.archived_at) throw notFound('Project');
+      if (!p || p.visibility !== 'public' || p.status !== 'live' || p.archived_at) throw notFound('Project');
       const theme = await tx.selectFrom('tenant_profile').select('theme').executeTakeFirst();
       return { tenant: t, project: p, theme: Theme.parse({ ...DEFAULT_THEME, ...((theme?.theme as object) ?? {}) }) };
     });
@@ -503,5 +545,40 @@ export class QueryService {
       return applyParams(w.query, params, filters);
     });
     return this.cached(tenant.id, project.id, null, spec, () => this.projects.cellTx(tenant.id, (tx) => this.run(tx, project.id, null, spec)));
+  }
+
+  private catalogue: { at: number; value: PublicProjectCard[] } | null = null;
+
+  /** Every live, public project across organisations (the portal's catalogue; cached briefly). */
+  async publicCatalogue(): Promise<PublicProjectCard[]> {
+    if (this.catalogue && Date.now() - this.catalogue.at < 60_000) return this.catalogue.value;
+    const tenants = await this.ctx.db.selectFrom('tenant').select(['id', 'name', 'slug']).where('status', '=', 'active').execute();
+    const out: PublicProjectCard[] = [];
+    for (const t of tenants) {
+      try {
+        const rows = await this.projects.cellTx(t.id, async (tx) => ({
+          projects: await tx
+            .selectFrom('project')
+            .select(['key', 'name', 'description', 'color', 'icon', 'logo', 'cover_image'])
+            .where('visibility', '=', 'public')
+            .where('status', '=', 'live')
+            .where('archived_at', 'is', null)
+            .orderBy('name')
+            .execute(),
+          theme: (await tx.selectFrom('tenant_profile').select('theme').executeTakeFirst())?.theme,
+        }));
+        if (!rows.projects.length) continue;
+        const theme = Theme.parse({ ...DEFAULT_THEME, ...((rows.theme as object) ?? {}) });
+        for (const p of rows.projects)
+          out.push({
+            tenant: { slug: t.slug, name: t.name, logo: theme.logo, primaryColor: theme.primaryColor },
+            project: { key: p.key, name: p.name, description: p.description, color: p.color, icon: p.icon, logo: p.logo, coverImage: p.cover_image },
+          });
+      } catch {
+        // A tenant whose cell is unavailable is left out rather than failing the catalogue.
+      }
+    }
+    this.catalogue = { at: Date.now(), value: out };
+    return out;
   }
 }

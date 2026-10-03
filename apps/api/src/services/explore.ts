@@ -7,6 +7,8 @@ import {
   type ExplorePlace,
   type MapOverlay,
   type MapOverlayDto,
+  type OverlayGroupDto,
+  type OverlayGroupInput,
   type OverlayResult,
   type PlaceNode,
   type SearchHit,
@@ -61,10 +63,69 @@ export class ExploreService {
     const names = new Map(
       (await tx.selectFrom('data_element').select(['key', 'name']).where('project_id', '=', projectId).execute()).map((d) => [d.key, d.name]),
     );
+    const paths = new Map((await this.groupRows(tx, projectId)).map((g) => [g.id, g.path]));
     return rows.map((r) => {
-      const o = MapOverlayInput.parse({ ...r.config, key: r.key, isPublic: r.is_public });
+      const groupId = r.group_id && paths.has(r.group_id) ? r.group_id : null;
+      const o = MapOverlayInput.parse({ ...r.config, key: r.key, isPublic: r.is_public, groupId, ...(groupId && { group: paths.get(groupId) }) });
       return { ...o, id: r.id, elementName: names.get(o.element) ?? o.element, updatedAt: iso(r.updated_at) };
     });
+  }
+
+  // ---------- overlay groups (levels) ----------
+
+  private async groupRows(tx: Tx, projectId: string): Promise<OverlayGroupDto[]> {
+    const rows = await tx
+      .selectFrom('map_overlay_group as g')
+      .selectAll('g')
+      .select((eb) => eb.selectFrom('map_overlay as o').select((e2) => e2.fn.countAll<string>().as('n')).whereRef('o.group_id', '=', 'g.id').as('n'))
+      .where('g.project_id', '=', projectId)
+      .orderBy('g.sort')
+      .orderBy('g.name')
+      .execute();
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const path = (id: string, seen = new Set<string>()): string => {
+      const g = byId.get(id)!;
+      if (!g.parent_id || seen.has(g.parent_id) || !byId.has(g.parent_id)) return g.name;
+      seen.add(id);
+      return `${path(g.parent_id, seen)} › ${g.name}`;
+    };
+    return rows
+      .map((r) => ({ id: r.id, parentId: r.parent_id, name: r.name, path: path(r.id), sort: r.sort, overlayCount: Number(r.n ?? 0) }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  async overlayGroups(actor: Actor, tenantId: string, project: string): Promise<OverlayGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project);
+    return this.projects.cellTx(tenantId, (tx) => this.groupRows(tx, a.project.id));
+  }
+
+  async saveOverlayGroup(actor: Actor, tenantId: string, project: string, input: OverlayGroupInput & { parentId: string | null; sort: number }, id?: string): Promise<OverlayGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      if (input.parentId) {
+        const groups = await this.groupRows(tx, a.project.id);
+        if (!groups.some((g) => g.id === input.parentId)) throw badRequest('Unknown parent group');
+        // No cycles: the parent may not be this group or one of its descendants.
+        for (let p: string | null = input.parentId; p; p = groups.find((g) => g.id === p)?.parentId ?? null)
+          if (p === id) throw badRequest('A group cannot sit inside itself');
+      }
+      const values = { name: input.name, parent_id: input.parentId, sort: input.sort };
+      if (id) {
+        const r = await tx.updateTable('map_overlay_group').set(values).where('id', '=', id).where('project_id', '=', a.project.id).executeTakeFirst();
+        if (!r.numUpdatedRows) throw notFound('Group');
+      } else await tx.insertInto('map_overlay_group').values({ id: uuidv7(), tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
+    });
+    return this.overlayGroups(actor, tenantId, project);
+  }
+
+  async deleteOverlayGroup(actor: Actor, tenantId: string, project: string, id: string): Promise<OverlayGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      if (await tx.selectFrom('map_overlay_group').select('id').where('parent_id', '=', id).executeTakeFirst())
+        throw conflict('Group has sub-groups', 'Move or delete its sub-groups first.');
+      await tx.deleteFrom('map_overlay_group').where('id', '=', id).where('project_id', '=', a.project.id).execute();
+    });
+    return this.overlayGroups(actor, tenantId, project);
   }
 
   async overlays(actor: Actor, tenantId: string, project: string): Promise<MapOverlayDto[]> {
@@ -83,9 +144,13 @@ export class ExploreService {
           const t = await tx.selectFrom('entity_type').select('id').where('project_id', '=', a.project.id).where('key', '=', input.level).executeTakeFirst();
           if (!t) throw badRequest(`Unknown entity type "${input.level}"`);
         }
+        if (input.groupId) {
+          const g = await tx.selectFrom('map_overlay_group').select('id').where('id', '=', input.groupId).where('project_id', '=', a.project.id).executeTakeFirst();
+          if (!g) throw badRequest('Unknown overlay group');
+        }
         const sorted = [...input.thresholds].sort((x, y) => x - y);
-        const { key, isPublic, ...config } = { ...input, thresholds: sorted };
-        const values = { key, is_public: isPublic, config: JSON.stringify(config), updated_at: this.ctx.now() };
+        const { key, isPublic, groupId, ...config } = { ...input, thresholds: sorted };
+        const values = { key, is_public: isPublic, group_id: groupId, config: JSON.stringify(config), updated_at: this.ctx.now() };
         if (existingKey) {
           const r = await tx.updateTable('map_overlay').set(values).where('project_id', '=', a.project.id).where('key', '=', existingKey).executeTakeFirst();
           if (!r.numUpdatedRows) throw notFound('Overlay');

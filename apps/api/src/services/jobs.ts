@@ -16,7 +16,7 @@ import {
   type RunDto,
 } from '@grids/schema';
 import type { z } from 'zod';
-import type { JobInput, RunQuery } from '@grids/schema';
+import type { DatasetInput, DatasetRowsInput, JobInput, RunQuery } from '@grids/schema';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import type { ProjectService } from './projects.js';
@@ -455,5 +455,60 @@ export class JobService {
         .execute();
       return { columns: ds.columns as string[], items: rows.map((r) => r.data as Record<string, unknown>), total: ds.row_count, page: page.page, pageSize: page.pageSize };
     });
+  }
+
+  /** Creates (or updates the definition of) a dataset maintained by hand. */
+  async saveDataset(actor: Actor, tenantId: string, project: string, input: z.output<typeof DatasetInput>, existingKey?: string): Promise<DatasetDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    const values = { key: input.key, name: input.name, description: input.description, columns: JSON.stringify(input.columns), freshness_minutes: input.freshnessMinutes };
+    try {
+      await this.projects.cellTx(tenantId, async (tx) => {
+        if (existingKey) {
+          const r = await tx.updateTable('dataset').set(values).where('project_id', '=', a.project.id).where('key', '=', existingKey).executeTakeFirst();
+          if (!r.numUpdatedRows) throw notFound('Dataset');
+        } else await tx.insertInto('dataset').values({ id: uuidv7(), tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
+      });
+    } catch (e) {
+      if (isUniqueViolation(e)) throw conflict('Key taken', `A dataset with key "${input.key}" already exists.`);
+      throw e;
+    }
+    await audit(this.ctx, actor.id, tenantId, existingKey ? 'dataset.updated' : 'dataset.created', { project: a.project.key, dataset: input.key });
+    return this.datasets(actor, tenantId, project);
+  }
+
+  /** Loads rows (e.g. a parsed CSV) into a dataset; new columns are added to its definition. */
+  async uploadDatasetRows(actor: Actor, tenantId: string, project: string, key: string, input: z.output<typeof DatasetRowsInput>) {
+    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const res = await this.projects.cellTx(tenantId, async (tx) => {
+      const ds = await tx.selectFrom('dataset').select(['id', 'columns']).where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
+      if (!ds) throw notFound('Dataset');
+      // Numbers stay numbers (CSV gives strings) so aggregations work.
+      const rows = input.rows.map((r) =>
+        Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v])),
+      );
+      if (input.mode === 'replace') await tx.deleteFrom('dataset_row').where('dataset_id', '=', ds.id).execute();
+      for (let i = 0; i < rows.length; i += 1000)
+        await tx
+          .insertInto('dataset_row')
+          .values(rows.slice(i, i + 1000).map((data) => ({ tenant_id: tenantId, dataset_id: ds.id, data: JSON.stringify(data) })))
+          .execute();
+      const columns = [...new Set([...(ds.columns as string[]), ...rows.slice(0, 500).flatMap((r) => Object.keys(r))])];
+      const count = await tx.selectFrom('dataset_row').select((eb) => eb.fn.countAll<string>().as('n')).where('dataset_id', '=', ds.id).executeTakeFirstOrThrow();
+      await tx
+        .updateTable('dataset')
+        .set({ columns: JSON.stringify(columns), row_count: Number(count.n), last_materialised_at: this.ctx.now() })
+        .where('id', '=', ds.id)
+        .execute();
+      return { rows: Number(count.n), added: rows.length };
+    });
+    await audit(this.ctx, actor.id, tenantId, 'dataset.loaded', { project: a.project.key, dataset: key, rows: res.added, mode: input.mode });
+    return res;
+  }
+
+  async deleteDataset(actor: Actor, tenantId: string, project: string, key: string): Promise<DatasetDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.projects.cellTx(tenantId, (tx) => tx.deleteFrom('dataset').where('project_id', '=', a.project.id).where('key', '=', key).execute());
+    await audit(this.ctx, actor.id, tenantId, 'dataset.deleted', { project: a.project.key, dataset: key });
+    return this.datasets(actor, tenantId, project);
   }
 }

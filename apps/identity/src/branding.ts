@@ -29,3 +29,28 @@ export function brandingLoader(apiUrl: string) {
     return value;
   };
 }
+
+export interface PlatformBranding {
+  appName: string;
+  primaryColor: string;
+  logo: string | null;
+  welcomeMessage: string;
+}
+
+let platformCache: { at: number; value: PlatformBranding | null } | null = null;
+
+/** The platform's own look (console › Platform settings), for pages not tied to an organisation. */
+export function platformLoader(apiUrl: string) {
+  return async (): Promise<PlatformBranding | null> => {
+    if (platformCache && Date.now() - platformCache.at < 60_000) return platformCache.value;
+    let value: PlatformBranding | null = null;
+    try {
+      const res = await fetch(`${apiUrl}/public/platform`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) value = ((await res.json()) as { branding: PlatformBranding }).branding;
+    } catch {
+      value = null;
+    }
+    platformCache = { at: Date.now(), value };
+    return value;
+  };
+}

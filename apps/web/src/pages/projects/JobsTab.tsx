@@ -27,7 +27,7 @@ import { CircleCheck, CircleX, Clock, Loader, FileUp, Pencil, Play, Plus, Radar,
 import { useState } from 'react';
 import { api } from '../../api';
 import { env } from '../../env';
-import { FreshnessBadge } from '../../viz/Freshness';
+import { FreshnessBadge } from '@grids/viz';
 import { useProject } from './context';
 
 const STATUS: Record<RunStatus, { icon: typeof Clock; cls: string; label: string }> = {

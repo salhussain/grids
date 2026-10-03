@@ -1,6 +1,11 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  PublicProjectCard,
+  DatasetInput,
+  DatasetRowsInput,
+  OverlayGroupDto,
+  OverlayGroupInput,
   DashboardDto,
   DashboardInput,
   DashboardParams,
@@ -277,6 +282,20 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   app.delete('/tenants/:tenantId/projects/:project/files/:key', { schema: { params: PK, response: Files } }, (req) =>
     s.jobs.deleteFile(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
   );
+  app.post('/tenants/:tenantId/projects/:project/datasets', { schema: { params: P, body: DatasetInput, response: { 200: z.array(DatasetDto) } } }, (req) =>
+    s.jobs.saveDataset(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/datasets/:key', { schema: { params: PK, body: DatasetInput, response: { 200: z.array(DatasetDto) } } }, (req) =>
+    s.jobs.saveDataset(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.key),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/datasets/:key', { schema: { params: PK, response: { 200: z.array(DatasetDto) } } }, (req) =>
+    s.jobs.deleteDataset(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
+  app.put(
+    '/tenants/:tenantId/projects/:project/datasets/:key/rows',
+    { bodyLimit: 30 * 1024 * 1024, schema: { params: PK, body: DatasetRowsInput, response: { 200: z.object({ rows: z.number(), added: z.number() }) } } },
+    (req) => s.jobs.uploadDatasetRows(actorOf(req), req.params.tenantId, req.params.project, req.params.key, req.body),
+  );
   app.get('/tenants/:tenantId/projects/:project/datasets', { schema: { params: P, response: { 200: z.array(DatasetDto) } } }, (req) =>
     s.jobs.datasets(actorOf(req), req.params.tenantId, req.params.project),
   );
@@ -313,6 +332,21 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
   );
   app.delete('/tenants/:tenantId/projects/:project/dashboards/:key', { schema: { params: PK, response: Dashboards } }, (req) =>
     s.query.deleteDashboard(actorOf(req), req.params.tenantId, req.params.project, req.params.key),
+  );
+
+  // ----- map overlay groups (levels) -----
+  const OGroups = { 200: z.array(OverlayGroupDto) };
+  app.get('/tenants/:tenantId/projects/:project/overlay-groups', { schema: { params: P, response: OGroups } }, (req) =>
+    s.explore.overlayGroups(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/overlay-groups', { schema: { params: P, body: OverlayGroupInput, response: OGroups } }, (req) =>
+    s.explore.saveOverlayGroup(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/overlay-groups/:id', { schema: { params: PId, body: OverlayGroupInput, response: OGroups } }, (req) =>
+    s.explore.saveOverlayGroup(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.id),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/overlay-groups/:id', { schema: { params: PId, response: OGroups } }, (req) =>
+    s.explore.deleteOverlayGroup(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
   );
 
   // ----- explorer & map overlays -----
@@ -387,6 +421,18 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
 
   // ----- the organisation's Forms menu and review inbox -----
   const FormGroups = { 200: z.array(FormGroupDto) };
+  app.get('/tenants/:tenantId/projects/:project/form-groups', { schema: { params: P, response: FormGroups } }, (req) =>
+    s.forms.projectGroups(actorOf(req), req.params.tenantId, req.params.project),
+  );
+  app.post('/tenants/:tenantId/projects/:project/form-groups', { schema: { params: P, body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveProjectGroup(actorOf(req), req.params.tenantId, req.params.project, req.body),
+  );
+  app.put('/tenants/:tenantId/projects/:project/form-groups/:id', { schema: { params: PId, body: FormGroupInput, response: FormGroups } }, (req) =>
+    s.forms.saveProjectGroup(actorOf(req), req.params.tenantId, req.params.project, req.body, req.params.id),
+  );
+  app.delete('/tenants/:tenantId/projects/:project/form-groups/:id', { schema: { params: PId, response: FormGroups } }, (req) =>
+    s.forms.deleteProjectGroup(actorOf(req), req.params.tenantId, req.params.project, req.params.id),
+  );
   app.get('/tenants/:tenantId/forms/menu', { schema: { params: T, response: { 200: FormsMenuDto } } }, (req) => s.forms.menu(actorOf(req), req.params.tenantId));
   app.get('/tenants/:tenantId/forms/inbox', { schema: { params: T, response: { 200: InboxDto } } }, (req) => s.forms.inbox(actorOf(req), req.params.tenantId));
   app.get('/tenants/:tenantId/form-groups', { schema: { params: T, response: FormGroups } }, (req) => s.forms.groups(actorOf(req), req.params.tenantId));
@@ -405,6 +451,10 @@ export const projectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) 
 export const publicProjectRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) => {
   const s = deps.services;
   const Params = z.object({ tenant: z.string().min(1).max(63), project: z.string().min(1).max(63) });
+  app.get('/public/projects', { schema: { response: { 200: z.array(PublicProjectCard) } } }, async (_req, reply) => {
+    reply.header('cache-control', 'public, max-age=60');
+    return s.query.publicCatalogue();
+  });
   app.get('/public/projects/:tenant/:project', { schema: { params: Params, response: { 200: PublicProjectDto } } }, async (req, reply) => {
     reply.header('cache-control', 'public, max-age=30');
     return s.query.publicView(req.params.tenant, req.params.project);

@@ -54,10 +54,13 @@ import { OverlaysTab } from './pages/projects/OverlaysTab';
 import { ProjectLayout } from './pages/projects/ProjectLayout';
 import { ProjectsPage } from './pages/projects/ProjectsPage';
 import { PublicProjectPage } from './pages/projects/PublicProjectPage';
-import { SettingsTab } from './pages/projects/SettingsTab';
+import { DatasetsTab } from './pages/projects/DatasetsTab';
+import { OverviewTab } from './pages/projects/OverviewTab';
+import { MembersTab, SubmissionsTab, TypesTab } from './pages/projects/pages';
 import { LanguagesPage } from './pages/LanguagesPage';
 import { CommandPalette, usePaletteShortcut, type PaletteLink } from './palette';
-import { PreferencesDialog, ThemeToggle } from './prefs';
+import { HeaderControls, PreferencesDialog } from './prefs';
+import { SupportBubble } from './SupportBubble';
 import { ActivityPage } from './pages/ActivityPage';
 import { BrandingPage } from './pages/BrandingPage';
 import { DomainsPage } from './pages/DomainsPage';
@@ -272,7 +275,6 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch()
               {ws.me.role === 'org_admin' ? t('web.shell.orgAdmin') : t('web.shell.member')}
             </div>
           </div>
-          <ThemeToggle me={me} className={tone.hover} />
           <button
             type="button"
             onClick={() => userManager.signoutRedirect()}
@@ -359,7 +361,7 @@ function WorkspaceShell() {
     queryFn: () => api.workspace(tenantId),
   });
   const [open, setOpen] = useState(false);
-  const bare = useRouterState({ select: (st) => /^\/o\/[^/]+\/p\/[^/]+\/?$/.test(st.location.pathname) });
+  const bare = useRouterState({ select: (st) => /^\/o\/[^/]+\/p\/[^/]+\/explore\/?$/.test(st.location.pathname) });
   useEffect(() => {
     if (ws.data) {
       applyTheme(ws.data.theme);
@@ -400,6 +402,8 @@ function WorkspaceShell() {
 /** Sidebar on the canvas, the page as one raised sheet beside it, and ⌘K search. */
 function Shell({ open, setOpen }: { open: boolean; setOpen(v: boolean): void }) {
   const t = useT();
+  const me = useMe();
+  const ws = useWorkspace();
   const groups = useNavGroups();
   const [search, setSearch] = useState(false);
   const openSearch = useCallback(() => {
@@ -438,12 +442,13 @@ function Shell({ open, setOpen }: { open: boolean; setOpen(v: boolean): void }) 
               <Menu className="size-5" />
             </button>
             <Breadcrumbs />
+            <HeaderControls me={me} localization={ws.localization} className="ms-auto hidden sm:flex" />
             <button
               type="button"
               onClick={openSearch}
               aria-label={t('web.shell.search')}
               title={t('web.shell.search')}
-              className="ms-auto flex size-9 shrink-0 items-center justify-center text-zinc-600 hover:bg-zinc-100 hover:text-ink lg:hidden"
+              className="ms-auto flex size-9 shrink-0 items-center justify-center text-zinc-600 hover:bg-zinc-100 hover:text-ink sm:ms-0 lg:hidden"
             >
               <Search className="size-[18px]" />
             </button>
@@ -456,6 +461,7 @@ function Shell({ open, setOpen }: { open: boolean; setOpen(v: boolean): void }) 
         </div>
       </div>
       <CommandPalette open={search} onClose={() => setSearch(false)} links={links} />
+      <SupportBubble />
     </div>
   );
 }
@@ -516,7 +522,12 @@ export const projectRoute = createRoute({
 });
 const pr = () => projectRoute;
 const projectTree = projectRoute.addChildren([
-  createRoute({ getParentRoute: pr, path: '/', component: () => null }),
+  createRoute({ getParentRoute: pr, path: '/', component: OverviewTab }),
+  createRoute({ getParentRoute: pr, path: '/explore', component: () => null }),
+  createRoute({ getParentRoute: pr, path: '/members', component: MembersTab }),
+  createRoute({ getParentRoute: pr, path: '/types', component: TypesTab }),
+  createRoute({ getParentRoute: pr, path: '/datasets', component: DatasetsTab }),
+  createRoute({ getParentRoute: pr, path: '/submissions', component: SubmissionsTab }),
   createRoute({ getParentRoute: pr, path: '/dashboards', component: DashboardsTab }),
   createRoute({ getParentRoute: pr, path: '/overlays', component: OverlaysTab }),
   createRoute({ getParentRoute: pr, path: '/entities', component: EntitiesTab }),
@@ -531,7 +542,8 @@ const projectTree = projectRoute.addChildren([
     validateSearch: (s: Record<string, unknown>) => ({ entity: typeof s.entity === 'string' ? s.entity : undefined }),
   }),
   createRoute({ getParentRoute: pr, path: '/jobs', component: JobsTab }),
-  createRoute({ getParentRoute: pr, path: '/settings', component: SettingsTab }),
+  // Older links: settings now live on the overview.
+  createRoute({ getParentRoute: pr, path: '/settings', component: () => <Navigate to=".." /> }),
 ]);
 
 export const invoiceRoute = createRoute({

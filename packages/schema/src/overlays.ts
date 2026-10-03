@@ -21,7 +21,9 @@ export const MapOverlayInput = z.object({
   key: Key,
   name: z.string().trim().min(1).max(120),
   /** Overlays are listed under their group in the overlay picker. */
-  group: z.string().trim().min(1).max(60).default('General'),
+  group: z.string().trim().min(1).max(200).default('General'),
+  /** A configured overlay group (levels nest); when set, `group` shows its path. */
+  groupId: z.uuid().nullable().default(null),
   description: z.string().trim().max(500).default(''),
   element: Key,
   aggregation: z.enum(AGGREGATIONS).default('sum'),
@@ -89,3 +91,21 @@ export type SearchHit = z.infer<typeof SearchHit>;
 /** A node in the place hierarchy browser. */
 export const PlaceNode = ExplorePlace.extend({ hasChildren: z.boolean(), childCount: z.number().int() });
 export type PlaceNode = z.infer<typeof PlaceNode>;
+
+/** Overlay groups: nested levels in the explorer's overlay picker (e.g. Health › Malaria). */
+export const OverlayGroupInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  parentId: z.uuid().nullable().default(null),
+  sort: z.number().int().default(0),
+});
+export type OverlayGroupInput = z.input<typeof OverlayGroupInput>;
+export const OverlayGroupDto = z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  name: z.string(),
+  /** "Health › Malaria" */
+  path: z.string(),
+  sort: z.number().int(),
+  overlayCount: z.number().int(),
+});
+export type OverlayGroupDto = z.infer<typeof OverlayGroupDto>;

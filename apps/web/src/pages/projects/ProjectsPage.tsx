@@ -1,26 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { TEMPLATE_KEYS, type ProjectDto, type ProjectTemplate, type ProjectVisibility } from '@grids/schema';
-import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, PageHeader, Tag, Textarea, cx } from '@grids/ui';
-import { Archive, FolderKanban, Globe, Lock, Plus, Users } from 'lucide-react';
+import type { ProjectDto, ProjectStatus, ProjectVisibility } from '@grids/schema';
+import { Button, Dialog, Empty, ErrorNotice, Field, Input, Listbox, Loading, PageHeader, Tag, Textarea } from '@grids/ui';
+import { Archive, FolderKanban, Plus, UserRound } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { api } from '../../api';
 import { useT } from '../../i18n';
 import { useCan, useWorkspace } from '../../session';
-import { FreshnessBadge } from '../../viz/Freshness';
+import { FreshnessBadge } from '@grids/viz';
 import { iconOf } from './context';
+import { ChoiceCards, ImageField, STATUS, VISIBILITY } from './fields';
 
-const TEMPLATES: Record<ProjectTemplate, { title: string; text: string; icon: string; color: string }> = {
-  blank: { title: 'Blank project', text: 'Start from scratch: define your own entity types, data and forms.', icon: 'folder', color: '#0f62fe' },
-  'flight-tracker': { title: 'Live flight tracker', text: 'Aircraft positions from the OpenSky Network every 5 minutes, on a public live map.', icon: 'plane', color: '#0043ce' },
-  'hr-workforce': { title: 'HR & workforce', text: 'Offices and staff, leave, training and changes, with a workforce dashboard.', icon: 'users', color: '#8a3ffc' },
-  'health-surveillance': { title: 'Health facility surveillance', text: 'Weekly facility reports with indicators, alerts, maps and trends.', icon: 'heart-pulse', color: '#da1e28' },
-};
-const VISIBILITY: Record<ProjectVisibility, { label: string; text: string; icon: typeof Lock }> = {
-  private: { label: 'Private', text: 'Only project members', icon: Lock },
-  organisation: { label: 'Organisation', text: 'Every member can view', icon: Users },
-  public: { label: 'Public', text: 'Anyone can view public dashboards', icon: Globe },
-};
 
 export function ProjectsPage() {
   const ws = useWorkspace();
@@ -82,10 +72,15 @@ function ProjectCard({ p }: { p: ProjectDto }) {
         params={{ tenantId: ws.tenant.id, project: p.key }}
         className="group flex h-full flex-col overflow-hidden border border-zinc-200 bg-snow transition-[border-color,box-shadow,translate] hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-raised motion-reduce:hover:translate-y-0"
       >
-        <ProjectCover color={p.color}>
-          <span className="absolute start-5 -bottom-px flex size-10 items-center justify-center text-white" style={{ background: p.color }}>
-            <Icon className="size-5" />
-          </span>
+        <ProjectCover color={p.color} image={p.coverImage}>
+          {p.logo ? (
+            <img src={p.logo} alt="" className="absolute start-5 -bottom-5 size-12 border border-zinc-200 bg-snow object-contain p-1" />
+          ) : (
+            <span className="absolute start-5 -bottom-px flex size-10 items-center justify-center text-white" style={{ background: p.color }}>
+              <Icon className="size-5" />
+            </span>
+          )}
+          {p.status === 'draft' && <span className="absolute end-3 top-3 border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800">Draft</span>}
         </ProjectCover>
         <div className="flex flex-1 flex-col p-5">
           <div className="flex items-start gap-3">
@@ -115,7 +110,7 @@ function ProjectCard({ p }: { p: ProjectDto }) {
           </dl>
           <div className="mt-4 flex items-center justify-between gap-2">
             <FreshnessBadge value={p.freshness} compact />
-            {p.template && <Tag>{TEMPLATES[p.template as ProjectTemplate]?.title ?? p.template}</Tag>}
+            <Tag>{p.key}</Tag>
           </div>
         </div>
       </Link>
@@ -124,7 +119,13 @@ function ProjectCard({ p }: { p: ProjectDto }) {
 }
 
 /** A quiet header band in the project's colour over the Grids grid. */
-function ProjectCover({ color, children }: { color: string; children?: ReactNode }) {
+function ProjectCover({ color, image, children }: { color: string; image?: string | null; children?: ReactNode }) {
+  if (image)
+    return (
+      <div className="relative h-24 border-b border-zinc-200 bg-cover bg-center" style={{ backgroundImage: `url("${image}")` }}>
+        {children}
+      </div>
+    );
   return (
     <div
       className="relative h-20 border-b border-zinc-200"
@@ -143,38 +144,50 @@ function NewProjectDialog({ onClose }: { onClose(): void }) {
   const ws = useWorkspace();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [template, setTemplate] = useState<ProjectTemplate>('blank');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [visibility, setVisibility] = useState<ProjectVisibility>('private');
+  const members = useQuery({ queryKey: ['members', ws.tenant.id], queryFn: () => api.members(ws.tenant.id), retry: false });
+  const [f, setF] = useState({
+    name: '',
+    key: '',
+    description: '',
+    visibility: 'private' as ProjectVisibility,
+    status: 'draft' as ProjectStatus,
+    logo: null as string | null,
+    coverImage: null as string | null,
+    managerId: null as string | null,
+  });
+  const [keyEdited, setKeyEdited] = useState(false);
+  const code = keyEdited ? f.key : slug(f.name);
   const create = useMutation({
     mutationFn: () =>
       api.createProject(ws.tenant.id, {
-        name: name || TEMPLATES[template].title,
-        description: description || (template === 'blank' ? '' : TEMPLATES[template].text),
-        template,
-        visibility,
-        icon: TEMPLATES[template].icon,
-        color: TEMPLATES[template].color,
+        name: f.name,
+        key: code || undefined,
+        description: f.description,
+        visibility: f.visibility,
+        status: f.status,
+        logo: f.logo,
+        coverImage: f.coverImage,
+        managerId: f.managerId,
       }),
     onSuccess: (p) => {
       void qc.invalidateQueries({ queryKey: ['projects', ws.tenant.id] });
       void navigate({ to: '/o/$tenantId/p/$project', params: { tenantId: ws.tenant.id, project: p.key } });
     },
   });
+  const people = (members.data?.members ?? []).filter((m) => m.status === 'active');
   return (
     <Dialog
       open
       onClose={onClose}
       wide
       title="New project"
-      description="Start blank or from a template with a ready data model, jobs, forms and dashboards."
+      description="Every project starts empty: add its data model, data, dashboards and forms once it exists."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => create.mutate()} loading={create.isPending}>
+          <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!f.name.trim()}>
             Create project
           </Button>
         </>
@@ -182,54 +195,51 @@ function NewProjectDialog({ onClose }: { onClose(): void }) {
     >
       <div className="space-y-5">
         <ErrorNotice error={create.error} />
-        <fieldset>
-          <legend className="mb-2 text-xs font-medium tracking-wide text-zinc-600">Template</legend>
-          <div role="radiogroup" className="grid gap-px border border-zinc-200 bg-zinc-200 sm:grid-cols-2">
-            {TEMPLATE_KEYS.map((k) => {
-              const tpl = TEMPLATES[k];
-              const Icon = iconOf(tpl.icon);
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  role="radio"
-                  aria-checked={template === k}
-                  onClick={() => {
-                    setTemplate(k);
-                    if (k === 'flight-tracker') setVisibility('public');
-                  }}
-                  className={cx('flex gap-3 p-4 text-start transition-colors', template === k ? 'bg-accent-50 outline-2 -outline-offset-2 outline-accent-600' : 'bg-snow hover:bg-zinc-50')}
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center text-white" style={{ background: tpl.color }}>
-                    <Icon className="size-[18px]" />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-medium">{tpl.title}</span>
-                    <span className="mt-0.5 block text-xs text-zinc-500">{tpl.text}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name">
-            <Input value={name} placeholder={TEMPLATES[template].title} onChange={(e) => setName(e.target.value)} />
+        <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+          <Field label="Project name" required>
+            <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus />
           </Field>
-          <Field label="Visibility">
-            <select value={visibility} onChange={(e) => setVisibility(e.target.value as ProjectVisibility)} className="h-9 w-full border border-zinc-300 bg-snow px-2.5 text-sm">
-              {Object.entries(VISIBILITY).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v.label}: {v.text}
-                </option>
-              ))}
-            </select>
+          <Field label="Code" hint="Used in links; lowercase letters, digits and hyphens">
+            <Input
+              value={code}
+              onChange={(e) => {
+                setKeyEdited(true);
+                setF({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') });
+              }}
+              className="font-mono"
+            />
           </Field>
         </div>
         <Field label="Description">
-          <Textarea value={description} placeholder={template === 'blank' ? 'What is this project for?' : TEMPLATES[template].text} onChange={(e) => setDescription(e.target.value)} />
+          <Textarea value={f.description} placeholder="What is this project for, and who uses it?" onChange={(e) => setF({ ...f, description: e.target.value })} />
         </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ImageField label="Project logo" value={f.logo} onChange={(logo) => setF({ ...f, logo })} hint="Square works best" />
+          <ImageField label="Background image" aspect="wide" maxSize={1600} value={f.coverImage} onChange={(coverImage) => setF({ ...f, coverImage })} hint="Shown on the project tile and pages" />
+        </div>
+        <Field label="Manager (optional)" hint="You are a manager too. Add someone else to run the project day to day.">
+          <Listbox
+            label="Manager"
+            value={f.managerId ?? 'none'}
+            onChange={(v) => setF({ ...f, managerId: v === 'none' ? null : v })}
+            options={[
+              { value: 'none', label: 'Only me for now', icon: UserRound },
+              ...people.map((m) => ({ value: m.userId, label: m.displayName ?? m.email ?? 'Member', description: m.email ?? undefined, text: m.displayName ?? m.email ?? '', icon: UserRound })),
+            ]}
+          />
+        </Field>
+        <ChoiceCards label="Status" value={f.status} onChange={(status) => setF({ ...f, status })} options={STATUS} />
+        <ChoiceCards label="Visibility" value={f.visibility} onChange={(visibility) => setF({ ...f, visibility })} options={VISIBILITY} />
       </div>
     </Dialog>
   );
 }
+
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);

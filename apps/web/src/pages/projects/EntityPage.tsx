@@ -4,9 +4,9 @@ import { Button, ErrorNotice, KeyValues, Loading, Panel, Tag, cx, dateTime, relT
 import { ChevronRight, ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../../api';
-import { Chart, type ChartOption } from '../../viz/Chart';
-import { MapView } from '../../viz/MapView';
-import { brandColor, INK, useScheme } from '../../viz/scheme';
+import { Chart, type ChartOption } from '@grids/viz';
+import { MapView } from '@grids/viz';
+import { brandColor, INK, useScheme } from '@grids/viz';
 import { iconOf, useProject } from './context';
 import { EntityDialog, fmtAttr, useTypes } from './EntitiesTab';
 

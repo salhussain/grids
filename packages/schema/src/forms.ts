@@ -77,8 +77,56 @@ export const FormDefinition = z.object({
   layout: z.enum(FORM_LAYOUTS).default('single'),
   /** Shown after a successful submission. */
   thankYou: z.string().trim().max(500).default(''),
+  /**
+   * Translations by language. Keys: `title`, `description`, `thankYou`,
+   * `section.<key>`, `<question>.label`, `<question>.hint`,
+   * `<question>.constraintMessage`, `<question>.option.<value>`. Missing keys
+   * fall back to the form's own text.
+   */
+  translations: z.record(z.string().regex(/^[a-z]{2,3}$/), z.record(z.string().max(200), z.string().max(2000))).default({}),
 });
 export type FormDefinition = z.infer<typeof FormDefinition>;
+
+/** The translatable texts of a form, keyed as in `translations`, with the source text. */
+export function formTexts(def: FormDefinition): [string, string][] {
+  const out: [string, string][] = [['title', def.title]];
+  if (def.description) out.push(['description', def.description]);
+  if (def.thankYou) out.push(['thankYou', def.thankYou]);
+  for (const s of def.sections) {
+    if (s.title) out.push([`section.${s.key}`, s.title]);
+    for (const q of s.questions) {
+      if (q.label) out.push([`${q.key}.label`, q.label]);
+      if (q.hint) out.push([`${q.key}.hint`, q.hint]);
+      if (q.constraintMessage) out.push([`${q.key}.constraintMessage`, q.constraintMessage]);
+      for (const o of q.options ?? []) out.push([`${q.key}.option.${o.value}`, o.label]);
+    }
+  }
+  return out;
+}
+
+/** The form in another language: translated texts replace the originals where present. */
+export function localizeForm(def: FormDefinition, locale: string | null | undefined): FormDefinition {
+  const tr = locale ? def.translations[locale] : undefined;
+  if (!tr || !Object.keys(tr).length) return def;
+  const t = (key: string, fallback: string) => tr[key]?.trim() || fallback;
+  return {
+    ...def,
+    title: t('title', def.title),
+    description: t('description', def.description),
+    thankYou: t('thankYou', def.thankYou),
+    sections: def.sections.map((s) => ({
+      ...s,
+      title: t(`section.${s.key}`, s.title),
+      questions: s.questions.map((q) => ({
+        ...q,
+        label: t(`${q.key}.label`, q.label),
+        ...(q.hint && { hint: t(`${q.key}.hint`, q.hint) }),
+        ...(q.constraintMessage && { constraintMessage: t(`${q.key}.constraintMessage`, q.constraintMessage) }),
+        ...(q.options && { options: q.options.map((o) => ({ ...o, label: t(`${q.key}.option.${o.value}`, o.label) })) }),
+      })),
+    })),
+  };
+}
 export type FormDefinitionInput = z.input<typeof FormDefinition>;
 
 // ---------------------------------------------------------------- access & approval workflow
@@ -228,6 +276,8 @@ export type FormGroupInput = z.input<typeof FormGroupInput>;
 
 export const FormGroupDto = z.object({
   id: z.string(),
+  /** The project the group belongs to (null = an older organisation-wide group). */
+  projectId: z.string().nullable(),
   parentId: z.string().nullable(),
   name: z.string(),
   icon: z.string(),
@@ -237,7 +287,7 @@ export const FormGroupDto = z.object({
 export type FormGroupDto = z.infer<typeof FormGroupDto>;
 
 export const MenuForm = z.object({
-  project: z.object({ key: z.string(), name: z.string() }),
+  project: z.object({ id: z.string(), key: z.string(), name: z.string() }),
   key: z.string(),
   name: z.string(),
   description: z.string(),

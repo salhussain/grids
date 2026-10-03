@@ -6,6 +6,7 @@ import * as p0004 from './platform/0004_tenant_plan_optional.js';
 import * as p0005 from './platform/0005_staff_rbac.js';
 import * as p0006 from './platform/0006_invitation_org_unit.js';
 import * as p0007 from './platform/0007_preferences.js';
+import * as p0008 from './platform/0008_platform_settings_support.js';
 import * as i0001 from './identity/0001_identity.js';
 import * as t0001 from './tenant/0001_rls_foundation.js';
 import * as t0002 from './tenant/0002_tenant_profile.js';
@@ -21,6 +22,7 @@ import * as t0011 from './tenant/0011_map_overlays.js';
 import * as t0012 from './tenant/0012_permission_groups.js';
 import * as t0013 from './tenant/0013_triggers_sensors.js';
 import * as t0014 from './tenant/0014_form_workflow.js';
+import * as t0015 from './tenant/0015_project_profile_groups.js';
 
 // Explicit registries (not filesystem globbing) so migrations bundle and typecheck.
 const platform: Record<string, Migration> = {
@@ -31,6 +33,7 @@ const platform: Record<string, Migration> = {
   '0005_staff_rbac': p0005,
   '0006_invitation_org_unit': p0006,
   '0007_preferences': p0007,
+  '0008_platform_settings_support': p0008,
 };
 const tenant: Record<string, Migration> = {
   '0001_rls_foundation': t0001,
@@ -47,6 +50,7 @@ const tenant: Record<string, Migration> = {
   '0012_permission_groups': t0012,
   '0013_triggers_sensors': t0013,
   '0014_form_workflow': t0014,
+  '0015_project_profile_groups': t0015,
 };
 
 const provider = (m: Record<string, Migration>): MigrationProvider => ({

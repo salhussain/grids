@@ -11,12 +11,15 @@ import {
 } from '@grids/schema';
 import { badRequest, forbidden, notFound } from '../errors.js';
 import { can, requireStaff, requireTenantAccess } from './authz.js';
+import { workspacePolicy } from './policy.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import { iso, mapPage, paginate } from './util.js';
 
 type NewTicket = Required<Pick<CreateTicketInput, 'subject' | 'body'>> & {
   category: NonNullable<CreateTicketInput['category']>;
   priority: NonNullable<CreateTicketInput['priority']>;
+  audience?: 'organisation' | 'platform';
+  page?: string;
 };
 
 /**
@@ -36,6 +39,10 @@ export class SupportService {
       });
     }
     let q = this.summaryQuery().orderBy('st.updated_at', 'desc');
+    // Organisation-internal tickets stay inside the organisation.
+    const member = query.tenantId ? await workspacePolicy(this.ctx, actor, query.tenantId) : null;
+    if (!member) q = q.where('st.audience', '=', 'platform');
+    if (query.audience) q = q.where('st.audience', '=', query.audience);
     if (query.tenantId) q = q.where('st.tenant_id', '=', query.tenantId);
     if (query.status === 'active') q = q.where('st.status', 'in', ['open', 'pending']);
     else if (query.status) q = q.where('st.status', '=', query.status);
@@ -63,7 +70,8 @@ export class SupportService {
       staff: 'support.view',
       workspace: 'support.view',
     });
-    const staffView = can(actor, 'support.view');
+    if (t.audience === 'organisation' && !(await workspacePolicy(this.ctx, actor, t.tenant_id))) throw notFound('Ticket');
+    const staffView = can(actor, 'support.view') && t.audience === 'platform';
     let mq = this.ctx.db
       .selectFrom('support_message as m')
       .innerJoin('user_identity as u', 'u.id', 'm.author_id')
@@ -131,11 +139,12 @@ export class SupportService {
           priority: input.priority,
           status: 'open',
           created_by: actor.id,
+          audience: input.audience ?? 'platform',
         })
         .execute();
       await tx
         .insertInto('support_message')
-        .values({ id: uuidv7(), ticket_id: id, author_id: actor.id, body: input.body })
+        .values({ id: uuidv7(), ticket_id: id, author_id: actor.id, body: input.page ? `${input.body}\n\n— Sent from ${input.page}` : input.body })
         .execute();
     });
     await audit(this.ctx, actor.id, tenantId, 'ticket.created', {
@@ -143,6 +152,10 @@ export class SupportService {
       subject: input.subject,
       priority: input.priority,
     });
+    if (input.audience === 'organisation') {
+      await this.notifyHandlers(tenantId, `[#${number}] ${input.subject}`, `New ${input.category.replace('_', ' ')} ticket from ${actor.email ?? 'a member'}.\n\n${input.body}\n\nOpen: ${this.ctx.workspaceUrl}/o/${tenantId}/support/${id}`, actor.id);
+      return this.get(actor, id);
+    }
     await this.ctx.email.send('ticket_created', tenantId, {
       to: this.ctx.supportEmail,
       subject: `[#${number}] ${input.subject} (${tenant.name}, ${input.priority})`,
@@ -158,12 +171,14 @@ Open in console: ${this.ctx.consoleUrl}/support/${id}`,
   async reply(actor: Actor, ticketId: string, input: Required<ReplyInput>): Promise<TicketDetail> {
     const t = await this.summaryQuery().where('st.id', '=', ticketId).executeTakeFirst();
     if (!t) throw notFound('Ticket');
-    const asStaff = can(actor, 'support.reply');
-    await requireTenantAccess(this.ctx, actor, t.tenant_id, {
+    const policy = await requireTenantAccess(this.ctx, actor, t.tenant_id, {
       staff: 'support.reply',
       workspace: 'support.create',
     });
-    if (input.internal && !asStaff) throw forbidden('Only staff can add internal notes.');
+    if (t.audience === 'organisation' && !policy) throw notFound('Ticket');
+    // The handling side: platform staff for platform tickets, the organisation's support managers for internal ones.
+    const asStaff = t.audience === 'platform' ? can(actor, 'support.reply') : !!policy?.has('support.manage') && t.created_by !== actor.id;
+    if (input.internal && !(asStaff && t.audience === 'platform')) throw forbidden('Only staff can add internal notes.');
 
     // Staff replies wait on the customer; customer replies reopen the ticket.
     const status = input.internal ? t.status : asStaff ? 'pending' : 'open';
@@ -196,7 +211,15 @@ Open in console: ${this.ctx.consoleUrl}/support/${id}`,
       { ticket: `#${t.number}` },
     );
 
-    if (!input.internal) {
+    if (!input.internal && t.audience === 'organisation') {
+      if (asStaff && t.creator_email)
+        await this.ctx.email.send('ticket_reply', t.tenant_id, {
+          to: t.creator_email,
+          subject: `Re: [#${t.number}] ${t.subject}`,
+          text: `${actor.email ?? 'Someone'} replied:\n\n${input.body}\n\n${this.ctx.workspaceUrl}/o/${t.tenant_id}/support/${ticketId}`,
+        });
+      else if (!asStaff) await this.notifyHandlers(t.tenant_id, `Re: [#${t.number}] ${t.subject}`, `${actor.email ?? 'Someone'} replied:\n\n${input.body}\n\n${this.ctx.workspaceUrl}/o/${t.tenant_id}/support/${ticketId}`, actor.id);
+    } else if (!input.internal) {
       const to = asStaff ? t.creator_email : (t.assignee_email ?? this.ctx.supportEmail);
       if (to) {
         await this.ctx.email.send('ticket_reply', t.tenant_id, {
@@ -243,6 +266,57 @@ ${asStaff ? `Reply in your workspace: ${this.ctx.workspaceUrl}/o/${t.tenant_id}/
     return this.get(actor, ticketId);
   }
 
+  /** Organisation admins handle internal tickets: they hear about new ones and replies. */
+  private async notifyHandlers(tenantId: string, subject: string, text: string, exceptUserId: string) {
+    const admins = await this.ctx.db
+      .selectFrom('membership as m')
+      .innerJoin('user_identity as u', 'u.id', 'm.user_id')
+      .select('u.email')
+      .where('m.tenant_id', '=', tenantId)
+      .where('m.role', '=', 'org_admin')
+      .where('m.status', '=', 'active')
+      .where('m.user_id', '<>', exceptUserId)
+      .execute();
+    for (const a of admins) if (a.email) await this.ctx.email.send('ticket_internal', tenantId, { to: a.email, subject, text });
+  }
+
+  /** Organisation support managers change the status of internal tickets. */
+  async orgUpdate(actor: Actor, tenantId: string, ticketId: string, input: { status: TicketSummary['status'] }): Promise<TicketDetail> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'support.triage', workspace: 'support.manage' });
+    const t = await this.ctx.db.selectFrom('support_ticket').select(['number', 'audience']).where('id', '=', ticketId).where('tenant_id', '=', tenantId).executeTakeFirst();
+    if (!t) throw notFound('Ticket');
+    if (t.audience !== 'organisation') throw forbidden('The platform team manages the status of escalated tickets.');
+    await this.ctx.db
+      .updateTable('support_ticket')
+      .set({ status: input.status, resolved_at: input.status === 'resolved' ? this.ctx.now() : null, updated_at: this.ctx.now() })
+      .where('id', '=', ticketId)
+      .execute();
+    await audit(this.ctx, actor.id, tenantId, 'ticket.updated', { ticket: `#${t.number}`, status: input.status });
+    return this.get(actor, ticketId);
+  }
+
+  /** Hands an internal ticket to the platform team (the conversation goes with it). */
+  async escalate(actor: Actor, tenantId: string, ticketId: string, note: string | undefined): Promise<TicketDetail> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'support.triage', workspace: 'support.manage' });
+    const t = await this.summaryQuery().where('st.id', '=', ticketId).where('st.tenant_id', '=', tenantId).executeTakeFirst();
+    if (!t) throw notFound('Ticket');
+    if (t.audience === 'platform') throw badRequest('This ticket is already with the platform team');
+    await this.ctx.db.transaction().execute(async (tx) => {
+      await tx.updateTable('support_ticket').set({ audience: 'platform', escalated_at: this.ctx.now(), status: 'open', updated_at: this.ctx.now() }).where('id', '=', ticketId).execute();
+      await tx
+        .insertInto('support_message')
+        .values({ id: uuidv7(), ticket_id: ticketId, author_id: actor.id, body: `Escalated to the platform team${note ? `: ${note}` : '.'}` })
+        .execute();
+    });
+    await audit(this.ctx, actor.id, tenantId, 'ticket.escalated', { ticket: `#${t.number}` });
+    await this.ctx.email.send('ticket_created', tenantId, {
+      to: this.ctx.supportEmail,
+      subject: `[#${t.number}] ${t.subject} (${t.tenant_name}, escalated)`,
+      text: `${actor.email ?? 'An organisation admin'} escalated ticket #${t.number} from ${t.tenant_name}.${note ? `\n\n${note}` : ''}\n\nOpen in console: ${this.ctx.consoleUrl}/support/${ticketId}`,
+    });
+    return this.get(actor, ticketId);
+  }
+
   private summaryQuery() {
     return this.ctx.db
       .selectFrom('support_ticket as st')
@@ -286,6 +360,8 @@ type SummaryRow = {
   message_count: string | null;
   created_at: Date;
   updated_at: Date;
+  audience: 'organisation' | 'platform';
+  escalated_at: Date | null;
 };
 
 function toSummary(t: SummaryRow): TicketSummary {
@@ -313,5 +389,7 @@ function toSummary(t: SummaryRow): TicketSummary {
     messageCount: Number(t.message_count ?? 0),
     createdAt: iso(t.created_at),
     updatedAt: iso(t.updated_at),
+    audience: t.audience,
+    escalatedAt: t.escalated_at ? iso(t.escalated_at) : null,
   };
 }

@@ -64,6 +64,9 @@ type ProjectRow = {
   created_at: Date;
   updated_at: Date;
   archived_at: Date | null;
+  status: 'draft' | 'live';
+  logo: string | null;
+  cover_image: string | null;
 };
 
 /** The caller's effective access to one project. */
@@ -155,7 +158,7 @@ export class ProjectService {
           role = m.role;
           rootPath = m.root_path;
           group = m.permission_group;
-        } else if (staffView || p.visibility !== 'private') role = 'viewer';
+        } else if (staffView || (p.visibility !== 'private' && p.status === 'live')) role = 'viewer';
       }
       if (!role) throw notFound('Project');
       if (!roleAtLeast(role, need)) throw forbidden(`Requires the project ${need} role.`);
@@ -351,6 +354,9 @@ export class ProjectService {
       color: p.color,
       icon: p.icon,
       template: p.template,
+      status: p.status,
+      logo: p.logo,
+      coverImage: p.cover_image,
       myRole: roles.get(p.id) ?? null,
       counts: {
         entities: entities.get(p.id) ?? 0,
@@ -382,7 +388,7 @@ export class ProjectService {
       q = opts.archived ? q.where('archived_at', 'is not', null) : q.where('archived_at', 'is', null);
       if (!all)
         q = q.where((eb) =>
-          eb.or([eb('visibility', '<>', 'private'), ...(mine.size ? [eb('id', 'in', [...mine.keys()])] : [])]),
+          eb.or([eb.and([eb('visibility', '<>', 'private'), eb('status', '=', 'live')]), ...(mine.size ? [eb('id', 'in', [...mine.keys()])] : [])]),
         );
       const rows = (await q.execute()) as ProjectRow[];
       const roles = new Map(rows.map((p) => [p.id, policy && all ? ('manager' as const) : (mine.get(p.id) ?? 'viewer')]));
@@ -401,6 +407,15 @@ export class ProjectService {
       throw forbidden('Requires the "projects.create" permission.');
     assertWithinLimit(await this.planLimits(tenantId), 'projects' as LimitKey, await this.projectCount(tenantId));
     const id = uuidv7();
+    if (input.managerId && input.managerId !== actor.id) {
+      const m = await this.ctx.db
+        .selectFrom('membership')
+        .select('status')
+        .where('tenant_id', '=', tenantId)
+        .where('user_id', '=', input.managerId)
+        .executeTakeFirst();
+      if (m?.status !== 'active') throw badRequest('The manager must be an active member of the organisation');
+    }
     try {
       await this.cellTx(tenantId, async (tx) => {
         let key = input.key ?? slugify(input.name);
@@ -420,10 +435,15 @@ export class ProjectService {
             color: input.color,
             icon: input.icon,
             template: input.template === 'blank' ? null : input.template,
+            status: input.status,
+            logo: input.logo,
+            cover_image: input.coverImage,
             created_by: actor.id,
           })
           .execute();
         await tx.insertInto('project_member').values({ project_id: id, tenant_id: tenantId, user_id: actor.id, role: 'manager' }).execute();
+        if (input.managerId && input.managerId !== actor.id)
+          await tx.insertInto('project_member').values({ project_id: id, tenant_id: tenantId, user_id: input.managerId, role: 'manager' }).execute();
         if (input.template !== 'blank')
           await dataCall(() => this.installTemplate(tx, { tenantId, projectId: id, actorId: actor.id, template: input.template }));
       });
@@ -437,14 +457,20 @@ export class ProjectService {
 
   async update(actor: Actor, tenantId: string, project: string, input: z.output<typeof ProjectUpdate>): Promise<ProjectDto> {
     const a = await this.access(actor, tenantId, project, 'manager');
+    const { coverImage, ...rest } = input;
     await this.cellTx(tenantId, (tx) =>
       tx
         .updateTable('project')
-        .set({ ...input, updated_at: this.ctx.now() })
+        .set({ ...rest, ...(coverImage !== undefined && { cover_image: coverImage }), updated_at: this.ctx.now() })
         .where('id', '=', a.project.id)
         .execute(),
     );
-    await audit(this.ctx, actor.id, tenantId, 'project.updated', { project: a.project.key, ...input });
+    await audit(this.ctx, actor.id, tenantId, 'project.updated', {
+      project: a.project.key,
+      ...rest,
+      ...(rest.logo !== undefined && { logo: rest.logo ? 'set' : 'none' }),
+      ...(coverImage !== undefined && { coverImage: coverImage ? 'set' : 'none' }),
+    });
     return this.get(actor, tenantId, a.project.id);
   }
 

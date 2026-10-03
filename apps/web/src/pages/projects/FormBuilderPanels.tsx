@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { references, validate } from '@grids/forms';
-import { FORM_LAYOUTS, FORM_LAYOUT_INFO, PROJECT_ROLE_INFO, type FormDefinition, type FormLayout, type ProjectRole, type WorkflowStage } from '@grids/schema';
-import { Button, Dialog, Field, Input, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { ArrowDown, ArrowUp, CheckCircle2, ClipboardList, GitBranch, Monitor, Plus, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { FORM_LAYOUTS, FORM_LAYOUT_INFO, PROJECT_ROLE_INFO, formTexts, type FormDefinition, type FormLayout, type ProjectRole, type WorkflowStage } from '@grids/schema';
+import { Button, Dialog, Field, Input, Listbox, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
+import { LOCALES } from '@grids/i18n';
+import { ArrowDown, ArrowUp, CheckCircle2, ClipboardList, GitBranch, Languages, Monitor, Plus, Send, ShieldCheck, Smartphone, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { api } from '../../api';
+import { useWorkspace } from '../../session';
 import { useProject } from './context';
 import type { Draft } from './FormBuilder';
 import { FormRunner, type Answers } from './FormRenderer';
@@ -75,8 +77,8 @@ function LayoutArt({ layout }: { layout: FormLayout }) {
 }
 
 export function DesignPanel({ draft, set }: { draft: Draft; set(p: Partial<Draft>): void }) {
-  const { tenantId } = useProject();
-  const groups = useQuery({ queryKey: ['form-groups', tenantId], queryFn: () => api.formGroups(tenantId) });
+  const { tenantId, project } = useProject();
+  const groups = useQuery({ queryKey: ['form-groups', tenantId, project.key], queryFn: () => api.projectFormGroups(tenantId, project.key) });
   const def = draft.def;
   const setDef = (patch: Partial<FormDefinition>) => set({ def: { ...def, ...patch } });
   const tree = useMemo(() => {
@@ -487,5 +489,73 @@ function StageCard({
         <SwitchField label="Reviewers can send it back for changes" checked={stage.allowReturn} onChange={(v) => set({ allowReturn: v })} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Translations of the form's texts into the organisation's other languages. People
+ * fill the form in their own language; anything not translated shows the original.
+ */
+export function TranslationsPanel({ draft, set }: { draft: Draft; set(p: Partial<Draft>): void }) {
+  const ws = useWorkspace();
+  const def = draft.def;
+  const others = LOCALES.filter((l) => ws.localization.languages.includes(l.code) && l.code !== ws.localization.defaultLanguage);
+  const [lang, setLang] = useState<string>(others[0]?.code ?? '');
+  const texts = formTexts(def);
+  const tr = def.translations[lang] ?? {};
+  const done = texts.filter(([k]) => tr[k]?.trim()).length;
+  const setText = (key: string, value: string) => {
+    const next = { ...tr, [key]: value };
+    if (!value) delete next[key];
+    set({ def: { ...def, translations: { ...def.translations, [lang]: next } } });
+  };
+  if (!others.length)
+    return (
+      <Card title="Translations" description="Your organisation offers one language. Enable more under Settings › Languages to translate this form." icon={Languages}>
+        <span />
+      </Card>
+    );
+  const source = LOCALES.find((l) => l.code === ws.localization.defaultLanguage)?.nativeName ?? 'Original';
+  return (
+    <Card title="Translations" description={`Write the form in ${source}, then translate it here. Untranslated texts show in ${source}.`} icon={Languages}>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Listbox label="Language" className="w-56" value={lang} onChange={setLang} options={others.map((l) => ({ value: l.code, label: l.nativeName, description: l.name }))} />
+        <span className="text-sm text-zinc-600">
+          {done} of {texts.length} translated
+        </span>
+        <div className="h-1.5 min-w-24 flex-1 bg-zinc-100">
+          <div className="h-full bg-accent-600" style={{ width: `${texts.length ? (done / texts.length) * 100 : 0}%` }} />
+        </div>
+      </div>
+      <div className="max-h-[60vh] overflow-y-auto border border-zinc-200">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-10 bg-zinc-50 text-xs text-zinc-500">
+            <tr>
+              <th className="w-1/2 px-3 py-2 text-start font-medium">{source}</th>
+              <th className="px-3 py-2 text-start font-medium">{LOCALES.find((l) => l.code === lang)?.nativeName}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {texts.map(([key, text]) => (
+              <tr key={key} className="border-t border-zinc-100 align-top">
+                <td className="px-3 py-2">
+                  <div>{text}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-zinc-400" dir="ltr">
+                    {key}
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  {text.length > 80 ? (
+                    <Textarea aria-label={`${key} in ${lang}`} lang={lang} value={tr[key] ?? ''} placeholder={text} onChange={(e) => setText(key, e.target.value)} className="min-h-16" />
+                  ) : (
+                    <Input aria-label={`${key} in ${lang}`} lang={lang} value={tr[key] ?? ''} placeholder={text} onChange={(e) => setText(key, e.target.value)} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

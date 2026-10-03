@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
+  type DatasetDto,
   AGGREGATIONS,
   WIDGET_TYPES,
   applyParams,
@@ -10,14 +11,14 @@ import {
   type Widget,
   type WidgetInput,
 } from '@grids/schema';
-import { Button, CopyField, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { ArrowDown, ArrowUp, BarChart3, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Button, CopyField, Dialog, Empty, ErrorNotice, Field, Input, Listbox, Loading, Select, SwitchField, Table, Td, Textarea, cx, relTime, useToast } from '@grids/ui';
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { useWorkspace } from '../../session';
-import { DashboardFilterBar } from '../../viz/DashboardFilters';
+import { DashboardFilterBar } from '@grids/viz';
 import { GroupSelect, LockBadge } from './permissions';
-import { WidgetView } from '../../viz/WidgetView';
+import { WidgetView } from '@grids/viz';
 import { useElementNames, useProject } from './context';
 
 export function DashboardsTab() {
@@ -34,7 +35,7 @@ export function DashboardsTab() {
   const [widgetDialog, setWidgetDialog] = useState<{ index: number | null } | null>(null);
   const [newOpen, setNewOpen] = useState(false);
 
-  const current = list.data?.find((d) => d.key === selected) ?? list.data?.[0] ?? null;
+  const current = list.data?.find((d) => d.key === selected) ?? null;
   const [params, setParams] = useState<DashboardParams>({});
   useEffect(() => setParams({}), [current?.key]);
   const areaType = current?.filters.areaType ?? null;
@@ -66,6 +67,58 @@ export function DashboardsTab() {
 
   if (list.isPending) return <Loading />;
   if (list.isError) return <ErrorNotice error={list.error} />;
+  if (!current && list.data.length)
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-zinc-600">Dashboards combine KPIs, charts, maps and tables over this project’s data.</p>
+          {can('manager') && (
+            <Button icon={Plus} onClick={() => setNewOpen(true)}>
+              New dashboard
+            </Button>
+          )}
+        </div>
+        <div className="border border-zinc-200 bg-snow">
+          <Table head={['Dashboard', 'Widgets', 'Shared', 'Updated', '']}>
+            {list.data.map((d) => (
+              <tr key={d.key} className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50" onClick={() => setSelected(d.key)}>
+                <Td>
+                  <button type="button" className="text-start font-medium text-accent-700 hover:underline" onClick={() => setSelected(d.key)}>
+                    {d.name}
+                  </button>
+                  {d.description && <div className="max-w-md truncate text-xs text-zinc-500">{d.description}</div>}
+                </Td>
+                <Td className="num">{d.widgets.length}</Td>
+                <Td>
+                  <span className="flex flex-wrap gap-1.5 text-xs">
+                    {d.isPublic ? <span className="border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-emerald-800">Public</span> : <span className="border border-zinc-300 px-1.5 py-0.5 text-zinc-600">Members</span>}
+                    {d.permissionGroup && <LockBadge group={d.permissionGroup} />}
+                  </span>
+                </Td>
+                <Td className="text-xs text-zinc-500">{relTime(d.updatedAt)}</Td>
+                <Td className="text-end">
+                  {can('manager') && (
+                    <button
+                      type="button"
+                      aria-label={`Edit ${d.name}`}
+                      className="p-1.5 text-zinc-500 hover:text-ink"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelected(d.key);
+                        setEditing(true);
+                      }}
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </Table>
+        </div>
+        {newOpen && <NewDashboard onClose={() => setNewOpen(false)} onCreated={(k) => setSelected(k)} />}
+      </div>
+    );
   if (!current)
     return (
       <div className="border border-zinc-200 bg-snow">
@@ -89,22 +142,21 @@ export function DashboardsTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Dashboards" className="flex flex-wrap gap-px border border-zinc-300 bg-zinc-300">
-          {list.data.map((d) => (
-            <button
-              key={d.key}
-              role="tab"
-              aria-selected={d.key === current.key}
-              onClick={() => {
-                setSelected(d.key);
-                setEditing(false);
-              }}
-              className={cx('px-3 py-1.5 text-sm', d.key === current.key ? 'bg-ink text-canvas' : 'bg-snow hover:bg-zinc-50')}
-            >
-              {d.name}
-              {d.permissionGroup && <Lock className="ms-1.5 inline size-3 opacity-60" aria-label="Restricted" />}
-            </button>
-          ))}
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSelected(null);
+              setEditing(false);
+            }}
+            className="flex shrink-0 items-center gap-1 text-sm text-accent-700 hover:underline"
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180" /> All dashboards
+          </button>
+          <h2 className="truncate text-lg font-semibold">
+            {current.name}
+            {current.permissionGroup && <Lock className="ms-1.5 inline size-3.5 opacity-60" aria-label="Restricted" />}
+          </h2>
         </div>
         {can('manager') && (
           <div className="flex flex-wrap gap-2">
@@ -243,13 +295,85 @@ const IconBtn = ({ label, onClick, icon: Icon }: { label: string; onClick(): voi
   </button>
 );
 
+/** Widget types that can chart a dataset. */
+const DATASET_TYPES: string[] = ['kpi', 'gauge', 'line', 'area', 'bar', 'pie'];
+
+/** Dataset query: a value column (or row count), grouped by a column or over time. */
+function DatasetFields({ q, setQ, type, datasets }: { q: Record<string, unknown>; setQ(p: Record<string, unknown>): void; type: string; datasets: DatasetDto[] }) {
+  const ds = datasets.find((d) => d.key === q.dataset) ?? null;
+  const cols = ds?.columns ?? [];
+  const colOptions = (none?: string) => [...(none ? [{ value: '', label: none }] : []), ...cols.map((c) => ({ value: c, label: c }))];
+  const timed = type === 'line' || type === 'area';
+  const grouped = type === 'bar' || type === 'pie';
+  return (
+    <>
+      <Field label="Dataset">
+        <Listbox label="Dataset" value={(q.dataset as string) || null} onChange={(v) => setQ({ dataset: v, value: undefined, groupBy: grouped ? '' : undefined, timeColumn: timed ? '' : undefined })} options={datasets.map((d) => ({ value: d.key, label: d.name, description: `${d.rowCount.toLocaleString()} rows` }))} />
+      </Field>
+      <Field label="Value">
+        <Listbox label="Value" value={(q.value as string) ?? ''} onChange={(v) => setQ({ value: v || undefined, aggregation: v ? (q.aggregation === 'count' ? 'sum' : q.aggregation) : 'count' })} options={colOptions('Number of rows')} />
+      </Field>
+      {q.value ? (
+        <Field label="Aggregation">
+          <Listbox
+            label="Aggregation"
+            value={(q.aggregation as string) ?? 'sum'}
+            onChange={(v) => setQ({ aggregation: v })}
+            options={['sum', 'avg', 'min', 'max', 'count', 'distinct', 'last'].map((a) => ({ value: a, label: a === 'distinct' ? 'distinct values' : a === 'avg' ? 'average' : a }))}
+          />
+        </Field>
+      ) : (
+        <div />
+      )}
+      {grouped && (
+        <Field label="Group by">
+          <Listbox label="Group by" value={(q.groupBy as string) ?? ''} onChange={(v) => setQ({ groupBy: v || undefined })} options={colOptions()} placeholder="Choose a column" />
+        </Field>
+      )}
+      {timed && (
+        <>
+          <Field label="Date column">
+            <Listbox label="Date column" value={(q.timeColumn as string) ?? ''} onChange={(v) => setQ({ timeColumn: v || undefined })} options={colOptions()} placeholder="Choose a column" />
+          </Field>
+          <Field label="Interval">
+            <Listbox label="Interval" value={(q.interval as string) ?? 'day'} onChange={(v) => setQ({ interval: v })} options={['hour', 'day', 'week', 'month', 'year'].map((i) => ({ value: i, label: i }))} />
+          </Field>
+        </>
+      )}
+      {(grouped || timed) && (
+        <Field label="Show at most">
+          <Input type="number" min={1} max={500} value={(q.limit as number) ?? 20} onChange={(e) => setQ({ limit: Number(e.target.value) })} />
+        </Field>
+      )}
+      <Field label="Only rows where" hint="Optional filter: column = value">
+        <div className="flex gap-2">
+          <Listbox
+            label="Filter column"
+            value={((q.filter as { column?: string } | undefined)?.column as string) ?? ''}
+            onChange={(v) => setQ({ filter: v ? { column: v, equals: (q.filter as { equals?: string } | undefined)?.equals ?? '' } : undefined })}
+            options={colOptions('No filter')}
+            className="flex-1"
+          />
+          {!!(q.filter as { column?: string } | undefined)?.column && (
+            <Input aria-label="Filter value" value={String((q.filter as { equals?: string }).equals ?? '')} onChange={(e) => setQ({ filter: { ...(q.filter as object), equals: e.target.value } })} className="w-28" />
+          )}
+        </div>
+      </Field>
+    </>
+  );
+}
+
 function NewDashboard({ onClose, onCreated }: { onClose(): void; onCreated(key: string): void }) {
   const { tenantId, project } = useProject();
   const qc = useQueryClient();
   const [name, setName] = useState('');
-  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, 'd_$1') || 'dashboard';
+  const [description, setDescription] = useState('');
+  const existing = qc.getQueryData<DashboardDto[]>(['dashboards', tenantId, project.key]) ?? [];
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, 'd_$1').slice(0, 55) || 'dashboard';
+  let key = base;
+  for (let n = 2; existing.some((d) => d.key === key); n++) key = `${base}_${n}`;
   const create = useMutation({
-    mutationFn: () => api.saveDashboard(tenantId, project.key, { key, name, widgets: [] }),
+    mutationFn: () => api.saveDashboard(tenantId, project.key, { key, name, description, widgets: [] }),
     onSuccess: (data) => {
       qc.setQueryData(['dashboards', tenantId, project.key], data);
       onCreated(key);
@@ -272,10 +396,15 @@ function NewDashboard({ onClose, onCreated }: { onClose(): void; onCreated(key: 
         </>
       }
     >
-      <ErrorNotice error={create.error} />
-      <Field label="Name" hint={`Key: ${key}`}>
-        <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-      </Field>
+      <div className="space-y-4">
+        <ErrorNotice error={create.error} />
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </Field>
+        <Field label="Description (optional)">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+      </div>
     </Dialog>
   );
 }
@@ -295,13 +424,14 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
   const kindFor = (type: string) =>
     ({ kpi: 'kpi', gauge: 'kpi', line: 'series', area: 'series', bar: q.kind === 'series' ? 'series' : 'breakdown', pie: 'breakdown', matrix: 'breakdown', map: 'geo', table: 'table', text: null })[type] ?? null;
   const changeType = (type: Widget['type']) => {
-    const kind = kindFor(type);
+    const kind = q.kind === 'dataset' && DATASET_TYPES.includes(type) ? 'dataset' : kindFor(type);
     const defaults: Record<string, QuerySpecInput> = {
       kpi: { kind: 'kpi', aggregation: 'sum', range: { lastHours: 24 * 30 } },
       series: { kind: 'series', elements: elements.data?.[0] ? [elements.data[0].key] : [], aggregation: 'sum', interval: 'day', range: { lastHours: 24 * 30 } },
       breakdown: { kind: 'breakdown', by: 'parent', aggregation: 'sum', range: { lastHours: 24 * 30 } },
       geo: { kind: 'geo', entityType: types.data?.find((t) => t.geometry !== 'none')?.key },
       table: { kind: 'table', source: 'entities', limit: 50 },
+      dataset: q as QuerySpecInput,
     };
     setW({ ...w, type, query: kind ? (q.kind === kind ? (q as QuerySpecInput) : defaults[kind]) : undefined, w: type === 'kpi' ? 3 : type === 'gauge' ? 4 : type === 'map' || type === 'table' || type === 'matrix' ? 12 : 6, h: type === 'kpi' ? 1 : type === 'gauge' ? 2 : 3 });
   };
@@ -427,7 +557,44 @@ function WidgetEditor({ initial, onClose, onSave }: { initial: Widget | null; on
             <Input type="number" min={0} max={6} value={w.options?.decimals ?? ''} onChange={(e) => setO({ decimals: e.target.value === '' ? undefined : Number(e.target.value) })} />
           </Field>
         </div>
+        {DATASET_TYPES.includes(w.type) && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4">
+            <span className="text-xs font-medium tracking-wide text-zinc-600">Data from</span>
+            <div role="radiogroup" aria-label="Data from" className="flex border border-zinc-300">
+              {(
+                [
+                  ['model', 'Indicators & entities'],
+                  ['dataset', 'A dataset'],
+                ] as const
+              ).map(([v, l]) => {
+                const on = (q.kind === 'dataset') === (v === 'dataset');
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => {
+                      if (on) return;
+                      if (v === 'dataset')
+                        setW({ ...w, query: { kind: 'dataset', dataset: datasets.data?.[0]?.key ?? '', aggregation: 'count', ...(w.type === 'line' || w.type === 'area' ? { timeColumn: '' } : w.type === 'kpi' || w.type === 'gauge' ? {} : { groupBy: '' }) } as QuerySpecInput });
+                      else {
+                        setW({ ...w, query: undefined });
+                        setTimeout(() => changeType(w.type));
+                      }
+                    }}
+                    className={cx('px-3 py-1.5 text-sm', on ? 'bg-ink text-canvas' : 'bg-snow hover:bg-zinc-50')}
+                  >
+                    {l}
+                  </button>
+                );
+              })}
+            </div>
+            {q.kind === 'dataset' && !datasets.data?.length && <span className="text-xs text-amber-700">No datasets yet: create one under Data › Datasets.</span>}
+          </div>
+        )}
         <div className="grid gap-4 border-t border-zinc-200 pt-4 sm:grid-cols-3">
+          {q.kind === 'dataset' && <DatasetFields q={q} setQ={setQ} type={w.type} datasets={datasets.data ?? []} />}
           {w.type === 'text' && (
             <Field label="Text" className="sm:col-span-3">
               <Textarea value={w.text ?? ''} onChange={(e) => setW({ ...w, text: e.target.value })} />

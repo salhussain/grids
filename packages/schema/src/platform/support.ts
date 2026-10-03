@@ -30,6 +30,9 @@ export const TicketSummary = z.object({
   messageCount: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** organisation: handled by the organisation's admins · platform: the platform team. */
+  audience: z.enum(['organisation', 'platform']),
+  escalatedAt: z.string().nullable(),
 });
 export type TicketSummary = z.infer<typeof TicketSummary>;
 
@@ -50,6 +53,10 @@ export const CreateTicketInput = z.object({
   category: TicketCategory.default('question'),
   priority: TicketPriority.default('normal'),
   body: z.string().trim().min(1).max(20000),
+  /** Raise it within the organisation, or straight to the platform team. */
+  audience: z.enum(['organisation', 'platform']).default('platform'),
+  /** Page the person was on (support bubble), for context. */
+  page: z.string().max(500).optional(),
 });
 export type CreateTicketInput = z.input<typeof CreateTicketInput>;
 
@@ -70,7 +77,11 @@ export const UpdateTicketInput = z.object({
 });
 export type UpdateTicketInput = z.infer<typeof UpdateTicketInput>;
 
+export const OrgTicketUpdate = z.object({ status: TicketStatus });
+export type OrgTicketUpdate = z.infer<typeof OrgTicketUpdate>;
+
 export const TicketListQuery = PageQuery.extend({
+  audience: z.enum(['organisation', 'platform']).optional(),
   status: z.enum(['open', 'pending', 'resolved', 'closed', 'active']).optional(),
   priority: TicketPriority.optional(),
   tenantId: z.uuid().optional(),

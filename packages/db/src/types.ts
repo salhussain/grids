@@ -203,6 +203,13 @@ export interface PlatformDB {
     created_at: CreatedAt;
     updated_at: Timestamp;
     resolved_at: Date | null;
+    audience: Generated<'organisation' | 'platform'>;
+    escalated_at: Date | null;
+  };
+  platform_setting: {
+    key: string;
+    value: Json<Record<string, unknown>>;
+    updated_at: Timestamp;
   };
   support_message: {
     id: string;
@@ -322,6 +329,9 @@ export interface CellDB {
     created_at: CreatedAt;
     updated_at: Timestamp;
     archived_at: Date | null;
+    status: Generated<'draft' | 'live'>;
+    logo: string | null;
+    cover_image: string | null;
   };
   project_member: {
     project_id: string;
@@ -509,6 +519,16 @@ export interface CellDB {
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;
+    group_id: string | null;
+  };
+  map_overlay_group: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    parent_id: string | null;
+    name: string;
+    sort: Generated<number>;
+    created_at: CreatedAt;
   };
   project_file: {
     id: string;
@@ -559,6 +579,7 @@ export interface CellDB {
   form_group: {
     id: string;
     tenant_id: string;
+    project_id: string | null;
     parent_id: string | null;
     name: string;
     icon: Generated<string>;

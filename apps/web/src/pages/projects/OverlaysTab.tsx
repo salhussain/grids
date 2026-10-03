@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { MapOverlayInput} from '@grids/schema';
-import { AGGREGATIONS, OVERLAY_DISPLAYS, OVERLAY_PALETTES, type MapOverlayDto, type OverlayDisplay } from '@grids/schema';
-import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
+import { AGGREGATIONS, OVERLAY_DISPLAYS, OVERLAY_PALETTES, type MapOverlayDto, type OverlayDisplay, type OverlayGroupDto } from '@grids/schema';
+import { Listbox, Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
 import { Box, CircleDot, Flame, Globe, Layers, Map as MapIcon, Pencil, Plus, SquareStack } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { z } from 'zod';
 import { api } from '../../api';
-import { paletteSwatch } from '../../explorer/colors';
+import { paletteSwatch } from '@grids/viz';
 import { useProject } from './context';
+import { GroupTree } from './GroupTree';
 import { GroupSelect, LockBadge } from './permissions';
 
 const WINDOWS: [number | null, string][] = [
@@ -32,6 +33,12 @@ export function OverlaysTab() {
   const { tenantId, project, can, base } = useProject();
   const list = useQuery({ queryKey: ['overlays', tenantId, project.key], queryFn: () => api.overlays(tenantId, project.key) });
   const [editing, setEditing] = useState<MapOverlayDto | 'new' | null>(null);
+  const qc = useQueryClient();
+  const groupList = useQuery({ queryKey: ['overlay-groups', tenantId, project.key], queryFn: () => api.overlayGroups(tenantId, project.key) });
+  const setGroups = (d: unknown) => {
+    qc.setQueryData(['overlay-groups', tenantId, project.key], d);
+    void qc.invalidateQueries({ queryKey: ['overlays', tenantId, project.key] });
+  };
   const groups = useMemo(() => {
     const m = new Map<string, MapOverlayDto[]>();
     for (const o of list.data ?? []) m.set(o.group, [...(m.get(o.group) ?? []), o]);
@@ -47,7 +54,7 @@ export function OverlaysTab() {
           Overlays colour the places on the explorer map by an indicator. Each place’s value rolls up everything inside it, so the same overlay works at every level.
         </p>
         <div className="flex gap-2">
-          <Link to={base} className="inline-flex h-9 items-center gap-2 border border-zinc-300 bg-snow px-3 text-sm hover:bg-zinc-50">
+          <Link to={`${base}/explore`} className="inline-flex h-9 items-center gap-2 border border-zinc-300 bg-snow px-3 text-sm hover:bg-zinc-50">
             <MapIcon className="size-4" /> Open explorer
           </Link>
           {can('manager') && (
@@ -103,19 +110,29 @@ export function OverlaysTab() {
           </section>
         ))
       )}
-      {editing && <OverlayEditor overlay={editing === 'new' ? null : editing} groups={groups.map(([g]) => g)} onClose={() => setEditing(null)} />}
+      <GroupTree
+        title="Overlay groups"
+        description="Levels in the explorer’s overlay picker, e.g. Health › Malaria."
+        noun="overlay"
+        canEdit={can('manager')}
+        error={groupList.error}
+        groups={(groupList.data ?? []).map((g) => ({ id: g.id, parentId: g.parentId, name: g.name, count: g.overlayCount }))}
+        onSave={async (input, id) => setGroups(await api.saveOverlayGroup(tenantId, project.key, input, id))}
+        onDelete={async (id) => setGroups(await api.deleteOverlayGroup(tenantId, project.key, id))}
+      />
+      {editing && <OverlayEditor overlay={editing === 'new' ? null : editing} groupOptions={groupList.data ?? []} onClose={() => setEditing(null)} />}
     </div>
   );
 }
 
-function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | null; groups: string[]; onClose(): void }) {
+function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlayDto | null; groupOptions: OverlayGroupDto[]; onClose(): void }) {
   const { tenantId, project } = useProject();
   const qc = useQueryClient();
   const toast = useToast();
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
   const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
   const [f, setF] = useState<z.input<typeof MapOverlayInput>>(
-    overlay ?? { key: '', name: '', group: groups[0] ?? 'General', element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', display: 'shade', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
+    overlay ?? { key: '', name: '', group: 'General', groupId: null, element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', display: 'shade', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
   );
   const [breaks, setBreaks] = useState((overlay?.thresholds ?? []).join(', '));
   const parsedBreaks = breaks.trim() ? breaks.split(/[,\s]+/).filter(Boolean).map(Number) : [];
@@ -164,14 +181,14 @@ function OverlayEditor({ overlay, groups, onClose }: { overlay: MapOverlayDto | 
           <Field label="Name" className="sm:col-span-2">
             <Input value={f.name} onChange={(e) => set({ name: e.target.value, key: overlay ? f.key : e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, 'o_$1') })} />
           </Field>
-          <Field label="Group" hint="Overlays are listed under their group">
-            <Input value={f.group} list="overlay-groups" onChange={(e) => set({ group: e.target.value })} />
+          <Field label="Group" hint="Set up groups and levels below the overlay list">
+            <Listbox
+              label="Group"
+              value={f.groupId ?? 'none'}
+              onChange={(v) => set(v === 'none' ? { groupId: null, group: 'General' } : { groupId: v, group: groupOptions.find((g) => g.id === v)?.path ?? 'General' })}
+              options={[{ value: 'none', label: 'General (no group)' }, ...groupOptions.map((g) => ({ value: g.id, label: g.path }))]}
+            />
           </Field>
-          <datalist id="overlay-groups">
-            {groups.map((g) => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
           <Field label="Data element">
             <Select value={f.element} onChange={(e) => set({ element: e.target.value })}>
               <option value="">Choose…</option>

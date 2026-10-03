@@ -1,5 +1,7 @@
 import type { z } from 'zod';
 import type {
+  PlatformSettingsDto,
+  PlatformSettingsInput,
   AuditPage,
   BillingOverview,
   CreatedInvitation,
@@ -41,7 +43,11 @@ const pt = (id: string) => `/platform/tenants/${id}`;
 
 export const api = {
   me: () => request<MeDto>('GET', '/me'),
-  setPreferences: (input: { colorMode?: 'light' | 'dark' | 'system' }) =>
+  platform: () => request<PlatformSettingsDto>('GET', '/public/platform'),
+  platformSettings: () => request<PlatformSettingsDto>('GET', '/platform/settings'),
+  savePlatformSettings: (input: PlatformSettingsInput) =>
+    request<PlatformSettingsDto>('PUT', '/platform/settings', input),
+  setPreferences: (input: { colorMode?: 'light' | 'dark' | 'system'; locale?: string | null }) =>
     request<MeDto>('PUT', '/me/preferences', input),
   overview: () => request<PlatformOverview>('GET', '/platform/overview'),
   staff: () => request<StaffDto[]>('GET', '/platform/staff'),

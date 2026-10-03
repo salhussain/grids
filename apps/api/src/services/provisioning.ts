@@ -9,7 +9,11 @@ import { ensureSystemRoles } from './policy.js';
  * Idempotent: every step checks its own state, so it can be resumed after a failure.
  */
 export class Provisioner {
-  constructor(private readonly ctx: ServiceContext) {}
+  constructor(
+    private readonly ctx: ServiceContext,
+    /** Languages a new organisation starts with (platform settings). */
+    private readonly orgDefaults: () => Promise<object> = async () => ({}),
+  ) {}
 
   async provision(actorId: string | null, tenantId: string): Promise<void> {
     const { db } = this.ctx;
@@ -28,10 +32,11 @@ export class Provisioner {
       .execute();
 
     const cellDb = await this.ctx.cells.forTenant(tenantId);
+    const defaults = await this.orgDefaults();
     await withTenant(cellDb, tenantId, (tx) =>
       tx
         .insertInto('tenant_profile')
-        .values({ tenant_id: tenantId, name: t.name })
+        .values({ tenant_id: tenantId, name: t.name, localization: JSON.stringify(defaults) })
         .onConflict((oc) => oc.column('tenant_id').doNothing())
         .execute(),
     );

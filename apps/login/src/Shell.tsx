@@ -225,10 +225,13 @@ function ThemeToggle() {
 }
 
 /** Frame shared by every page of the login app: one card centred over the grid. */
-export function Shell({ org, children }: { org: Branding | null; children: ReactNode }) {
+export function Shell({ org: orgBranding, children }: { org: Branding | null; children: ReactNode }) {
   const { locale, t } = useI18n();
-  const name = org ? org.appName || org.name : 'Grids';
-  useEffect(() => applyBrand(org?.primaryColor), [org?.primaryColor]);
+  const platform = usePlatformBranding(!orgBranding);
+  // Without an organisation, the platform's own branding (console › Platform settings).
+  const org = orgBranding;
+  const name = org ? org.appName || org.name : (platform?.appName ?? 'Grids');
+  useEffect(() => applyBrand(org?.primaryColor ?? platform?.primaryColor), [org?.primaryColor, platform?.primaryColor]);
   useEffect(() => {
     document.title = `${t('auth.signIn.title')} · ${name}`;
   }, [name, t]);
@@ -242,7 +245,7 @@ export function Shell({ org, children }: { org: Branding | null; children: React
       <main className="relative flex flex-1 items-center justify-center px-4 pt-2 pb-8">
         <div className="w-full max-w-[420px] border border-zinc-200 bg-snow px-[22px] pt-8 pb-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.18)] sm:px-9 sm:pt-10 sm:pb-9">
           <div className="mb-8 flex items-center gap-2.5">
-            <OrgMark org={org} className="size-[30px]" />
+            {org || !platform?.logo ? <OrgMark org={org} className="size-[30px]" /> : <img src={platform.logo} alt="" className="size-[30px] object-contain" />}
             <span className="truncate font-semibold tracking-tight text-ink">{name}</span>
           </div>
           {children}
@@ -250,7 +253,7 @@ export function Shell({ org, children }: { org: Branding | null; children: React
       </main>
       <footer className="relative flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 p-4 text-xs text-zinc-500">
         <span>
-          © {new Date().getFullYear()} {org?.name ?? 'Grids'}
+          © {new Date().getFullYear()} {org?.name ?? platform?.appName ?? 'Grids'}
         </span>
         {org && (
           <span className="flex items-center gap-1.5">
@@ -271,4 +274,28 @@ export function Shell({ org, children }: { org: Branding | null; children: React
       </footer>
     </div>
   );
+}
+
+interface PlatformBranding {
+  appName: string;
+  primaryColor: string;
+  logo: string | null;
+  welcomeMessage: string;
+}
+
+/** The platform's look, used when the page isn't for a specific organisation. */
+function usePlatformBranding(enabled: boolean) {
+  const [b, setB] = useState<PlatformBranding | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    fetch('/ui/api/platform', { headers: { 'x-grids-request': '1' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { branding: PlatformBranding | null } | null) => live && setB(d?.branding ?? null))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return b;
 }

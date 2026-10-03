@@ -29,7 +29,7 @@ const services = createServices(
 
 const app = await buildApp({
   logger: true,
-  corsOrigins: [config.CONSOLE_URL, config.WEB_URL],
+  corsOrigins: [config.CONSOLE_URL, config.WEB_URL, config.PORTAL_URL],
   checks: {
     platform_db: async () => void (await sql`select 1`.execute(platformDb)),
     identity_provider: async () => {

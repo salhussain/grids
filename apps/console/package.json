@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@grids/i18n": "workspace:^",
     "@grids/schema": "workspace:^",
     "@grids/ui": "workspace:^",
     "@tanstack/react-query": "^5.104.0",

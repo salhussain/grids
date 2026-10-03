@@ -2,11 +2,12 @@ import { Link } from '@tanstack/react-router';
 import { LayoutGrid, LogOut } from 'lucide-react';
 import { useMemo } from 'react';
 import { memberSource } from '../../explorer/source';
-import { Explorer } from '../../explorer/Explorer';
+import { Explorer } from '@grids/viz';
 import { useProjectEvents } from '../../live';
 import { BrandMark } from '../../router';
 import { useMe, useWorkspace } from '../../session';
-import { LiveIndicator } from '../../viz/Freshness';
+import { LiveIndicator } from '@grids/viz';
+import { HeaderControls } from '../../prefs';
 import { useProject } from './context';
 
 /** A project's default view for members: the map-first explorer. */
@@ -38,7 +39,8 @@ export function ProjectExplorer() {
       }
       actions={
         <div className="flex items-center gap-1">
-          <Link to={`${base}/dashboards`} className="flex h-9 items-center gap-2 rounded-lg bg-ink px-3 text-sm font-medium text-canvas hover:opacity-90">
+          <HeaderControls me={me} localization={ws.localization} className="me-1 hidden md:flex" />
+          <Link to={base} className="flex h-9 items-center gap-2 rounded-lg bg-ink px-3 text-sm font-medium text-canvas hover:opacity-90">
             <LayoutGrid className="size-4" /> Studio
           </Link>
           <Link to="/o/$tenantId" params={{ tenantId }} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm text-zinc-600 hover:bg-zinc-100 hover:text-ink lg:flex" title={`Back to ${ws.tenant.name}`}>

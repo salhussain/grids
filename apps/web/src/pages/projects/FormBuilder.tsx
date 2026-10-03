@@ -32,12 +32,13 @@ import {
   Type,
   Workflow,
   type LucideIcon,
+  Languages,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api';
 import { useProject } from './context';
 import { useTypes } from './EntitiesTab';
-import { AccessPanel, DesignPanel, PreviewDialog } from './FormBuilderPanels';
+import { AccessPanel, DesignPanel, PreviewDialog, TranslationsPanel } from './FormBuilderPanels';
 
 export const TYPE_INFO: Record<QuestionType, { label: string; icon: LucideIcon }> = {
   text: { label: 'Short text', icon: Type },
@@ -56,10 +57,11 @@ export const TYPE_INFO: Record<QuestionType, { label: string; icon: LucideIcon }
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, 'q_$1').slice(0, 60) || 'question';
 
 type Sel = { kind: 'q'; s: number; q: number } | { kind: 's'; s: number } | null;
-type Tab = 'build' | 'design' | 'access';
+type Tab = 'build' | 'design' | 'translate' | 'access';
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'build', label: 'Questions', icon: Shapes },
   { id: 'design', label: 'Layout & design', icon: Palette },
+  { id: 'translate', label: 'Translations', icon: Languages },
   { id: 'access', label: 'Access & workflow', icon: Workflow },
 ];
 
@@ -195,6 +197,7 @@ export function FormBuilder() {
       )}
       {tab === 'build' && <BuildTab def={draft.def} setDef={setDef} sel={sel} setSel={setSel} subjectTypeKey={form.subjectType?.key ?? null} />}
       {tab === 'design' && <DesignPanel draft={draft} set={set} />}
+      {tab === 'translate' && <TranslationsPanel draft={draft} set={set} />}
       {tab === 'access' && <AccessPanel draft={draft} set={set} />}
       {preview && <PreviewDialog def={draft.def} onClose={() => setPreview(false)} />}
     </div>

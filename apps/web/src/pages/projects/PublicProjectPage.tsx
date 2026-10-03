@@ -3,11 +3,11 @@ import { useParams } from '@tanstack/react-router';
 import { ErrorNotice, Spinner } from '@grids/ui';
 import { useEffect, useMemo } from 'react';
 import { api } from '../../api';
-import { Explorer } from '../../explorer/Explorer';
+import { Explorer } from '@grids/viz';
 import { publicSource } from '../../explorer/source';
 import { usePublicEvents } from '../../live';
 import { applyTheme } from '../../theme';
-import { LiveIndicator } from '../../viz/Freshness';
+import { LiveIndicator } from '@grids/viz';
 
 /** Anonymous, read-only explorer of a public project (spec §13): public overlays and dashboards only. */
 export function PublicProjectPage() {

@@ -171,7 +171,16 @@ export class FormService {
         }
         await this.checkBindings(tx, a.project.id, input.definition, input.subjectType);
         await this.checkSettings(tx, a.project.id, input.definition, input.settings);
-        if (input.groupId && !(await tx.selectFrom('form_group').select('id').where('id', '=', input.groupId).executeTakeFirst()))
+        // The group must be one of this project's (or an older organisation-wide one).
+        if (
+          input.groupId &&
+          !(await tx
+            .selectFrom('form_group')
+            .select('id')
+            .where('id', '=', input.groupId)
+            .where((eb) => eb.or([eb('project_id', '=', a.project.id), eb('project_id', 'is', null)]))
+            .executeTakeFirst())
+        )
           throw badRequest('Unknown form group');
         const values = {
           key: input.key,
@@ -649,7 +658,7 @@ export class FormService {
       const def = FormDefinition.parse(r.definition);
       return [
         {
-          project: { key: r.project_key, name: r.project_name },
+          project: { id: r.project_id, key: r.project_key, name: r.project_name },
           key: r.key,
           name: r.name,
           description: r.description,
@@ -685,11 +694,12 @@ export class FormService {
 
   // ---------- form groups (organisation-wide menu) ----------
 
-  private async groupRows(tx: Tx): Promise<FormGroupDto[]> {
-    const rows = await tx
+  private async groupRows(tx: Tx, projectId?: string): Promise<FormGroupDto[]> {
+    let q = tx
       .selectFrom('form_group as g')
       .select([
         'g.id',
+        'g.project_id',
         'g.parent_id',
         'g.name',
         'g.icon',
@@ -697,9 +707,10 @@ export class FormService {
         (eb) => eb.selectFrom('form as f').select((e2) => e2.fn.countAll<string>().as('n')).whereRef('f.group_id', '=', 'g.id').where('f.archived_at', 'is', null).as('n'),
       ])
       .orderBy('g.sort')
-      .orderBy('g.name')
-      .execute();
-    return rows.map((g) => ({ id: g.id, parentId: g.parent_id, name: g.name, icon: g.icon, sort: g.sort, formCount: Number(g.n ?? 0) }));
+      .orderBy('g.name');
+    if (projectId) q = q.where('g.project_id', '=', projectId);
+    const rows = await q.execute();
+    return rows.map((g) => ({ id: g.id, projectId: g.project_id, parentId: g.parent_id, name: g.name, icon: g.icon, sort: g.sort, formCount: Number(g.n ?? 0) }));
   }
 
   async groups(actor: Actor, tenantId: string): Promise<FormGroupDto[]> {
@@ -734,6 +745,42 @@ export class FormService {
     });
     await audit(this.ctx, actor.id, tenantId, 'form_group.saved', { id: id ?? null, name: input.name });
     return this.groups(actor, tenantId);
+  }
+
+  // ---------- form groups within a project ----------
+
+  async projectGroups(actor: Actor, tenantId: string, project: string): Promise<FormGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project);
+    return this.projects.cellTx(tenantId, (tx) => this.groupRows(tx, a.project.id));
+  }
+
+  async saveProjectGroup(actor: Actor, tenantId: string, project: string, input: z.output<typeof FormGroupInput>, id?: string): Promise<FormGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      const mine = await this.groupRows(tx, a.project.id);
+      if (id && !mine.some((g) => g.id === id)) throw notFound('Form group');
+      if (input.parentId) {
+        if (!mine.some((g) => g.id === input.parentId)) throw badRequest('Unknown parent group');
+        for (let p: string | null = input.parentId; p; p = mine.find((g) => g.id === p)?.parentId ?? null)
+          if (p === id) throw badRequest('A group cannot be placed inside itself');
+      }
+      const values = { name: input.name, parent_id: input.parentId, icon: input.icon, sort: input.sort };
+      if (id) await tx.updateTable('form_group').set(values).where('id', '=', id).execute();
+      else await tx.insertInto('form_group').values({ id: uuidv7(), tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
+    });
+    await audit(this.ctx, actor.id, tenantId, 'form_group.saved', { project: a.project.key, id: id ?? null, name: input.name });
+    return this.projectGroups(actor, tenantId, project);
+  }
+
+  async deleteProjectGroup(actor: Actor, tenantId: string, project: string, id: string): Promise<FormGroupDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.projects.cellTx(tenantId, async (tx) => {
+      if (await tx.selectFrom('form_group').select('id').where('parent_id', '=', id).executeTakeFirst())
+        throw conflict('Group has sub-groups', 'Move or delete its sub-groups first.');
+      const r = await tx.deleteFrom('form_group').where('id', '=', id).where('project_id', '=', a.project.id).executeTakeFirst();
+      if (!r.numDeletedRows) throw notFound('Form group');
+    });
+    return this.projectGroups(actor, tenantId, project);
   }
 
   async deleteGroup(actor: Actor, tenantId: string, id: string): Promise<FormGroupDto[]> {

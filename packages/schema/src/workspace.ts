@@ -63,6 +63,7 @@ export const WORKSPACE_MODULES = [
     permissions: [
       ['support.view', 'View the organisation’s tickets', false],
       ['support.create', 'Raise tickets and reply', false],
+      ['support.manage', 'Handle internal tickets and escalate them to the platform', false],
     ],
   },
   {
@@ -284,3 +285,18 @@ export const WorkspaceDto = z.object({
 export type WorkspaceDto = z.infer<typeof WorkspaceDto>;
 
 export const ActivityQuery = PageQuery;
+
+/** Organisation-wide activity for the home dashboard. */
+export const OrgInsightsDto = z.object({
+  /** Last 30 days, oldest first. */
+  submissionsByDay: z.array(z.object({ day: z.string(), count: z.number().int() })),
+  submissions30: z.number().int(),
+  submissionsPrev30: z.number().int(),
+  toReview: z.number().int(),
+  entities: z.number().int(),
+  observations30: z.number().int(),
+  projects: z.object({ live: z.number().int(), draft: z.number().int(), stale: z.number().int() }),
+  members: z.object({ active: z.number().int(), suspended: z.number().int(), invited: z.number().int() }),
+  tickets: z.object({ internalOpen: z.number().int(), platformOpen: z.number().int() }),
+});
+export type OrgInsightsDto = z.infer<typeof OrgInsightsDto>;

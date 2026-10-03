@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { InvitationPreview, MeDto, PreferencesInput, PublicBranding, ResolvedHost } from '@grids/schema';
+import { PlatformSettingsDto, InvitationPreview, MeDto, PreferencesInput, PublicBranding, ResolvedHost } from '@grids/schema';
 import { actorOf, authenticate, type AuthDeps } from '../auth/plugin.js';
 
 /** Signed-in user, invitation landing, and edge routing endpoints. */
@@ -32,6 +32,12 @@ export const publicRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) =
       return services.workspace.publicBranding(req.params.tenantId);
     },
   );
+
+  // Platform look and languages: the console before sign-in, the sign-in page and the public portal.
+  app.get('/public/platform', { schema: { response: { 200: PlatformSettingsDto } } }, async (_req, reply) => {
+    reply.header('cache-control', 'public, max-age=60');
+    return services.settings.get();
+  });
 
   const TokenParams = z.object({ token: z.string().min(20).max(100) });
   app.get(

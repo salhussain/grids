@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AuthError, type Accounts } from '../accounts.js';
 import type { IdentityConfig } from '../config.js';
 import { originOf } from '../config.js';
+import { platformLoader } from '../branding.js';
 import type { GridsProvider } from '../provider.js';
 
 const Forgot = z.object({ email: z.email() });
@@ -15,6 +16,12 @@ export function selfServiceRoutes(app: FastifyInstance, deps: { provider: GridsP
   const { provider, accounts, config } = deps;
   const origin = originOf(config.IDENTITY_ISSUER);
   const appUrl = async (accountId: string) => ((await accounts.homeApp(accountId)) === 'web' ? config.WEB_URL : config.CONSOLE_URL);
+
+  const platform = platformLoader(config.API_URL);
+  app.get('/ui/api/platform', async (_req, reply) => {
+    reply.header('cache-control', 'public, max-age=60');
+    return { branding: await platform() };
+  });
 
   app.post('/ui/api/password/forgot', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req) => {
     const { email } = Forgot.parse(req.body);

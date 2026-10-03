@@ -30,12 +30,12 @@ const SATELLITE: StyleSpecification = {
   version: 8,
   sources: {
     imagery: { type: 'raster', tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' },
-    places: { type: 'raster', tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
+    'esri-places': { type: 'raster', tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': OCEAN.dark } },
     { id: 'imagery', type: 'raster', source: 'imagery' },
-    { id: 'reference', type: 'raster', source: 'places', paint: { 'raster-opacity': 0.9 } },
+    { id: 'reference', type: 'raster', source: 'esri-places', paint: { 'raster-opacity': 0.9 } },
   ],
 };
 // Terrain for hillshade: AWS open elevation tiles (Terrarium encoding), no key.

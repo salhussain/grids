@@ -1,0 +1,35 @@
+{
+  "name": "@grids/viz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Charts, maps, dashboard widgets, freshness badges and the map-first explorer, shared by the workspace and the public portal.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./viz.css": "./src/viz.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "@tanstack/react-router": "*",
+    "react": "*",
+    "react-dom": "*"
+  },
+  "dependencies": {
+    "@grids/schema": "workspace:^",
+    "@grids/ui": "workspace:^",
+    "echarts": "^6",
+    "lucide-react": "^1.49.0",
+    "maplibre-gl": "^5"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.104.0",
+    "@tanstack/react-router": "^1.170.41",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

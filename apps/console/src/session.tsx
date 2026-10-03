@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { MeDto, StaffPermission } from '@grids/schema';
 import { applyColorMode, storedColorMode } from '@grids/ui';
 import { api } from './api';
+import { usePlatform, useT } from './i18n';
 import { currentUser, signIn, userManager } from './auth';
 import { Button, Spinner } from '@grids/ui';
 
@@ -123,33 +124,24 @@ export function Centered({ title, children }: { title: ReactNode; children: Reac
   );
 }
 
-export function Logo({
-  dark,
-  subtitle = 'Platform Console',
-}: {
-  dark?: boolean;
-  subtitle?: string;
-}) {
+export function Logo({ dark, subtitle }: { dark?: boolean; subtitle?: string }) {
+  const platform = usePlatform();
+  const t = useT();
+  const b = platform.data?.branding;
   return (
     <div className="flex items-center gap-3">
-      <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-        <rect width="32" height="32" className="fill-accent-600" />
-        <path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" />
-        <path d="M17 17h7v7h-7z" fill="white" fillOpacity=".45" />
-      </svg>
+      {b?.logo ? (
+        <img src={b.logo} alt="" className="size-8 shrink-0 bg-white object-contain p-0.5" />
+      ) : (
+        <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
+          <rect width="32" height="32" className="fill-accent-600" />
+          <path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" />
+          <path d="M17 17h7v7h-7z" fill="white" fillOpacity=".45" />
+        </svg>
+      )}
       <div className="leading-tight">
-        <div
-          className={
-            dark
-              ? 'text-sm font-semibold tracking-[0.18em] text-white'
-              : 'text-sm font-semibold tracking-[0.18em] text-ink'
-          }
-        >
-          GRIDS
-        </div>
-        <div className={dark ? 'text-[11px] text-zinc-400' : 'text-[11px] text-zinc-500'}>
-          {subtitle}
-        </div>
+        <div className={dark ? 'text-sm font-semibold tracking-[0.18em] text-white uppercase' : 'text-sm font-semibold tracking-[0.18em] text-ink uppercase'}>{b?.appName ?? 'Grids'}</div>
+        <div className={dark ? 'text-[11px] text-zinc-400' : 'text-[11px] text-zinc-500'}>{subtitle ?? t('console.shell.subtitle')}</div>
       </div>
     </div>
   );

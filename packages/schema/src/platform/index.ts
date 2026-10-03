@@ -7,3 +7,4 @@ export * from './support.js';
 export * from './logs.js';
 export * from './dashboard.js';
 export * from './staff.js';
+export * from './settings.js';

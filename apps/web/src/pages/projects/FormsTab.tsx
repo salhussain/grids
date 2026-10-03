@@ -10,6 +10,7 @@ import { useOutbox } from '../forms/outbox';
 import { SubmissionSheet } from '../forms/SubmissionSheet';
 import { STATUS_INFO, SubmissionStatusPill, fmtAnswer } from '../forms/status';
 import { useProject } from './context';
+import { GroupTree } from './GroupTree';
 import { useTypes } from './EntitiesTab';
 
 export { useOutbox };
@@ -24,6 +25,12 @@ export function FormsTab() {
   const [viewing, setViewing] = useState<FormDto | null>(null);
   const [sheet, setSheet] = useState<string | null>(null);
   const mine = outbox.items.filter((p) => p.tenantId === tenantId && p.project === project.key);
+  const qc = useQueryClient();
+  const groups = useQuery({ queryKey: ['form-groups', tenantId, project.key], queryFn: () => api.projectFormGroups(tenantId, project.key) });
+  const setGroups = (d: unknown) => {
+    qc.setQueryData(['form-groups', tenantId, project.key], d);
+    void qc.invalidateQueries({ queryKey: ['forms-menu', tenantId] });
+  };
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -114,6 +121,16 @@ export function FormsTab() {
           ))}
         </ul>
       )}
+      <GroupTree
+        title="Form groups"
+        description="How this project’s forms appear in the side menu: project › group › form. Choose a form’s group in its builder."
+        noun="form"
+        canEdit={can('manager')}
+        error={groups.error}
+        groups={(groups.data ?? []).map((g) => ({ id: g.id, parentId: g.parentId, name: g.name, count: g.formCount }))}
+        onSave={async (input, id) => setGroups(await api.saveProjectFormGroup(tenantId, project.key, { ...input, icon: 'folder', sort: 0 }, id))}
+        onDelete={async (id) => setGroups(await api.deleteProjectFormGroup(tenantId, project.key, id))}
+      />
       {creating && <NewForm onClose={() => setCreating(false)} />}
       {viewing && !sheet && <Submissions form={viewing} onClose={() => setViewing(null)} onOpen={setSheet} />}
       {sheet && <SubmissionSheet tenantId={tenantId} project={project.key} id={sheet} onClose={() => setSheet(null)} />}
@@ -179,6 +196,15 @@ function NewForm({ onClose }: { onClose(): void }) {
 }
 
 function Submissions({ form, onClose, onOpen }: { form: FormDto; onClose(): void; onOpen(id: string): void }) {
+  return (
+    <Dialog open wide onClose={onClose} title={`${form.name}: submissions`}>
+      <SubmissionsTable form={form} onOpen={onOpen} />
+    </Dialog>
+  );
+}
+
+/** A form's submissions with a status filter (when it has an approval workflow). */
+export function SubmissionsTable({ form, onOpen }: { form: FormDto; onOpen(id: string): void }) {
   const { tenantId, project } = useProject();
   const [status, setStatus] = useState<SubmissionStatus | ''>('');
   const [pg, setPg] = usePagination([status], 25);
@@ -191,7 +217,7 @@ function Submissions({ form, onClose, onOpen }: { form: FormDto; onClose(): void
   const cols = def.sections.flatMap((s) => s.questions).filter((q) => q.type !== 'note').slice(0, 5);
   const wf = form.settings.workflow.enabled;
   return (
-    <Dialog open wide onClose={onClose} title={`${form.name}: submissions`}>
+    <>
       <ErrorNotice error={subs.error} />
       {wf && (
         <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
@@ -234,7 +260,7 @@ function Submissions({ form, onClose, onOpen }: { form: FormDto; onClose(): void
         </Table>
       </div>
       {subs.data && <Pagination {...pg} total={subs.data.total} onChange={setPg} />}
-    </Dialog>
+    </>
   );
 }
 

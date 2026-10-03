@@ -21,9 +21,8 @@ import {
   UserCog,
   X,
   type LucideIcon,
-  Monitor,
-  Moon,
-  Sun,
+  Globe,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api';
@@ -40,7 +39,10 @@ import { TenantPage } from './pages/TenantPage';
 import { TenantsPage } from './pages/TenantsPage';
 import { TicketPage } from './pages/TicketPage';
 import { FullPageSpinner, Logo, RequireSession, useCan, useSession } from './session';
-import { applyColorMode, cx } from '@grids/ui';
+import { applyColorMode, cx, Listbox, ModeSwitch, type ColorMode } from '@grids/ui';
+import { LOCALES } from '@grids/i18n';
+import { I18nProvider, useI18n, usePlatform, usePlatformBranding, useT } from './i18n';
+import { SettingsPage } from './pages/SettingsPage';
 import type { StaffPermission } from '@grids/schema';
 import { StaffPage } from './pages/StaffPage';
 
@@ -56,7 +58,8 @@ interface NavItem {
     | '/support'
     | '/logs/emails'
     | '/logs/system'
-    | '/staff';
+    | '/staff'
+    | '/settings';
   label: string;
   icon: LucideIcon;
   match: (path: string) => boolean;
@@ -73,18 +76,18 @@ function useNav(): { section: string; items: NavItem[] }[] {
   });
   const groups: { section: string; items: NavItem[] }[] = [
     {
-      section: 'Platform',
+      section: 'console.nav.platform',
       items: [
         {
           to: '/',
-          label: 'Overview',
+          label: 'console.nav.overview',
           icon: LayoutDashboard,
           match: (p) => p === '/',
           permission: 'overview.view',
         },
         {
           to: '/tenants',
-          label: 'Organisations',
+          label: 'console.nav.organisations',
           icon: Building2,
           match: (p) => p.startsWith('/tenants'),
           permission: 'tenants.view',
@@ -92,18 +95,18 @@ function useNav(): { section: string; items: NavItem[] }[] {
       ],
     },
     {
-      section: 'Revenue',
+      section: 'console.nav.revenue',
       items: [
         {
           to: '/billing',
-          label: 'Billing',
+          label: 'console.nav.billing',
           icon: CreditCard,
           match: (p) => p.startsWith('/billing'),
           permission: 'billing.view',
         },
         {
           to: '/plans',
-          label: 'Plans & pricing',
+          label: 'console.nav.plans',
           icon: Tags,
           match: (p) => p.startsWith('/plans'),
           permission: 'plans.view',
@@ -111,11 +114,11 @@ function useNav(): { section: string; items: NavItem[] }[] {
       ],
     },
     {
-      section: 'Operations',
+      section: 'console.nav.operations',
       items: [
         {
           to: '/support',
-          label: 'Support',
+          label: 'console.nav.support',
           icon: LifeBuoy,
           match: (p) => p.startsWith('/support'),
           badge: overview.data?.openTickets,
@@ -123,14 +126,14 @@ function useNav(): { section: string; items: NavItem[] }[] {
         },
         {
           to: '/logs/emails',
-          label: 'Email log',
+          label: 'console.nav.emailLog',
           icon: Mail,
           match: (p) => p.startsWith('/logs/emails'),
           permission: 'logs.email',
         },
         {
           to: '/logs/system',
-          label: 'System log',
+          label: 'console.nav.systemLog',
           icon: ScrollText,
           match: (p) => p.startsWith('/logs/system'),
           permission: 'logs.system',
@@ -138,14 +141,21 @@ function useNav(): { section: string; items: NavItem[] }[] {
       ],
     },
     {
-      section: 'Administration',
+      section: 'console.nav.administration',
       items: [
         {
           to: '/staff',
-          label: 'Staff & roles',
+          label: 'console.nav.staff',
           icon: UserCog,
           match: (p) => p.startsWith('/staff'),
           permission: 'staff.view',
+        },
+        {
+          to: '/settings',
+          label: 'console.nav.settings',
+          icon: SlidersHorizontal,
+          match: (p) => p.startsWith('/settings'),
+          permission: 'settings.manage',
         },
       ],
     },
@@ -158,6 +168,7 @@ function useNav(): { section: string; items: NavItem[] }[] {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { me } = useSession();
+  const t = useT();
   return (
     <div className="chrome flex h-full flex-col bg-chrome bg-[radial-gradient(120%_60%_at_0%_0%,rgb(255_255_255/0.06),transparent)] text-zinc-300">
       <div className="flex h-14 items-center border-b border-white/10 px-5">
@@ -167,7 +178,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {useNav().map((group) => (
           <div key={group.section} className="mb-5">
             <div className="px-6 pb-2 text-[10px] font-semibold tracking-[0.16em] text-zinc-500 uppercase">
-              {group.section}
+              {t(group.section)}
             </div>
             {group.items.map((item) => {
               const active = item.match(path);
@@ -191,7 +202,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     )}
                     strokeWidth={1.75}
                   />
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">{t(item.label)}</span>
                   {!!item.badge && (
                     <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] font-medium text-white">
                       {item.badge}
@@ -212,19 +223,18 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <div className="truncate text-sm text-white">{me.displayName ?? me.email}</div>
             <div className="truncate text-xs text-zinc-500">{me.email}</div>
           </div>
-          <ColorModeButton />
           <a
             href={accountUrl()}
-            title="Account & security"
-            aria-label="Account & security"
+            title={t('console.shell.account')}
+            aria-label={t('console.shell.account')}
             className="p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <UserCog className="size-4" />
           </a>
           <button
             onClick={() => userManager.signoutRedirect()}
-            title="Sign out"
-            aria-label="Sign out"
+            title={t('console.shell.signOut')}
+            aria-label={t('console.shell.signOut')}
             className="p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
           >
             <LogOut className="size-4" />
@@ -235,31 +245,50 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Cycles light → dark → system and saves it as the person's preference. */
-function ColorModeButton() {
+/** Language and appearance, top right on every console page; saved as the person's preferences. */
+function HeaderControls({ className }: { className?: string }) {
   const { me } = useSession();
+  const t = useT();
+  const { locale } = useI18n();
+  const platform = usePlatform();
   const qc = useQueryClient();
   const save = useMutation({
     mutationFn: api.setPreferences,
-    onSuccess: (next) => {
-      qc.setQueryData(['me'], next);
-      applyColorMode(next.preferences.colorMode);
-    },
+    onSuccess: (next) => qc.setQueryData(['me'], next),
   });
-  const mode = me.preferences.colorMode;
-  const next = ({ light: 'dark', dark: 'system', system: 'light' } as const)[mode];
-  const Icon = { light: Sun, dark: Moon, system: Monitor }[mode];
-  const label = `Appearance: ${mode} (switch to ${next})`;
+  const [mode, setMode] = useState<ColorMode>(me.preferences.colorMode);
+  const langs = LOCALES.filter((l) => (platform.data?.localization.consoleLanguages ?? ['en']).includes(l.code));
   return (
-    <button
-      onClick={() => save.mutate({ colorMode: next })}
-      title={label}
-      aria-label={label}
-      className="p-1.5 text-zinc-500 hover:bg-white/10 hover:text-white"
-    >
-      <Icon className="size-4" />
-    </button>
+    <div className={cx('flex items-center gap-2', className)}>
+      {langs.length > 1 && (
+        <Listbox
+          compact
+          align="end"
+          label={t('console.shell.language')}
+          className="w-40"
+          value={locale as string}
+          onChange={(v) => save.mutate({ locale: v })}
+          options={langs.map((l) => ({ value: l.code as string, label: l.nativeName, text: l.nativeName, icon: Globe }))}
+        />
+      )}
+      <ModeSwitch
+        value={mode}
+        labels={{ light: t('common.light'), dark: t('common.dark'), system: t('common.system'), group: t('common.appearance') }}
+        onChange={(m) => {
+          setMode(m);
+          applyColorMode(m);
+          save.mutate({ colorMode: m });
+        }}
+      />
+    </div>
   );
+}
+
+/** Wraps the signed-in console in the person's language and the platform's look. */
+function ConsoleI18n({ children }: { children: React.ReactNode }) {
+  const { me } = useSession();
+  usePlatformBranding();
+  return <I18nProvider preferred={me.preferences.locale}>{children}</I18nProvider>;
 }
 
 /** Authenticated shell: fixed dark sidebar on desktop, slide-over on mobile. */
@@ -267,8 +296,9 @@ function ConsoleLayout() {
   const [open, setOpen] = useState(false);
   return (
     <RequireSession>
-      <div className="min-h-full lg:pl-64">
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
+      <ConsoleI18n>
+      <div className="min-h-full lg:ps-64">
+        <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 lg:block">
           <Sidebar />
         </aside>
         <header className="sticky top-0 z-20 chrome flex h-14 items-center justify-between bg-chrome px-4 lg:hidden">
@@ -280,24 +310,31 @@ function ConsoleLayout() {
         {open && (
           <div className="fixed inset-0 z-40 lg:hidden">
             <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-            <div className="absolute inset-y-0 left-0 w-72">
+            <div className="absolute inset-y-0 start-0 w-72">
               <Sidebar onNavigate={() => setOpen(false)} />
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close menu"
-                className="chrome absolute top-3 -right-11 bg-chrome p-2 text-white"
+                className="chrome absolute top-3 -end-11 bg-chrome p-2 text-white"
               >
                 <X className="size-5" />
               </button>
             </div>
           </div>
         )}
+        <div className="hidden justify-end border-b border-zinc-200 bg-snow/80 px-8 py-2.5 backdrop-blur lg:flex">
+          <HeaderControls />
+        </div>
         <main className="px-4 py-6 sm:px-8 sm:py-8">
+          <div className="mb-4 flex justify-end lg:hidden">
+            <HeaderControls />
+          </div>
           <div className="mx-auto max-w-[1280px]">
             <Outlet />
           </div>
         </main>
       </div>
+      </ConsoleI18n>
     </RequireSession>
   );
 }
@@ -306,6 +343,12 @@ const consoleRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'console',
   component: ConsoleLayout,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: '/settings',
+  component: SettingsPage,
 });
 
 export const tenantRoute = createRoute({
@@ -351,6 +394,7 @@ const parent = () => consoleRoute;
 const routeTree = rootRoute.addChildren([
   consoleRoute.addChildren([
     createRoute({ getParentRoute: parent, path: '/', component: OverviewPage }),
+    settingsRoute,
     createRoute({ getParentRoute: parent, path: '/tenants', component: TenantsPage }),
     createRoute({ getParentRoute: parent, path: '/tenants/new', component: NewTenantPage }),
     tenantRoute,
