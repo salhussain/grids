@@ -100,6 +100,34 @@ export async function claimNext(cell: Kysely<CellDB>, worker: string, leaseSecon
   return r ? { runId: r.run_id, tenantId: r.tenant_id } : null;
 }
 
+/** A run that was not started because the plan's allowance for the month is used up (retrying would not help). */
+class AllowanceError extends Error {}
+
+/** Which of the plan's monthly allowances for runs is used up, if any (the platform keeps the plan's limits in the cell). */
+async function allowanceUsedUp(tx: CellTx, now: Date, runId: string): Promise<string | null> {
+  const profile = await tx.selectFrom('tenant_profile').select('limits').executeTakeFirst();
+  const limits = (profile?.limits ?? null) as Record<string, number | null> | null;
+  if (!limits) return null;
+  const minutesLimit = limits['run_minutes_per_month'] ?? null;
+  const rowsLimit = limits['rows_ingested_per_month'] ?? null;
+  if (minutesLimit === null && rowsLimit === null) return null;
+  const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const used = (
+    await sql<{ minutes: string; rows: string }>`
+      select
+        coalesce(sum(extract(epoch from (coalesce(finished_at, ${now}) - started_at)) / 60), 0)::text as minutes,
+        coalesce(sum(greatest(
+          coalesce((stats->>'rows_fetched')::numeric, 0),
+          coalesce((stats->>'rows_parsed')::numeric, 0),
+          coalesce((stats->>'rows_received')::numeric, 0)
+        )), 0)::text as rows
+      from run where started_at >= ${month} and id <> ${runId}`.execute(tx)
+  ).rows[0]!;
+  if (minutesLimit !== null && Number(used.minutes) >= minutesLimit) return 'run minutes';
+  if (rowsLimit !== null && Number(used.rows) >= rowsLimit) return 'rows ingested';
+  return null;
+}
+
 export interface ProcessDeps {
   worker: string;
   fetch?: typeof fetch;
@@ -148,7 +176,10 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
   const changedTypes = new Set<string>();
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(new Error('timeout')), loaded.timeout_seconds * 1000);
+  let noRetry = false;
   try {
+    const used = await withTenant(cell, claim.tenantId, (tx) => allowanceUsedUp(tx, now(), loaded.id));
+    if (used) throw new AllowanceError(`The plan's monthly allowance of ${used} is used up. This run did not start; it can run again next month or once the plan is changed.`);
     const steps = (loaded.steps as unknown[]).map((s) => JobStep.parse(s));
     stats = await Promise.race([
       withTenant(cell, claim.tenantId, (tx) =>
@@ -168,6 +199,7 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
       new Promise<never>((_, reject) => abort.signal.addEventListener('abort', () => reject(new Error(`Timed out after ${loaded.timeout_seconds} s`)))),
     ]);
   } catch (e) {
+    noRetry = e instanceof AllowanceError;
     error = e instanceof StepError || e instanceof Error ? e.message : String(e);
     log('error', e instanceof StepError ? e.step : null, error);
   } finally {
@@ -181,7 +213,7 @@ export async function processRun(cell: Kysely<CellDB>, claim: { runId: string; t
     const status = cancelled ? 'cancelled' : error ? 'failed' : 'succeeded';
     if (!error && !cancelled) log('info', null, `Run succeeded in ${durationMs} ms`);
     let retryAt: Date | null = null;
-    if (status === 'failed' && loaded.attempt <= loaded.max_retries) {
+    if (status === 'failed' && !noRetry && loaded.attempt <= loaded.max_retries) {
       retryAt = new Date(now().getTime() + retryDelayMs(loaded.attempt));
       log('warn', null, `Retrying at ${retryAt.toISOString()} (attempt ${loaded.attempt + 1})`);
     }

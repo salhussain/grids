@@ -24,6 +24,14 @@ export const CATEGORICAL: Record<Scheme, string[]> = {
   dark: ['#8a3ffc', '#33b1ff', '#08bdba', '#ff7eb6', '#fa4d56', '#6fdc8c', '#4589ff', '#d2a106'],
 };
 
+let custom: string[] | null = null;
+/** Series colours from the workspace branding (null = the standard set). */
+export const setChartColors = (c: string[] | null) => {
+  custom = c;
+};
+/** The series colours in use for a mode. */
+export const categorical = (scheme: Scheme) => custom ?? CATEGORICAL[scheme];
+
 /** Reserved status colours (thresholds): never reused for series. */
 export const STATUS: Record<Scheme, { good: string; warn: string; bad: string; none: string }> = {
   light: { good: '#198038', warn: '#f1c21b', bad: '#da1e28', none: '#8d8d8d' },

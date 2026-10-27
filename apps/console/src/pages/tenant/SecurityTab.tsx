@@ -1,11 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck } from 'lucide-react';
-import type { TenantDetail } from '@grids/schema';
+import { History, ShieldCheck, Timer, Users } from 'lucide-react';
+import { useState } from 'react';
+import type { SessionPolicy, TenantDetail } from '@grids/schema';
 import { api } from '../../api';
 import { useCan } from '../../session';
-import { ErrorNotice, Panel, Stat, Switch, useToast } from '@grids/ui';
+import {
+  ErrorNotice,
+  SectionHead,
+  ActiveSessionsList,
+  PastSessionsList,
+  SessionPolicyPanel,
+  Stat,
+  Switch,
+  VerticalTabs,
+  useToast,
+} from '@grids/ui';
+
+type Tab = 'mfa' | 'sessions' | 'active' | 'past';
 
 export function SecurityTab({ t }: { t: TenantDetail }) {
+  const [tab, setTab] = useState<Tab>('mfa');
   const can = useCan();
   const qc = useQueryClient();
   const toast = useToast();
@@ -26,52 +40,118 @@ export function SecurityTab({ t }: { t: TenantDetail }) {
       );
     },
   });
+  const policy = useMutation({
+    mutationFn: (p: SessionPolicy) => api.setSessionPolicy(t.id, p),
+    onSuccess: (res) => {
+      qc.setQueryData(['tenant', t.id], res);
+      toast('Session settings saved');
+    },
+  });
+  const active = useQuery({
+    queryKey: ['sessions', t.id],
+    queryFn: () => api.activeSessions(t.id),
+    enabled: t.status === 'active' && can('tenants.security'),
+  });
+  const past = useQuery({
+    queryKey: ['sessions-past', t.id],
+    queryFn: () => api.pastSessions(t.id),
+    enabled: t.status === 'active' && can('tenants.security') && tab === 'past',
+  });
+  const revoke = useMutation({
+    mutationFn: (sessionId: string) => api.revokeSession(t.id, sessionId),
+    onSuccess: (res) => {
+      qc.setQueryData(['sessions', t.id], res);
+      toast('Signed out');
+    },
+  });
   const ms = members.data?.members ?? [];
   const enrolled = ms.filter((m) => m.mfa?.enrolled).length;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-3">
-      <Panel className="xl:col-span-2" title="Two-factor authentication">
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex gap-4">
-            <ShieldCheck className="mt-0.5 size-6 shrink-0 text-accent-600" />
-            <div className="text-sm">
-              <p className="font-medium text-ink">Require 2FA for all users</p>
-              <p className="mt-1 text-zinc-600">
-                Enforced by the identity provider at sign-in for everyone in this organisation.
-                Users without a second factor (authenticator app, security key or passkey) must
-                enrol before continuing. Organisation administrators can change this from their own
-                workspace too.
-              </p>
-              {!t.idpOrgId && (
-                <p className="mt-2 text-xs text-amber-800">
-                  Applied when the organisation is provisioned.
-                </p>
-              )}
+    <>
+      <VerticalTabs<Tab>
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'mfa', label: 'Two-factor', icon: ShieldCheck },
+          { id: 'sessions', label: 'Session limits', icon: Timer },
+          {
+            id: 'active',
+            label: 'Active sessions',
+            icon: Users,
+            count: active.data?.sessions.length,
+          },
+          { id: 'past', label: 'Past sessions', icon: History },
+        ]}
+      >
+        {tab === 'mfa' && (
+          <>
+            <SectionHead
+              title="Two-factor authentication"
+              description="Enforced by the identity provider at sign-in. People without a second factor must enrol before continuing."
+            />
+            <div className="flex items-center justify-between gap-4 pb-4">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">Require 2FA for all users</div>
+                <div className="text-xs text-zinc-500">
+                  {t.idpOrgId
+                    ? 'The organisation’s administrators can change this from their own workspace too'
+                    : 'Applied when the organisation is provisioned'}
+                </div>
+              </div>
+              <Switch
+                label="Require 2FA"
+                checked={t.mfaRequired}
+                disabled={set.isPending || !can('tenants.security')}
+                onChange={(v) => set.mutate(v)}
+              />
             </div>
-          </div>
-          <Switch
-            label="Require 2FA"
-            checked={t.mfaRequired}
-            disabled={set.isPending || !can('tenants.security')}
-            onChange={(v) => set.mutate(v)}
+            <ErrorNotice error={set.error} />
+            <div className="grid gap-px border border-zinc-200 bg-zinc-200 sm:grid-cols-2 [&>*]:border-0">
+              <Stat
+                label="Members enrolled in 2FA"
+                value={`${enrolled} / ${ms.length}`}
+                sub={
+                  ms.length
+                    ? `${Math.round((enrolled / ms.length) * 100)}% coverage`
+                    : 'No members yet'
+                }
+                tone={t.mfaRequired && enrolled < ms.length ? 'warn' : undefined}
+              />
+              <Stat
+                label="Suspended members"
+                value={ms.filter((m) => m.status === 'suspended').length}
+              />
+            </div>
+          </>
+        )}
+        {tab === 'sessions' && (
+          <SessionPolicyPanel
+            value={t.sessionPolicy}
+            saving={policy.isPending}
+            disabled={!can('tenants.security')}
+            error={policy.error}
+            onSave={(p) => policy.mutate(p)}
           />
-        </div>
-        <div className="mt-4">
-          <ErrorNotice error={set.error} />
-        </div>
-      </Panel>
-      <div className="grid gap-px border border-zinc-200 bg-zinc-200 [&>*]:border-0">
-        <Stat
-          label="Members enrolled in 2FA"
-          value={`${enrolled} / ${ms.length}`}
-          sub={
-            ms.length ? `${Math.round((enrolled / ms.length) * 100)}% coverage` : 'No members yet'
-          }
-          tone={t.mfaRequired && enrolled < ms.length ? 'warn' : undefined}
-        />
-        <Stat label="Suspended members" value={ms.filter((m) => m.status === 'suspended').length} />
-      </div>
-    </div>
+        )}
+        {tab === 'active' && (
+          <ActiveSessionsList
+            sessions={active.data?.sessions ?? []}
+            loading={active.isPending}
+            revoking={revoke.isPending}
+            disabled={!can('tenants.security')}
+            error={active.error ?? revoke.error}
+            onRevoke={(sid) => revoke.mutate(sid)}
+          />
+        )}
+        {tab === 'past' && (
+          <PastSessionsList
+            sessions={past.data?.sessions ?? []}
+            loading={past.isPending}
+            error={past.error}
+          />
+        )}
+      </VerticalTabs>
+    </>
   );
 }

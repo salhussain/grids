@@ -1,15 +1,17 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { FORM_LAYOUT_INFO, SUBMISSION_STATUSES, type FormDto, type SubmissionStatus } from '@grids/schema';
-import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Pagination, Select, Table, Tag, Td, dateTime, relTime, usePagination } from '@grids/ui';
-import { ClipboardList, CloudOff, GitBranch, Lock, Pencil, Plus, Send } from 'lucide-react';
+import { approvalsOf } from '@grids/forms';
+import { PROJECT_SUBJECT, SUBMISSION_STATUSES, type FormDto, type SubmissionStatus } from '@grids/schema';
+import { Button, Dialog, Empty, ErrorNotice, Field, Input, Listbox, Loading, Pagination, SectionHead, Table, Td, dateTime, relTime, usePagination, EmptyState, cx } from '@grids/ui';
+import { CircleDot, ClipboardList, CloudOff, FolderKanban, GitBranch, Globe, Languages, Layers, Lock, MapPin, Pencil, Plus, Search, Send } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
 import { FillForm } from '../forms/FillForm';
 import { useOutbox } from '../forms/outbox';
 import { SubmissionSheet } from '../forms/SubmissionSheet';
-import { STATUS_INFO, SubmissionStatusPill, fmtAnswer } from '../forms/status';
-import { useProject } from './context';
+import { STATUS_INFO, SubmissionStatusPill } from '../forms/status';
+import { FilterMenu, type FilterCategory, type FilterValue } from '../support/FilterMenu';
+import { iconOf, useProject } from './context';
 import { GroupTree } from './GroupTree';
 import { useTypes } from './EntitiesTab';
 
@@ -19,28 +21,59 @@ export { useOutbox };
 
 export function FormsTab() {
   const { tenantId, project, base, can } = useProject();
-  const forms = useQuery({ queryKey: ['forms', tenantId, project.key], queryFn: () => api.forms(tenantId, project.key) });
+  const forms = useQuery({
+    queryKey: ['forms', tenantId, project.key],
+    queryFn: () => api.forms(tenantId, project.key),
+  });
+  const groups = useQuery({
+    queryKey: ['form-groups', tenantId, project.key],
+    queryFn: () => api.projectFormGroups(tenantId, project.key),
+  });
   const outbox = useOutbox();
   const [creating, setCreating] = useState(false);
   const [viewing, setViewing] = useState<FormDto | null>(null);
   const [sheet, setSheet] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [filters, setFilters] = useState<FilterValue>({});
+  const [sort, setSort] = useState<'edited' | 'name' | 'submissions'>('edited');
   const mine = outbox.items.filter((p) => p.tenantId === tenantId && p.project === project.key);
-  const qc = useQueryClient();
-  const groups = useQuery({ queryKey: ['form-groups', tenantId, project.key], queryFn: () => api.projectFormGroups(tenantId, project.key) });
-  const setGroups = (d: unknown) => {
-    qc.setQueryData(['form-groups', tenantId, project.key], d);
-    void qc.invalidateQueries({ queryKey: ['forms-menu', tenantId] });
-  };
+  const all = forms.data ?? [];
+  const groupList = groups.data ?? [];
+  const needle = q.trim().toLowerCase();
+  const shown = all
+    .filter((f) => {
+      const pick = (id: string) => filters[id] ?? [];
+      const any = (id: string, value: string) => !pick(id).length || pick(id).includes(value);
+      return (
+        any('status', f.currentVersion ? 'published' : 'draft') &&
+        any('group', f.groupId ?? 'none') &&
+        any('about', f.subjectType?.key ?? 'none') &&
+        any('approval', f.settings.workflow.enabled && approvalsOf(f.settings).length ? 'yes' : 'no')
+      );
+    })
+    .filter((f) => !needle || `${f.name} ${f.description}`.toLowerCase().includes(needle))
+    .sort((x, y) => (sort === 'name' ? x.name.localeCompare(y.name) : sort === 'submissions' ? y.submissionCount - x.submissionCount : y.updatedAt.localeCompare(x.updatedAt)));
+  const submissions = all.reduce((n, f) => n + f.submissionCount, 0);
+  const subjects = [...new Map(all.filter((f) => f.subjectType).map((f) => [f.subjectType!.key, f.subjectType!.name])).entries()];
+  const categories: FilterCategory[] = [
+    { id: 'status', label: 'Status', icon: CircleDot, options: [{ value: 'published', label: 'Published' }, { value: 'draft', label: 'Draft' }] },
+    ...(groupList.length ? [{ id: 'group', label: 'Group', icon: Layers, options: [...groupList.map((g) => ({ value: g.id, label: g.name })), { value: 'none', label: 'No group' }] }] : []),
+    ...(subjects.length ? [{ id: 'about', label: 'About', icon: MapPin, options: subjects.map(([value, label]) => ({ value, label })) }] : []),
+    { id: 'approval', label: 'Approval', icon: GitBranch, options: [{ value: 'yes', label: 'Has approval' }, { value: 'no', label: 'No approval' }] },
+  ];
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-600">Forms collect data in the field. Published versions are immutable; answers can update entities and indicators.</p>
-        {can('manager') && (
-          <Button icon={Plus} onClick={() => setCreating(true)}>
-            New form
-          </Button>
-        )}
-      </div>
+    <div className="space-y-5">
+      <SectionHead
+        title="Forms"
+        description="Forms collect data in the field. Published versions are fixed, and answers can update places and indicators."
+        actions={
+          can('manager') ? (
+            <Button size="sm" icon={Plus} onClick={() => setCreating(true)}>
+              New form
+            </Button>
+          ) : undefined
+        }
+      />
       {mine.length > 0 && (
         <div className="flex items-center gap-3 border-s-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm">
           <CloudOff className="size-4 text-amber-700" />
@@ -53,88 +86,176 @@ export function FormsTab() {
       <ErrorNotice error={forms.error} />
       {forms.isPending ? (
         <Loading />
-      ) : !forms.data?.length ? (
-        <div className="border border-zinc-200 bg-snow">
-          <Empty icon={ClipboardList} title="No forms yet" />
-        </div>
+      ) : !all.length ? (
+        <EmptyState icon={ClipboardList} title="No forms yet">
+          Forms collect data in the field. Build one with questions and logic, publish it, and the answers can update places and indicators.
+        </EmptyState>
       ) : (
-        <ul className="grid gap-4 lg:grid-cols-2">
-          {forms.data.map((f) => (
-            <li key={f.key} className="flex flex-col border border-zinc-200 bg-snow p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold">{f.name}</h3>
-                  <p className="mt-0.5 text-sm text-zinc-500">{f.description || (f.subjectType ? `About a ${f.subjectType.name.toLowerCase()}` : 'Standalone form')}</p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="flex gap-1">
-                    {f.settings.workflow.enabled && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-800 ring-1 ring-sky-200" title={f.settings.workflow.stages.map((x) => x.name).join(' → ')}>
-                        <GitBranch className="size-3" /> {f.settings.workflow.stages.length}-stage approval
-                      </span>
-                    )}
-                    {f.currentVersion ? <Tag>v{f.currentVersion}</Tag> : <Tag>Draft</Tag>}
-                  </span>
-                  {f.currentVersion && f.hasUnpublishedChanges && <span className="text-xs text-amber-700">Unpublished changes</span>}
-                </div>
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="w-72 max-w-full">
+                <Input icon={Search} aria-label="Search forms" placeholder="Search forms" value={q} onChange={(e) => setQ(e.target.value)} />
               </div>
-              <dl className="mt-4 flex gap-6 text-sm">
-                <div>
-                  <dt className="text-xs text-zinc-500">Submissions</dt>
-                  <dd className="num font-medium">{f.submissionCount.toLocaleString()}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-500">Last</dt>
-                  <dd>{f.lastSubmissionAt ? relTime(f.lastSubmissionAt) : '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-500">Questions</dt>
-                  <dd className="num">{f.draft.sections.reduce((n, s) => n + s.questions.length, 0)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-zinc-500">Layout</dt>
-                  <dd>{FORM_LAYOUT_INFO[f.draft.layout].label}</dd>
-                </div>
-              </dl>
-              <div className="mt-auto flex flex-wrap gap-2 border-t border-zinc-100 pt-4">
-                {f.canFill && f.currentVersion ? (
-                  <Link to={`${base}/forms/${f.key}/fill`} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent-600 px-2.5 text-xs font-medium text-white hover:bg-accent-700">
-                    <Send className="size-3.5" /> Fill in
-                  </Link>
-                ) : (
-                  !f.canFill && (
-                    <span className="inline-flex h-7 items-center gap-1.5 px-1 text-xs text-zinc-500">
-                      <Lock className="size-3.5" /> Not for your role
-                    </span>
-                  )
-                )}
-                <Button size="sm" variant="secondary" onClick={() => setViewing(f)}>
-                  Submissions
-                </Button>
-                {can('manager') && (
-                  <Link to={`${base}/forms/${f.key}/edit`} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-300 bg-snow px-2.5 text-xs font-medium hover:border-zinc-900">
-                    <Pencil className="size-3.5" /> Build
-                  </Link>
-                )}
+              <FilterMenu categories={categories} value={filters} onChange={setFilters} />
+              <Listbox
+                compact
+                label="Sort"
+                className="w-52"
+                value={sort}
+                options={[
+                  { value: 'edited', label: 'Recently edited' },
+                  { value: 'name', label: 'Name' },
+                  { value: 'submissions', label: 'Most submissions' },
+                ]}
+                onChange={(v) => setSort(v as typeof sort)}
+              />
+              <span className="ms-auto text-[13px] text-zinc-500">
+                {all.length} form{all.length === 1 ? '' : 's'} · {submissions.toLocaleString()} submissions
+              </span>
+            </div>
+            {!shown.length ? (
+              <div className="border border-zinc-200 bg-snow">
+                <Empty icon={ClipboardList} title="No matching forms">
+                  Try different filters or search.
+                </Empty>
               </div>
-            </li>
-          ))}
-        </ul>
+            ) : (
+              <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {shown.map((f) => (
+                  <FormCard key={f.key} f={f} base={base} canEdit={can('manager')} groupName={groupList.find((g) => g.id === f.groupId)?.name} onSubmissions={() => setViewing(f)} />
+                ))}
+              </ul>
+            )}
+        </div>
       )}
-      <GroupTree
-        title="Form groups"
-        description="How this project’s forms appear in the side menu: project › group › form. Choose a form’s group in its builder."
-        noun="form"
-        canEdit={can('manager')}
-        error={groups.error}
-        groups={(groups.data ?? []).map((g) => ({ id: g.id, parentId: g.parentId, name: g.name, count: g.formCount }))}
-        onSave={async (input, id) => setGroups(await api.saveProjectFormGroup(tenantId, project.key, { ...input, icon: 'folder', sort: 0 }, id))}
-        onDelete={async (id) => setGroups(await api.deleteProjectFormGroup(tenantId, project.key, id))}
-      />
       {creating && <NewForm onClose={() => setCreating(false)} />}
       {viewing && !sheet && <Submissions form={viewing} onClose={() => setViewing(null)} onOpen={setSheet} />}
       {sheet && <SubmissionSheet tenantId={tenantId} project={project.key} id={sheet} onClose={() => setSheet(null)} />}
     </div>
+  );
+}
+
+function FormCard({ f, base, canEdit, groupName, onSubmissions }: { f: FormDto; base: string; canEdit: boolean; groupName?: string; onSubmissions(): void }) {
+  const questions = f.draft.sections.reduce((n, s) => n + s.questions.length, 0);
+  const stages = f.settings.workflow.enabled ? approvalsOf(f.settings).length : 0;
+  const langs = Object.keys(f.draft.translations).filter((k) => Object.keys(f.draft.translations[k] ?? {}).length);
+  const layout = f.draft.layout === 'steps' ? `${f.draft.sections.length} pages` : f.draft.layout === 'focus' ? 'one at a time' : 'one page';
+  const Icon = iconOf(f.draft.icon ?? 'clipboard');
+  const chip = 'inline-flex h-[22px] items-center bg-zinc-100 px-2 text-xs text-zinc-600';
+  // The colour dot and the small line under the name say where the form stands.
+  const closed = { not_yet: 'not open yet', closed: 'closed', full: 'full' }[f.availability.state as 'not_yet' | 'closed' | 'full'];
+  const status = !f.currentVersion
+    ? { label: 'Draft', dot: 'bg-amber-500', text: 'text-amber-700' }
+    : closed
+      ? { label: `Published · ${closed}`, dot: f.availability.state === 'not_yet' ? 'bg-zinc-400' : 'bg-red-500', text: f.availability.state === 'not_yet' ? 'text-zinc-600' : 'text-red-700' }
+      : f.hasUnpublishedChanges
+        ? { label: 'Published · unpublished changes', dot: 'bg-orange-500', text: 'text-orange-700' }
+        : { label: 'Published', dot: 'bg-emerald-500', text: 'text-emerald-700' };
+  return (
+    <li className="flex h-full flex-col gap-3 border border-zinc-200 bg-snow p-4.5">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center bg-accent-50 text-accent-700">
+          <Icon className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-semibold" title={f.name}>{f.name}</div>
+          <div className={cx('truncate text-xs font-medium', status.text)}>{status.label}</div>
+        </div>
+        <span className={cx('mt-1.5 size-2.5 shrink-0 rounded-full', status.dot)} title={status.label} role="img" aria-label={status.label} />
+      </div>
+      <div className="flex h-[22px] items-center gap-1.5 overflow-hidden whitespace-nowrap">
+        <span className={chip}>{questions} questions</span>
+        <span className={chip}>{layout}</span>
+        {f.settings.publicAccess.enabled && <span className={cx(chip, 'gap-1 bg-sky-50 text-sky-800')}><Globe className="size-3" /> Public link</span>}
+        {groupName && <span className={cx(chip, 'min-w-0 truncate')}>{groupName}</span>}
+      </div>
+      <p className={`line-clamp-2 min-h-10 text-[13px] ${f.description ? 'text-zinc-600' : 'text-zinc-400'}`}>{f.description || 'No description available yet.'}</p>
+      <dl className="space-y-1.5 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
+        <div className="flex items-center gap-2" title="The entity each submission is about">
+          <MapPin className="size-3.5 shrink-0" />
+          <span className="truncate">
+            {f.subjectType ? (f.subjectType.key === PROJECT_SUBJECT ? 'About the project' : `About a ${f.subjectType.name.toLowerCase()}`) : 'Not about an entity'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Send className="size-3.5 shrink-0" />
+          <button type="button" onClick={onSubmissions} className="font-medium text-accent-700 hover:underline" title="View submissions">
+            {f.submissionCount.toLocaleString()} submissions
+          </button>
+          {f.lastSubmissionAt && <span>· last {relTime(f.lastSubmissionAt)}</span>}
+        </div>
+        <div className="flex items-center gap-2" title={stages > 0 ? approvalsOf(f.settings).map((x) => x.name || x.id).join(' → ') : undefined}>
+          <GitBranch className="size-3.5 shrink-0" /> {stages > 0 ? `${stages}-stage approval` : 'No approval'}
+        </div>
+        <div className="flex items-center gap-2">
+          <Languages className="size-3.5 shrink-0" /> {['EN', ...langs.map((l) => l.toUpperCase())].join(' · ')}
+        </div>
+        <div className="flex items-center gap-2">
+          <Pencil className="size-3.5 shrink-0" /> edited {relTime(f.updatedAt)}
+        </div>
+      </dl>
+      <div className="mt-auto grid grid-flow-col auto-cols-fr gap-2">
+        {f.canFill && f.currentVersion ? (
+          <Link to={`${base}/forms/${f.key}/fill`} className="inline-flex h-8 items-center justify-center gap-1.5 bg-accent-600 px-3 text-[13px] font-medium text-on-accent hover:bg-accent-700">
+            <Send className="size-3.5" /> Fill in
+          </Link>
+        ) : (
+          !f.canFill && (
+            <span className="inline-flex h-8 items-center justify-center gap-1.5 px-1 text-xs text-zinc-500" title="Not for your role">
+              <Lock className="size-3.5" /> Not for you
+            </span>
+          )
+        )}
+        {canEdit && (
+          <Link to={`${base}/forms/${f.key}/edit`} className="inline-flex h-8 items-center justify-center gap-1.5 border border-zinc-300 bg-snow px-3 text-[13px] font-medium hover:border-zinc-900">
+            <Pencil className="size-3.5" /> {f.currentVersion ? 'Edit' : 'Continue editing'}
+          </Link>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** How the project's forms are grouped in the side menu: project › group › form. */
+export function FormGroupsTab() {
+  const { tenantId, project, can } = useProject();
+  const qc = useQueryClient();
+  const groups = useQuery({
+    queryKey: ['form-groups', tenantId, project.key],
+    queryFn: () => api.projectFormGroups(tenantId, project.key),
+  });
+  const setGroups = (d: unknown) => {
+    qc.setQueryData(['form-groups', tenantId, project.key], d);
+    void qc.invalidateQueries({ queryKey: ['forms-menu', tenantId] });
+  };
+  return (
+    <GroupTree
+      title="Form groups"
+      description="Levels in the side menu’s forms list, e.g. Surveillance › Weekly reports."
+      emptyText="Groups organise this project’s forms into levels in the side menu, and a group can sit inside another group. Add one, then choose it for a form when you edit the form."
+      noun="form"
+      canEdit={can('manager')}
+      error={groups.error}
+      groups={(groups.data ?? []).map((g) => ({
+        id: g.id,
+        parentId: g.parentId,
+        name: g.name,
+        count: g.formCount,
+      }))}
+      onSave={async (input, id) =>
+        setGroups(
+          await api.saveProjectFormGroup(
+            tenantId,
+            project.key,
+            { ...input, icon: 'folder', sort: 0 },
+            id,
+          ),
+        )
+      }
+      onDelete={async (id) =>
+        setGroups(await api.deleteProjectFormGroup(tenantId, project.key, id))
+      }
+    />
   );
 }
 
@@ -151,8 +272,21 @@ function NewForm({ onClose }: { onClose(): void }) {
       api.saveForm(tenantId, project.key, {
         key,
         name,
-        subjectType: subject || null,
-        definition: { title: name, sections: [{ key: 'main', title: '', questions: [{ key: 'first_question', type: 'text', label: 'First question' }] }] },
+        subjectType: subject,
+        definition: {
+          title: name,
+          sections: [
+            {
+              key: 'main',
+              title: '',
+              questions: [
+                // A form about an entity opens with the question that says which one.
+                ...(subject !== PROJECT_SUBJECT ? [{ key: 'main_entity', type: 'entity' as const, label: `Which ${(types.data?.find((t) => t.key === subject)?.name ?? 'entity').toLowerCase()}?`, entityType: subject, primary: true, required: true }] : []),
+                { key: 'first_question', type: 'text', label: 'First question' },
+              ],
+            },
+          ],
+        },
       }),
     onSuccess: (data) => {
       qc.setQueryData(['forms', tenantId, project.key], data);
@@ -169,7 +303,7 @@ function NewForm({ onClose }: { onClose(): void }) {
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!name}>
+          <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!name || !subject}>
             Create and build
           </Button>
         </>
@@ -180,15 +314,18 @@ function NewForm({ onClose }: { onClose(): void }) {
         <Field label="Name" hint={`Key: ${key}`}>
           <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
-        <Field label="About" hint="Submissions about an entity can update its attributes and indicators">
-          <Select value={subject} onChange={(e) => setSubject(e.target.value)}>
-            <option value="">Nothing in particular</option>
-            {types.data?.map((t) => (
-              <option key={t.key} value={t.key}>
-                A {t.name.toLowerCase()}
-              </option>
-            ))}
-          </Select>
+        <Field label="Captured against" hint="Every submission is about the project itself or one entity of a type, and can update its attributes and indicators">
+          <Listbox
+            searchable={(types.data?.length ?? 0) > 5}
+            label="Captured against"
+            placeholder="Choose what it is about…"
+            value={subject || null}
+            onChange={setSubject}
+            options={[
+              { value: PROJECT_SUBJECT, label: 'The project itself', description: 'One submission is about the project as a whole', icon: FolderKanban, text: 'project' },
+              ...(types.data ?? []).map((t) => ({ value: t.key, label: `A ${t.name.toLowerCase()}`, description: `Each submission is about one ${t.name.toLowerCase()}`, icon: iconOf(t.icon), text: t.name })),
+            ]}
+          />
         </Field>
       </div>
     </Dialog>
@@ -213,9 +350,16 @@ export function SubmissionsTable({ form, onOpen }: { form: FormDto; onOpen(id: s
     queryFn: () => api.submissions(tenantId, project.key, form.key, { ...pg, status: status || undefined }),
     placeholderData: keepPreviousData,
   });
-  const def = form.published ?? form.draft;
-  const cols = def.sections.flatMap((s) => s.questions).filter((q) => q.type !== 'note').slice(0, 5);
   const wf = form.settings.workflow.enabled;
+  const about = form.subjectType?.key === PROJECT_SUBJECT ? 'project' : (form.subjectType?.name ?? 'Entity');
+  if (subs.data && !subs.data.total && !status)
+    return (
+      <EmptyState icon={ClipboardList} title="No submissions yet">
+        {form.currentVersion
+          ? `Answers to ${form.name} are listed here as people submit them, with who sent each one and which ${about.toLowerCase()} it is about.`
+          : `Publish ${form.name} to start collecting answers. They will be listed here, one row per ${about.toLowerCase()} reported on.`}
+      </EmptyState>
+    );
   return (
     <>
       <ErrorNotice error={subs.error} />
@@ -227,20 +371,35 @@ export function SubmissionsTable({ form, onOpen }: { form: FormDto; onOpen(id: s
               type="button"
               aria-pressed={status === x}
               onClick={() => setStatus(x)}
-              className={`px-2.5 py-1 text-xs ring-1 ${status === x ? 'bg-ink text-canvas ring-ink' : 'bg-snow text-zinc-600 ring-zinc-200 hover:ring-zinc-400'}`}
+              className={`px-2.5 py-1 text-xs ring-1 ${status === x ? 'bg-accent-600 text-on-accent ring-accent-600' : 'bg-snow text-zinc-600 ring-zinc-200 hover:ring-zinc-400'}`}
             >
               {x ? STATUS_INFO[x].label : 'All'}
             </button>
           ))}
         </div>
       )}
+      <div className="overflow-hidden border border-zinc-200 bg-snow">
       <div className="max-h-[60vh] overflow-auto">
         <Table
-          head={['Submitted', ...(wf ? ['Status'] : []), ...(form.subjectType ? [form.subjectType.name] : []), 'By', ...cols.map((q) => q.label)]}
-          empty={<Empty icon={ClipboardList} title="No submissions yet" />}
+          head={[
+            `${about} code`,
+            `${about} name`,
+            'Submitted by',
+            'Submitted at',
+            ...(wf ? ['Status'] : []),
+          ]}
+          tintEmpty
+          empty={subs.data ? <Empty icon={ClipboardList} title="No matching submissions">Try a different status.</Empty> : undefined}
         >
           {subs.data?.items.map((s) => (
-            <tr key={s.id} className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50" onClick={() => onOpen(s.id)}>
+            <tr
+              key={s.id}
+              className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50"
+              onClick={() => onOpen(s.id)}
+            >
+              <Td className="font-mono text-xs">{s.entity?.code ?? '—'}</Td>
+              <Td>{s.entity?.name ?? <span className="text-zinc-400">—</span>}</Td>
+              <Td className="text-sm">{s.submittedBy ?? '—'}</Td>
               <Td className="text-xs whitespace-nowrap">{dateTime(s.submittedAt)}</Td>
               {wf && (
                 <Td>
@@ -248,18 +407,12 @@ export function SubmissionsTable({ form, onOpen }: { form: FormDto; onOpen(id: s
                   {s.stageName && s.status === 'in_review' && <div className="mt-0.5 text-[11px] text-zinc-500">{s.stageName}</div>}
                 </Td>
               )}
-              {form.subjectType && <Td>{s.entity?.name ?? '—'}</Td>}
-              <Td className="text-xs">{s.submittedBy ?? '—'}</Td>
-              {cols.map((q) => (
-                <Td key={q.key} className="max-w-48 truncate">
-                  {fmtAnswer(s.answers[q.key])}
-                </Td>
-              ))}
             </tr>
           ))}
         </Table>
       </div>
       {subs.data && <Pagination {...pg} total={subs.data.total} onChange={setPg} />}
+      </div>
     </>
   );
 }
@@ -278,7 +431,7 @@ export function FormFillPage() {
       formKey={formKey}
       entityId={search.entity}
       back={{ to: `${base}/forms`, label: 'Forms' }}
-      inboxHref={`/o/${tenantId}/inbox`}
+      inboxHref={`/o/${tenantId}/forms/${project.key}/${formKey}`}
     />
   );
 }

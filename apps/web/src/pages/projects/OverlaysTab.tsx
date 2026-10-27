@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { MapOverlayInput} from '@grids/schema';
-import { AGGREGATIONS, OVERLAY_DISPLAYS, OVERLAY_PALETTES, type MapOverlayDto, type OverlayDisplay, type OverlayGroupDto } from '@grids/schema';
-import { Listbox, Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, Select, SwitchField, Textarea, cx, useToast } from '@grids/ui';
-import { Box, CircleDot, Flame, Globe, Layers, Map as MapIcon, Pencil, Plus, SquareStack } from 'lucide-react';
+import { AGGREGATIONS, OVERLAY_DISPLAYS, OVERLAY_ENTITY_KEYS, OVERLAY_PALETTES, type MapOverlayDto, type OverlayDisplay, type OverlayGroupDto } from '@grids/schema';
+import { confirmDialog, Listbox, Button, Dialog, ErrorNotice, Field, Input, Loading, Select, SectionHead, SwitchField, Textarea, cx, useToast, EmptyState } from '@grids/ui';
+import { Box, CircleDot, Ruler, Flame, Globe, Layers, Map as MapIcon, Pencil, Plus, SquareStack } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { z } from 'zod';
 import { api } from '../../api';
-import { paletteSwatch } from '@grids/viz';
+import { AGGREGATION_INFO, aggregationOptions } from './aggregations';
+import { formatOverlayValue, paletteSwatch } from '@grids/viz';
 import { useProject } from './context';
 import { GroupTree } from './GroupTree';
 import { GroupSelect, LockBadge } from './permissions';
+
+/** Common units, with where each usually goes. */
+const UNIT_PRESETS: [string, 'after' | 'before'][] = [['%', 'after'], ['°C', 'after'], ['cases', 'after'], ['people', 'after'], ['visits', 'after'], ['km²', 'after'], ['mm', 'after'], ['days', 'after'], ['$', 'before'], ['USD', 'before'], ['€', 'before']];
 
 const WINDOWS: [number | null, string][] = [
   [null, 'Latest value per place'],
@@ -19,7 +23,7 @@ const WINDOWS: [number | null, string][] = [
   [24 * 7 * 12, 'Last 12 weeks'],
   [24 * 365, 'Last 12 months'],
 ];
-const AGG_LABEL: Record<string, string> = { sum: 'Sum', avg: 'Average', min: 'Minimum', max: 'Maximum', count: 'Number of reports', distinct: 'Places reporting', last: 'Latest value' };
+const AGG_LABEL: Record<string, string> = Object.fromEntries(Object.entries(AGGREGATION_INFO).map(([k, v]) => [k, v.label]));
 const DISPLAY_INFO: Record<OverlayDisplay, { label: string; hint: string; icon: typeof Box }> = {
   shade: { label: 'Shaded areas', hint: 'Colour each place', icon: SquareStack },
   extrude: { label: '3D columns', hint: 'Height by value', icon: Box },
@@ -33,43 +37,43 @@ export function OverlaysTab() {
   const { tenantId, project, can, base } = useProject();
   const list = useQuery({ queryKey: ['overlays', tenantId, project.key], queryFn: () => api.overlays(tenantId, project.key) });
   const [editing, setEditing] = useState<MapOverlayDto | 'new' | null>(null);
-  const qc = useQueryClient();
   const groupList = useQuery({ queryKey: ['overlay-groups', tenantId, project.key], queryFn: () => api.overlayGroups(tenantId, project.key) });
-  const setGroups = (d: unknown) => {
-    qc.setQueryData(['overlay-groups', tenantId, project.key], d);
-    void qc.invalidateQueries({ queryKey: ['overlays', tenantId, project.key] });
-  };
   const groups = useMemo(() => {
     const m = new Map<string, MapOverlayDto[]>();
     for (const o of list.data ?? []) m.set(o.group, [...(m.get(o.group) ?? []), o]);
     return [...m.entries()];
   }, [list.data]);
 
-  if (list.isPending) return <Loading />;
+  if (list.isPending)
+    return (
+      <div>
+        <SectionHead title="Map overlays" description="Overlays colour the places on the explorer map by an indicator. Each place’s value rolls up everything inside it, so the same overlay works at every level." />
+        <Loading />
+      </div>
+    );
   if (list.isError) return <ErrorNotice error={list.error} />;
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-sm text-zinc-600">
-          Overlays colour the places on the explorer map by an indicator. Each place’s value rolls up everything inside it, so the same overlay works at every level.
-        </p>
-        <div className="flex gap-2">
-          <Link to={`${base}/explore`} className="inline-flex h-9 items-center gap-2 border border-zinc-300 bg-snow px-3 text-sm hover:bg-zinc-50">
-            <MapIcon className="size-4" /> Open explorer
-          </Link>
-          {can('manager') && (
-            <Button icon={Plus} onClick={() => setEditing('new')}>
-              New overlay
-            </Button>
-          )}
-        </div>
-      </div>
+      <SectionHead
+        title="Map overlays"
+        description="Overlays colour the places on the explorer map by an indicator. Each place’s value rolls up everything inside it, so the same overlay works at every level."
+        actions={
+          <>
+            <Link to={`${base}/explore`} className="inline-flex h-8 items-center gap-2 border border-zinc-300 bg-snow px-3 text-sm hover:bg-zinc-50">
+              <MapIcon className="size-4" /> Open explorer
+            </Link>
+            {can('manager') && (
+              <Button size="sm" icon={Plus} onClick={() => setEditing('new')}>
+                New overlay
+              </Button>
+            )}
+          </>
+        }
+      />
       {!list.data.length ? (
-        <div className="border border-zinc-200 bg-snow">
-          <Empty icon={Layers} title="No map overlays yet" action={can('manager') ? <Button icon={Plus} onClick={() => setEditing('new')}>New overlay</Button> : undefined}>
-            Pick a data element, how to aggregate it and a colour scale.
-          </Empty>
-        </div>
+        <EmptyState icon={Layers} title="No map overlays yet">
+          An overlay colours the places on the explorer map by an indicator. Pick a data element, how to aggregate it and a colour scale.
+        </EmptyState>
       ) : (
         groups.map(([g, items]) => (
           <section key={g}>
@@ -110,18 +114,32 @@ export function OverlaysTab() {
           </section>
         ))
       )}
-      <GroupTree
-        title="Overlay groups"
-        description="Levels in the explorer’s overlay picker, e.g. Health › Malaria."
-        noun="overlay"
-        canEdit={can('manager')}
-        error={groupList.error}
-        groups={(groupList.data ?? []).map((g) => ({ id: g.id, parentId: g.parentId, name: g.name, count: g.overlayCount }))}
-        onSave={async (input, id) => setGroups(await api.saveOverlayGroup(tenantId, project.key, input, id))}
-        onDelete={async (id) => setGroups(await api.deleteOverlayGroup(tenantId, project.key, id))}
-      />
       {editing && <OverlayEditor overlay={editing === 'new' ? null : editing} groupOptions={groupList.data ?? []} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+/** Studio: levels in the explorer's overlay picker (e.g. Health › Malaria). */
+export function OverlayGroupsTab() {
+  const { tenantId, project, can } = useProject();
+  const qc = useQueryClient();
+  const groupList = useQuery({ queryKey: ['overlay-groups', tenantId, project.key], queryFn: () => api.overlayGroups(tenantId, project.key) });
+  const setGroups = (d: unknown) => {
+    qc.setQueryData(['overlay-groups', tenantId, project.key], d);
+    void qc.invalidateQueries({ queryKey: ['overlays', tenantId, project.key] });
+  };
+  return (
+    <GroupTree
+      title="Overlay groups"
+      description="Levels in the explorer’s overlay picker, e.g. Health › Malaria."
+      emptyText="Groups organise this project’s map overlays into levels in the explorer’s overlay picker, and a group can sit inside another group. Add one, then choose it for an overlay when you edit the overlay."
+      noun="overlay"
+      canEdit={can('manager')}
+      error={groupList.error}
+      groups={(groupList.data ?? []).map((g) => ({ id: g.id, parentId: g.parentId, name: g.name, count: g.overlayCount }))}
+      onSave={async (input, id) => setGroups(await api.saveOverlayGroup(tenantId, project.key, input, id))}
+      onDelete={async (id) => setGroups(await api.deleteOverlayGroup(tenantId, project.key, id))}
+    />
   );
 }
 
@@ -131,8 +149,9 @@ function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlay
   const toast = useToast();
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
   const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
+  const datasets = useQuery({ queryKey: ['datasets', tenantId, project.key], queryFn: () => api.datasets(tenantId, project.key) });
   const [f, setF] = useState<z.input<typeof MapOverlayInput>>(
-    overlay ?? { key: '', name: '', group: 'General', groupId: null, element: '', aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', display: 'shade', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
+    overlay ?? { key: '', name: '', group: 'General', groupId: null, element: null, dataset: null, aggregation: 'sum', hours: 24 * 28, level: null, palette: 'heat', display: 'shade', thresholds: [], higherIsBetter: false, unit: '', decimals: 0, isPublic: false, description: '', permissionGroup: null },
   );
   const [breaks, setBreaks] = useState((overlay?.thresholds ?? []).join(', '));
   const parsedBreaks = breaks.trim() ? breaks.split(/[,\s]+/).filter(Boolean).map(Number) : [];
@@ -162,14 +181,14 @@ function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlay
       footer={
         <>
           {overlay && (
-            <Button variant="danger" className="me-auto" onClick={() => confirm(`Delete ${overlay.name}?`) && remove.mutate()}>
+            <Button variant="danger" className="me-auto" onClick={async () => (await confirmDialog(`Delete ${overlay.name}?`)) && remove.mutate()}>
               Delete
             </Button>
           )}
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!f.name || !f.key || !f.element || badBreaks}>
+          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!f.name || !f.key || badBreaks || (f.dataset ? !f.dataset.dataset || !f.dataset.entityColumn : !f.element)}>
             Save overlay
           </Button>
         </>
@@ -189,24 +208,36 @@ function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlay
               options={[{ value: 'none', label: 'General (no group)' }, ...groupOptions.map((g) => ({ value: g.id, label: g.path }))]}
             />
           </Field>
-          <Field label="Data element">
-            <Select value={f.element} onChange={(e) => set({ element: e.target.value })}>
-              <option value="">Choose…</option>
-              {elements.data?.map((d) => (
-                <option key={d.key} value={d.key}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
+          <Field label="Built from" hint="Where the numbers come from">
+            <Listbox
+              label="Built from"
+              value={f.dataset ? 'dataset' : 'element'}
+              onChange={(v) => set(v === 'dataset' ? { element: null, dataset: { dataset: '', entityColumn: '', entityKey: 'code', entityType: null, valueColumn: null, timeColumn: null } } : { dataset: null, element: '' })}
+              options={[
+                { value: 'element', label: 'An indicator', description: 'Values reported by forms and jobs' },
+                { value: 'dataset', label: 'A dataset', description: 'A table whose rows name the place they are about' },
+              ]}
+            />
           </Field>
-          <Field label="Aggregate">
-            <Select value={f.aggregation} onChange={(e) => set({ aggregation: e.target.value as typeof f.aggregation })}>
-              {AGGREGATIONS.map((a) => (
-                <option key={a} value={a}>
-                  {AGG_LABEL[a]}
-                </option>
-              ))}
-            </Select>
+          {!f.dataset && (
+            <Field label="Data element" hint="The indicator to colour by">
+              <Listbox
+                searchable
+                label="Data element"
+                placeholder="Choose an indicator"
+                value={f.element ?? null}
+                onChange={(element) => set({ element })}
+                options={(elements.data ?? []).map((d) => ({ value: d.ref, label: d.name, description: `${d.key} · ${d.groupName}` }))}
+              />
+            </Field>
+          )}
+          <Field label="Aggregate" hint="How readings are combined">
+            <Listbox
+              label="Aggregate"
+              value={f.aggregation ?? 'sum'}
+              onChange={(v) => set({ aggregation: v as typeof f.aggregation })}
+              options={aggregationOptions(AGGREGATIONS)}
+            />
           </Field>
           <Field label="Period">
             <Select value={f.hours === null ? '' : String(f.hours)} onChange={(e) => set({ hours: e.target.value ? Number(e.target.value) : null })}>
@@ -227,13 +258,54 @@ function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlay
               ))}
             </Select>
           </Field>
-          <Field label="Unit">
-            <Input value={f.unit} onChange={(e) => set({ unit: e.target.value })} placeholder="e.g. cases" />
-          </Field>
-          <Field label="Decimals">
-            <Input type="number" min={0} max={6} value={f.decimals} onChange={(e) => set({ decimals: Number(e.target.value) })} />
-          </Field>
         </div>
+
+        <fieldset className="space-y-4 border border-zinc-200 bg-zinc-50 p-4">
+          <legend className="px-1 text-sm font-medium">Number format</legend>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Unit" intro="Shown with every number" className="sm:col-span-2">
+              <Input icon={Ruler} value={f.unit} maxLength={20} onChange={(e) => set({ unit: e.target.value })} placeholder="e.g. cases" />
+            </Field>
+            <Field label="Unit goes" intro="Before or after the number">
+              <Listbox
+                label="Unit goes"
+                value={f.unitPosition ?? 'after'}
+                onChange={(unitPosition) => set({ unitPosition: unitPosition as 'after' | 'before' })}
+                options={[
+                  { value: 'after', label: 'After the number', description: '12 cases' },
+                  { value: 'before', label: 'Before the number', description: '$12' },
+                ]}
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-1.5" aria-label="Common units">
+            {UNIT_PRESETS.map(([unit, position]) => (
+              <button
+                key={unit}
+                type="button"
+                onClick={() => set({ unit, unitPosition: position })}
+                className={cx('border px-2 py-0.5 text-xs', f.unit === unit ? 'border-accent-600 bg-accent-50 text-accent-800' : 'border-zinc-300 bg-snow text-zinc-600 hover:border-zinc-400')}
+              >
+                {unit}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Decimals" intro="Places after the point">
+              <Input type="number" min={0} max={6} value={f.decimals} onChange={(e) => set({ decimals: Number(e.target.value) })} />
+            </Field>
+            <div className="sm:col-span-2">
+              <SwitchField label="Shorten big numbers" description="12,400 shows as 12.4K" checked={!!f.compact} onChange={(compact) => set({ compact })} />
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Looks like <b className="font-semibold text-ink tabular-nums">{formatOverlayValue({ decimals: f.decimals ?? 0, unit: f.unit ?? '', unitPosition: f.unitPosition ?? 'after', compact: !!f.compact }, 12400.5)}</b>
+          </p>
+        </fieldset>
+
+        {f.dataset && (
+          <DatasetFields value={f.dataset} onChange={(dataset) => set({ dataset })} datasets={datasets.data ?? []} types={types.data ?? []} />
+        )}
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Style</legend>
@@ -295,5 +367,68 @@ function OverlayEditor({ overlay, groupOptions, onClose }: { overlay: MapOverlay
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** The dataset an overlay is built from, and which column names the place, the number and the date. */
+function DatasetFields({
+  value,
+  onChange,
+  datasets,
+  types,
+}: {
+  value: NonNullable<z.input<typeof MapOverlayInput>['dataset']>;
+  onChange(v: NonNullable<z.input<typeof MapOverlayInput>['dataset']>): void;
+  datasets: { key: string; name: string; columns: string[] }[];
+  types: { key: string; name: string }[];
+}) {
+  const ds = datasets.find((d) => d.key === value.dataset);
+  const cols = (ds?.columns ?? []).map((c) => ({ value: c, label: c }));
+  const set = (patch: Partial<typeof value>) => onChange({ ...value, ...patch });
+  return (
+    <fieldset className="space-y-4 border border-zinc-200 bg-zinc-50 p-4">
+      <legend className="px-1 text-sm font-medium">Dataset</legend>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Dataset" hint="The table to read">
+          <Listbox
+            searchable
+            label="Dataset"
+            placeholder="Choose a dataset"
+            value={value.dataset || null}
+            onChange={(v) => set({ dataset: v, entityColumn: '', valueColumn: null, timeColumn: null })}
+            options={datasets.map((d) => ({ value: d.key, label: d.name, description: `${d.columns.length} columns` }))}
+          />
+        </Field>
+        <Field label="Place column" hint="Which column says where a row is">
+          <Listbox searchable label="Place column" placeholder="Choose a column" value={value.entityColumn || null} onChange={(entityColumn) => set({ entityColumn })} options={cols} />
+        </Field>
+        <Field label="Place is given as" hint="What that column holds">
+          <Listbox
+            label="Place is given as"
+            value={value.entityKey ?? 'code'}
+            onChange={(entityKey) => set({ entityKey: entityKey as (typeof OVERLAY_ENTITY_KEYS)[number] })}
+            options={[
+              { value: 'code', label: 'Place code', description: 'e.g. D-007' },
+              { value: 'name', label: 'Place name', description: 'Matched ignoring capitals' },
+              { value: 'id', label: 'Place id', description: 'The entity’s identifier' },
+            ]}
+          />
+        </Field>
+        <Field label="Type of place" hint="Narrow the match, optional">
+          <Listbox
+            label="Type of place"
+            value={value.entityType ?? 'any'}
+            onChange={(v) => set({ entityType: v === 'any' ? null : v })}
+            options={[{ value: 'any', label: 'Any type' }, ...types.map((t) => ({ value: t.key, label: t.name }))]}
+          />
+        </Field>
+        <Field label="Value column" hint="The number to map; blank counts rows">
+          <Listbox label="Value column" value={value.valueColumn ?? 'none'} onChange={(v) => set({ valueColumn: v === 'none' ? null : v })} options={[{ value: 'none', label: 'None (count rows)' }, ...cols]} />
+        </Field>
+        <Field label="Date column" hint="Lets the period apply to rows, optional">
+          <Listbox label="Date column" value={value.timeColumn ?? 'none'} onChange={(v) => set({ timeColumn: v === 'none' ? null : v })} options={[{ value: 'none', label: 'None' }, ...cols]} />
+        </Field>
+      </div>
+    </fieldset>
   );
 }

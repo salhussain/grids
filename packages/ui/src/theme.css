@@ -117,6 +117,26 @@
   --brand-800: color-mix(in oklab, var(--brand-600) 42%, white);
 }
 
+/*
+ * A region with its own brand colour (a project inside the workspace): set --brand-600
+ * and --brand-contrast on the element and add this class so the lighter/darker steps
+ * re-derive there, since they are otherwise computed once at the root.
+ */
+.brand-scope {
+  --brand-50: color-mix(in oklab, var(--brand-600) 8%, white);
+  --brand-100: color-mix(in oklab, var(--brand-600) 20%, white);
+  --brand-500: color-mix(in oklab, var(--brand-600) 82%, white);
+  --brand-700: color-mix(in oklab, var(--brand-600) 80%, black);
+  --brand-800: color-mix(in oklab, var(--brand-600) 62%, black);
+}
+:root[data-theme='dark'] .brand-scope {
+  --brand-50: color-mix(in oklab, var(--brand-600) 14%, #1a1b1e);
+  --brand-100: color-mix(in oklab, var(--brand-600) 28%, #1a1b1e);
+  --brand-500: color-mix(in oklab, var(--brand-600) 80%, white);
+  --brand-700: color-mix(in oklab, var(--brand-600) 62%, white);
+  --brand-800: color-mix(in oklab, var(--brand-600) 42%, white);
+}
+
 /* Inside always-dark chrome, keep the light-mode neutrals the chrome was designed with. */
 :root[data-theme='dark'] .chrome {
   --color-ink: #161616;
@@ -181,5 +201,37 @@ dialog::backdrop {
 @media (min-width: 64rem) {
   .stat-strip > :last-child:nth-child(odd) {
     grid-column: auto;
+  }
+}
+
+/* Appears only after a short delay, then fades in. */
+@keyframes loading-in {
+  to {
+    opacity: 1;
+  }
+}
+.loading-delay {
+  opacity: 0;
+  animation: loading-in 150ms ease 300ms forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-delay {
+    animation-duration: 1ms;
+  }
+}
+
+/* A page swapping in fades up a hair instead of snapping. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+}
+.page-in {
+  /* No transform and no fill: either would trap position:fixed descendants (like the form builder). */
+  animation: page-in 140ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-in {
+    animation: none;
   }
 }

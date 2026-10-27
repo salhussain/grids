@@ -128,6 +128,21 @@ export const BillingOverview = z.object({
 });
 export type BillingOverview = z.infer<typeof BillingOverview>;
 
+/** Who an invoice or receipt is addressed to: the organisation and its billing (or registered) address. */
+export const BillTo = z.object({
+  name: z.string(),
+  legalName: z.string().nullable(),
+  taxId: z.string().nullable(),
+  registrationNumber: z.string().nullable(),
+  line1: z.string().nullable(),
+  line2: z.string().nullable(),
+  city: z.string().nullable(),
+  region: z.string().nullable(),
+  postalCode: z.string().nullable(),
+  country: z.string().nullable(),
+});
+export type BillTo = z.infer<typeof BillTo>;
+
 /** What an organisation's admins see about their own billing (workspace › Billing). */
 export const OrgBillingDto = z.object({
   subscription: SubscriptionDto.nullable(),
@@ -156,5 +171,28 @@ export const OrgBillingDto = z.object({
     overdue: z.number().int(),
   }),
   billingContact: z.object({ name: z.string(), email: z.string() }).nullable(),
+  /** Where the subscription stands: running, running out within two weeks, or ended. */
+  access: z.object({
+    state: z.enum(['ok', 'expiring', 'ended']),
+    endsAt: z.string().nullable(),
+    daysLeft: z.number().int().nullable(),
+  }),
+  /** Who invoices are addressed to. */
+  billTo: BillTo,
 });
 export type OrgBillingDto = z.infer<typeof OrgBillingDto>;
+
+/** A plan an organisation can compare itself with (public plans only; no subscriber counts or internal fields). */
+export const OrgPlanDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  currency: z.string(),
+  priceMonthly: Money,
+  priceYearly: Money,
+  yearlyDiscountPct: z.number(),
+  limits: PlanLimits,
+  features: z.array(z.string()),
+  current: z.boolean(),
+});
+export type OrgPlanDto = z.infer<typeof OrgPlanDto>;

@@ -1,4 +1,4 @@
-import type { ColumnType, Generated, Insertable, Selectable, Updateable } from 'kysely';
+import type { ColumnType, Generated, GeneratedAlways, Insertable, Selectable, Updateable } from 'kysely';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type Json<T> = ColumnType<T, string | T, string | T>;
@@ -54,6 +54,8 @@ export interface PlatformDB {
     price_monthly: Generated<number>;
     yearly_discount_pct: Numeric;
     trial_days: Generated<number>;
+    /** What Grids charges on each payment an organisation takes: `{ percent, fixed }` (null: nothing). */
+    payment_fee: JsonDefault<{ percent: number; fixed: number } | null>;
     is_public: Generated<boolean>;
     is_archived: Generated<boolean>;
     updated_at: Timestamp;
@@ -85,6 +87,9 @@ export interface PlatformDB {
     currency: Generated<string>;
     notes: Text;
     mfa_required: Generated<boolean>;
+    session_policy: JsonDefault<Record<string, unknown> | null>;
+    access_blocked: Generated<boolean>;
+    billing_address: JsonDefault<Record<string, string | null> | null>;
     created_at: Timestamp;
     updated_at: Timestamp;
   };
@@ -97,6 +102,30 @@ export interface PlatformDB {
     phone: Text;
     job_title: Text;
   };
+  tenant_receipt_counter: { tenant_id: string; last: Generated<string | number> };
+  payment: {
+    id: string;
+    tenant_id: string;
+    provider: string;
+    provider_ref: string | null;
+    method: string | null;
+    surcharge: Generated<string | number>;
+    receipt_no: string | number | null;
+    project_key: string;
+    form_key: string;
+    amount: string | number;
+    currency: string;
+    description: Generated<string>;
+    payer_email: string | null;
+    status: Generated<'pending' | 'succeeded' | 'failed' | 'cancelled'>;
+    meta: JsonDefault<Record<string, unknown>>;
+    fee_amount: Generated<string | number>;
+    fee_invoice_id: string | null;
+    submission_id: string | null;
+    created_at: CreatedAt;
+    paid_at: Date | null;
+  };
+  usage_counter: { tenant_id: string; month: Date | string; key: string; n: string | number };
   subscription: {
     id: string;
     tenant_id: string;
@@ -198,13 +227,64 @@ export interface PlatformDB {
     category: 'question' | 'bug' | 'billing' | 'feature_request' | 'account' | 'other';
     priority: 'low' | 'normal' | 'high' | 'urgent';
     status: 'open' | 'pending' | 'resolved' | 'closed';
-    created_by: string;
+    created_by: string | null;
     assignee_id: string | null;
     created_at: CreatedAt;
     updated_at: Timestamp;
     resolved_at: Date | null;
     audience: Generated<'organisation' | 'platform'>;
     escalated_at: Date | null;
+    /** Someone with no account is known by what they typed. */
+    requester_name: string | null;
+    requester_email: string | null;
+    requester_phone: string | null;
+    /** member: raised in the workspace · help: asked from a project's page or the portal. */
+    channel: Generated<'member' | 'help'>;
+    /** The project whose page it came from. */
+    source_project: string | null;
+    /** One of the organisation's own stages. */
+    stage: string | null;
+    /** Keys of the organisation's own labels. */
+    labels: Generated<string[]>;
+  };
+  support_favorite: {
+    user_id: string;
+    ticket_id: string;
+    created_at: Generated<Date>;
+  };
+  support_email_code: {
+    id: string;
+    tenant_id: string;
+    email: string;
+    code_hash: string;
+    expires_at: Date;
+    attempts: Generated<number>;
+    used_at: Date | null;
+    created_at: Generated<Date>;
+  };
+  support_ticket_link: {
+    id: string;
+    tenant_id: string;
+    kind: 'parent' | 'blocks' | 'related';
+    source_id: string;
+    target_id: string;
+    created_by: string | null;
+    created_at: Generated<Date>;
+  };
+  support_file: {
+    id: string;
+    tenant_id: string;
+    ticket_id: string | null;
+    name: string;
+    content_type: string;
+    size: number;
+    content: Buffer;
+    created_at: Generated<Date>;
+  };
+  support_desk: {
+    tenant_id: string;
+    config: JsonDefault<Record<string, unknown>>;
+    updated_at: Generated<Date>;
   };
   platform_setting: {
     key: string;
@@ -214,9 +294,20 @@ export interface PlatformDB {
   support_message: {
     id: string;
     ticket_id: string;
-    author_id: string;
+    author_id: string | null;
     body: string;
     internal: Generated<boolean>;
+    /** requester | staff | platform | system */
+    author_kind: string | null;
+    author_name: string | null;
+    attachments: JsonDefault<unknown[]>;
+    /** An answer in a thread under another message. */
+    parent_id: string | null;
+    edited_at: Date | null;
+    /** Every earlier wording, oldest first. */
+    edits: JsonDefault<unknown[]>;
+    resolved_at: Date | null;
+    resolved_by: string | null;
     created_at: CreatedAt;
   };
   email_log: {
@@ -258,6 +349,13 @@ export interface PlatformDB {
     tenant_id: string | null;
     action: string;
     details: JsonDefault<Record<string, unknown>>;
+    project_key: string | null;
+    category: Generated<string>;
+    ip: string | null;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    user_agent: string | null;
   };
 }
 
@@ -310,6 +408,8 @@ export interface CellDB {
     name: string;
     theme: JsonDefault<Record<string, unknown>>;
     localization: JsonDefault<Record<string, unknown>>;
+    /** The plan's allowances, copied from the platform for the worker. */
+    limits: JsonDefault<Record<string, number | null> | null>;
     created_at: Timestamp;
   };
 
@@ -337,30 +437,59 @@ export interface CellDB {
     project_id: string;
     tenant_id: string;
     user_id: string;
-    role: 'manager' | 'editor' | 'viewer';
-    root_entity_id: string | null;
-    permission_group: string | null;
+    role: 'manager' | 'viewer';
+    /** Entities the member is limited to (each with its subtree); empty = the whole project. */
+    root_entity_ids: Generated<string[]>;
+    /** Permissions (ids) the member holds. */
+    permission_groups: Generated<string[]>;
     created_at: CreatedAt;
   };
   entity_type: {
     id: string;
     tenant_id: string;
-    project_id: string;
+    /** null = the shared row of an organisation type. */
+    project_id: string | null;
     key: string;
     name: string;
     plural: string;
     icon: Generated<string>;
     color: Generated<string>;
     geometry: Generated<'none' | 'point' | 'polygon' | 'line'>;
+    /** How places of this type are drawn on maps: { style, rotateBy }. */
+    marker: JsonDefault<{ style: 'dot' | 'pin' | 'icon'; rotateBy: string | null }>;
     attributes: JsonDefault<unknown[]>;
     parent_types: ColumnType<string[], string[] | undefined, string[]>;
+    /** The hidden type of a project's own entity (`this_project`): not listed, not editable. */
+    system: Generated<boolean>;
+    sort: Generated<number>;
+    /** Set for a type defined by the organisation: linked to it and edited there. */
+    org_type_id: string | null;
+    /** Most entities of this type one project may hold; null = no limit. */
+    max_per_project: number | null;
+    created_at: CreatedAt;
+  };
+  /** An entity type defined for the whole organisation; every project holds a linked copy. */
+  org_entity_type: {
+    id: string;
+    tenant_id: string;
+    key: string;
+    name: string;
+    plural: string;
+    icon: Generated<string>;
+    color: Generated<string>;
+    geometry: Generated<'none' | 'point' | 'polygon' | 'line'>;
+    marker: JsonDefault<{ style: 'dot' | 'pin' | 'icon'; rotateBy: string | null }>;
+    attributes: JsonDefault<unknown[]>;
+    parent_types: ColumnType<string[], string[] | undefined, string[]>;
+    max_per_project: number | null;
     sort: Generated<number>;
     created_at: CreatedAt;
   };
   entity: {
     id: string;
     tenant_id: string;
-    project_id: string;
+    /** null = a shared entity: it belongs to the organisation and shows in every project. */
+    project_id: string | null;
     type_id: string;
     code: string;
     name: string;
@@ -369,6 +498,8 @@ export interface CellDB {
     attributes: JsonDefault<Record<string, unknown>>;
     /** PostGIS; read with ST_AsGeoJSON, write with ST_GeomFromGeoJSON. */
     geom: unknown;
+    /** Optional centre point (PostGIS Point), e.g. where to pin an area on a map. */
+    point: unknown;
     version: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;
@@ -393,6 +524,10 @@ export interface CellDB {
     value_type: Generated<'number' | 'text' | 'boolean'>;
     unit: Generated<string>;
     aggregation: Generated<'sum' | 'avg' | 'min' | 'max' | 'last' | 'count'>;
+    /** The data group it is in (`general` unless chosen). */
+    group_key: Generated<string>;
+    /** How things refer to it: its key, with the group in front unless it is in `general`. Made by the database. */
+    ref: GeneratedAlways<string>;
     created_at: CreatedAt;
   };
   observation: {
@@ -406,6 +541,34 @@ export interface CellDB {
     source: Generated<string>;
     source_ref: string | null;
     recorded_at: Timestamp;
+  };
+
+  project_variable: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    description: Generated<string>;
+    value_enc: string;
+    updated_by: string | null;
+    created_at: CreatedAt;
+    updated_at: Generated<Date>;
+  };
+  project_connection: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    description: Generated<string>;
+    kind: 'http' | 'postgres' | 'redshift' | 'mysql' | 'mariadb' | 'mssql' | 'oracle' | 'clickhouse' | 'snowflake' | 'bigquery' | 'file' | 's3' | 'azure_blob' | 'gcs' | 'gdrive';
+    target: string;
+    headers: JsonDefault<{ name: string; value: string }[]>;
+    options: JsonDefault<Record<string, string>>;
+    test: Generated<string>;
+    last_test: Json<Record<string, unknown> | null>;
+    created_at: CreatedAt;
+    updated_at: Generated<Date>;
   };
 
   // ---------- orchestration (M4) ----------
@@ -491,7 +654,39 @@ export interface CellDB {
     last_materialised_at: Date | null;
     last_run_id: string | null;
     freshness_minutes: number | null;
+    /** DatasetSource: rows (job or upload), a database connection, or local SQL. */
+    source: JsonDefault<Record<string, unknown>>;
+    column_types: JsonDefault<Record<string, string>>;
+    /** DatasetSettings: time column, metrics, parameters. */
+    settings: JsonDefault<Record<string, unknown>>;
+    refresh_error: string | null;
     created_at: CreatedAt;
+  };
+  dataset_version: {
+    dataset_id: string;
+    tenant_id: string;
+    version: number;
+    /** name, description, freshnessMinutes, source and settings as saved. */
+    definition: Json<Record<string, unknown>>;
+    saved_by: string | null;
+    saved_at: CreatedAt;
+  };
+  /** A dataset run again for the values a viewer picked. */
+  dataset_variant: {
+    id: string;
+    tenant_id: string;
+    dataset_id: string;
+    key: string;
+    params: JsonDefault<Record<string, unknown>>;
+    row_count: Generated<number>;
+    refreshed_at: Generated<Date>;
+    last_used_at: Generated<Date>;
+  };
+  dataset_variant_row: {
+    id: Generated<string>;
+    tenant_id: string;
+    variant_id: string;
+    data: Json<Record<string, unknown>>;
   };
   dataset_row: {
     id: Generated<string>;
@@ -503,10 +698,13 @@ export interface CellDB {
     id: string;
     tenant_id: string;
     project_id: string;
-    key: string;
     name: string;
     description: Generated<string>;
-    parent_key: string | null;
+    parent_id: string | null;
+    /** A built-in permission: can't be deleted or moved. */
+    system: Generated<boolean>;
+    /** Which built-in one: the project admin or the public permission. */
+    kind: 'admin' | 'public' | null;
     created_at: CreatedAt;
   };
   map_overlay: {
@@ -544,6 +742,155 @@ export interface CellDB {
     uploaded_at: Generated<Date>;
   };
 
+  form_attachment: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    form_key: string;
+    name: string;
+    content_type: string;
+    size: number;
+    content: Buffer;
+    uploaded_by: string | null;
+    uploaded_at: Generated<Date>;
+  };
+
+  work_type: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    description: Generated<string>;
+    icon: Generated<string>;
+    color: Generated<string>;
+    prefix: Generated<string>;
+    states: Json<{ key: string; label: string; kind: 'open' | 'active' | 'done' }[]>;
+    sla: JsonDefault<{ respondHours?: Partial<Record<string, number>>; resolveHours?: Partial<Record<string, number>> }>;
+    next_number: Generated<number>;
+    created_at: Generated<Date>;
+  };
+  work_item: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    type_id: string;
+    number: number;
+    title: string;
+    description: Generated<string>;
+    state: string;
+    priority: Generated<'low' | 'normal' | 'high' | 'urgent'>;
+    assignee_id: string | null;
+    requester_id: string | null;
+    requester_name: string | null;
+    entity_id: string | null;
+    submission_id: string | null;
+    due_at: Date | null;
+    respond_by: Date | null;
+    resolve_by: Date | null;
+    first_response_at: Date | null;
+    resolved_at: Date | null;
+    source: Generated<string>;
+    created_by: string | null;
+    created_at: Generated<Date>;
+    updated_at: Generated<Date>;
+  };
+  work_event: {
+    id: string;
+    tenant_id: string;
+    item_id: string;
+    actor_id: string | null;
+    kind: string;
+    body: Generated<string>;
+    internal: Generated<boolean>;
+    data: JsonDefault<Record<string, unknown>>;
+    created_at: Generated<Date>;
+  };
+
+  work_schedule: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    type_id: string;
+    key: string;
+    name: string;
+    title: string;
+    description: Generated<string>;
+    priority: Generated<'low' | 'normal' | 'high' | 'urgent'>;
+    assignee_id: string | null;
+    entity_id: string | null;
+    entity_type: string | null;
+    every_days: number | null;
+    meter_attribute: string | null;
+    meter_every: number | null;
+    lead_days: Generated<number>;
+    active: Generated<boolean>;
+    created_at: Generated<Date>;
+  };
+  work_schedule_target: {
+    schedule_id: string;
+    entity_id: string;
+    tenant_id: string;
+    next_due_at: Date | null;
+    last_meter: number | null;
+    item_id: string | null;
+  };
+
+  form_link: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    form_id: string;
+    kind: 'shared' | 'invite';
+    token: string;
+    label: Generated<string>;
+    email: string | null;
+    entity_id: string | null;
+    max_uses: number | null;
+    uses: Generated<number>;
+    opens_at: string | null;
+    closes_at: string | null;
+    /** The language it opens the form in; null: the person's own choice. */
+    language: string | null;
+    revoked_at: Date | null;
+    created_by: string | null;
+    created_at: Generated<Date>;
+    last_used_at: Date | null;
+  };
+
+  form_email_code: {
+    id: string;
+    tenant_id: string;
+    form_id: string;
+    email: string;
+    code_hash: string;
+    attempts: Generated<number>;
+    expires_at: Date;
+    used_at: Date | null;
+    created_at: Generated<Date>;
+  };
+
+  data_group: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    key: string;
+    name: string;
+    description: Generated<string>;
+    created_at: Generated<Date>;
+  };
+
+  form_document_revision: {
+    id: Generated<string>;
+    tenant_id: string;
+    form_id: string;
+    document_id: string;
+    action: string;
+    snapshot: unknown;
+    actor_id: string | null;
+    created_at: Generated<Date>;
+  };
+
   // ---------- dashboards (M5) & forms (M6) ----------
   dashboard: {
     id: string;
@@ -556,6 +903,7 @@ export interface CellDB {
     is_public: Generated<boolean>;
     filters: JsonDefault<Record<string, unknown>>;
     permission_group: string | null;
+    icon: Generated<string>;
     sort: Generated<number>;
     created_at: CreatedAt;
     updated_at: Timestamp;
@@ -608,7 +956,15 @@ export interface CellDB {
     location: unknown;
     status: Generated<'complete' | 'in_review' | 'approved' | 'rejected' | 'returned'>;
     stage: number | null;
+    /** Workflow node the submission is parked on (null: derive from `stage`, or no workflow). */
+    node_id: string | null;
+    /** The end node a finished submission reached; its name is the outcome shown. */
+    outcome_node: string | null;
     decided_at: Date | null;
+    /** The link the person came in through, when they had no account. */
+    link_id: string | null;
+    /** The name or email they typed, for a submission that came in through a link. */
+    submitter: string | null;
   };
   submission_review: {
     id: Generated<string>;
@@ -616,10 +972,28 @@ export interface CellDB {
     submission_id: string;
     stage: number | null;
     stage_name: string | null;
-    decision: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'returned';
+    node_id: string | null;
+    decision: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'returned' | 'timed_out';
     comment: Generated<string>;
     actor_id: string | null;
     at: Timestamp;
+  };
+  /** Outbox and timers of the form workflow engine (email, webhook, SLA/wait timers). */
+  workflow_task: {
+    id: string;
+    tenant_id: string;
+    project_id: string;
+    submission_id: string;
+    node_id: string;
+    kind: 'email' | 'webhook' | 'timer';
+    status: Generated<'pending' | 'done' | 'failed' | 'cancelled'>;
+    due_at: Timestamp;
+    locked_until: Date | null;
+    attempts: Generated<number>;
+    last_error: string | null;
+    payload: JsonDefault<Record<string, unknown>>;
+    created_at: CreatedAt;
+    done_at: Date | null;
   };
 }
 
@@ -653,6 +1027,7 @@ export interface IdentityDB {
     name: string;
     mfa_required: Generated<boolean>;
     allow_registration: Generated<boolean>;
+    blocked: Generated<boolean>;
     created_at: CreatedAt;
   };
   account_org: { account_id: string; org_id: string };
@@ -676,6 +1051,16 @@ export interface IdentityDB {
     expires_at: Date | null;
     consumed_at: Date | null;
   };
+  org_client: {
+    client_id: string;
+    org_id: string;
+    name: string;
+    secret_enc: string | null;
+    redirect_uris: Json<string[]>;
+    post_logout_redirect_uris: Json<string[]>;
+    disabled: Generated<boolean>;
+    created_at: CreatedAt;
+  };
   signing_key: { kid: string; private_jwk: Json<Record<string, unknown>>; active: Generated<boolean>; created_at: CreatedAt };
   pending_login: {
     uid: string;
@@ -692,5 +1077,51 @@ export interface IdentityDB {
     event: string;
     success: boolean;
     at: CreatedAt;
+  };
+}
+
+/** GridPay's own database: the merchants organisations add and the payments taken through them. */
+export interface PayDB {
+  merchant: {
+    id: string;
+    org_id: string;
+    name: string;
+    merchant_ref: Generated<string>;
+    credentials_enc: string | null;
+    logo: string | null;
+    methods: JsonDefault<string[]>;
+    mode: Generated<'test' | 'live'>;
+    enabled: Generated<boolean>;
+    created_at: CreatedAt;
+  };
+  pay_method: {
+    org_id: string;
+    id: string;
+    name: string;
+    kind: 'card' | 'wallet' | 'bank' | 'instalments';
+    logo: string | null;
+    surcharge_percent: Generated<string | number>;
+    surcharge_fixed: Generated<string | number>;
+    instalments: Generated<number>;
+    sort: Generated<number>;
+    created_at: CreatedAt;
+  };
+  payment: {
+    id: string;
+    org_id: string;
+    merchant_id: string | null;
+    project_key: string;
+    form_key: string;
+    amount: string | number;
+    currency: string;
+    description: Generated<string>;
+    payer_email: string | null;
+    status: Generated<'pending' | 'succeeded' | 'failed' | 'cancelled'>;
+    return_url: string;
+    method: string | null;
+    surcharge: Generated<string | number>;
+    notified_at: Date | null;
+    created_at: CreatedAt;
+    paid_at: Date | null;
   };
 }

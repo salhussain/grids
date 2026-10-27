@@ -1,0 +1,15 @@
+{
+  "name": "@grids/offline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline collection: the outbox that sends submissions up when there is a connection, and the download of places to keep on the device. Storage and network are passed in, so it runs the same on a phone, in a browser and in tests.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

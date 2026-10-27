@@ -1,16 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { PageHeader, Panel, Stat, cx, relTime } from '@grids/ui';
+import { PageHeader, Panel, cx, relTime } from '@grids/ui';
 import type { Inbox} from 'lucide-react';
 import { AlertTriangle, ArrowRight, ClipboardCheck, FolderKanban, KeyRound, LifeBuoy, MailPlus, Network, PencilRuler, Users } from 'lucide-react';
 import { useMemo } from 'react';
 import { api } from '../api';
 import { useT } from '../i18n';
 import { useCan, useMe, useWorkspace } from '../session';
+import { useInbox } from './forms/InboxPage';
 import { Chart, type ChartOption } from '@grids/viz';
 import { FreshnessBadge } from '@grids/viz';
 import { brandColor, INK, useScheme } from '@grids/viz';
 import { iconOf } from './projects/context';
+import { Avatar, StatCard } from '../ui';
 
 const pct = (now: number, before: number) => (before ? Math.round(((now - before) / before) * 100) : null);
 const humanAction = (a: string) => a.replace(/[._]/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -25,14 +27,17 @@ export function HomePage() {
   const admin = ws.me.role === 'org_admin';
   const insights = useQuery({ queryKey: ['insights', id], queryFn: () => api.insights(id), refetchInterval: 60_000 });
   const projects = useQuery({ queryKey: ['projects', id, false], queryFn: () => api.projects(id, false) });
+  const inbox = useInbox();
   const activity = useQuery({ queryKey: ['activity', id, 'home'], queryFn: () => api.activity(id, { page: 1, pageSize: 8 }), enabled: can('audit.view') });
   const billing = useQuery({ queryKey: ['billing', id], queryFn: () => api.billing(id), enabled: can('billing.view') });
   const name = (me.displayName ?? me.email ?? '').split(' ')[0];
   const i = insights.data;
   const change = i ? pct(i.submissions30, i.submissionsPrev30) : null;
 
+  const first = inbox.data?.toReview[0];
+  const pendingTo = first ? `/o/${id}/forms/${first.project.key}/${first.formKey}?tab=pending` : `/o/${id}/forms`;
   const attention = [
-    i?.toReview ? { icon: ClipboardCheck, text: `${i.toReview} submission${i.toReview === 1 ? '' : 's'} waiting for review`, to: `/o/${id}/inbox`, tone: 'warn' } : null,
+    i?.toReview ? { icon: ClipboardCheck, text: `${i.toReview} submission${i.toReview === 1 ? '' : 's'} waiting for review`, to: pendingTo, tone: 'warn' } : null,
     i?.tickets.internalOpen && can('support.manage') ? { icon: LifeBuoy, text: `${i.tickets.internalOpen} open internal ticket${i.tickets.internalOpen === 1 ? '' : 's'}`, to: `/o/${id}/support`, tone: 'warn' } : null,
     i?.projects.stale ? { icon: AlertTriangle, text: `${i.projects.stale} project${i.projects.stale === 1 ? ' has' : 's have'} stale data`, to: `/o/${id}/projects`, tone: 'bad' } : null,
     i?.members.invited && can('people.view', { anywhere: true }) ? { icon: MailPlus, text: `${i.members.invited} invitation${i.members.invited === 1 ? '' : 's'} not yet accepted`, to: `/o/${id}/people`, tone: 'info' } : null,
@@ -47,12 +52,37 @@ export function HomePage() {
         title={name ? t('web.home.welcomeName', { name }) : t('web.home.welcome')}
         meta={ws.theme.welcomeMessage ? <span>{ws.theme.welcomeMessage}</span> : <span>{t('web.home.plan', { plan: ws.tenant.planName ?? '—' })}</span>}
       />
-      <div className="stat-strip mb-6 grid grid-cols-2 gap-px border border-zinc-200 bg-zinc-200 md:grid-cols-3 xl:grid-cols-5 [&>*]:border-0">
-        <Stat label={t('web.home.people')} value={i ? i.members.active.toLocaleString() : '–'} sub={i ? t('web.home.invitationsPending', { count: i.members.invited }) : undefined} />
-        <Stat label={t('web.home.projects')} value={i ? (i.projects.live + i.projects.draft).toLocaleString() : '–'} sub={i ? `${i.projects.live} live · ${i.projects.draft} draft` : undefined} tone={i?.projects.stale ? 'warn' : undefined} />
-        <Stat label="Submissions (30 days)" value={i ? i.submissions30.toLocaleString() : '–'} sub={change === null ? 'No earlier period' : `${change > 0 ? '+' : ''}${change}% vs previous 30 days`} />
-        <Stat label="Data points (30 days)" value={i ? i.observations30.toLocaleString() : '–'} sub={i ? `${i.entities.toLocaleString()} entities` : undefined} />
-        <Stat label={t('web.home.tickets')} value={i ? (i.tickets.internalOpen + i.tickets.platformOpen).toLocaleString() : '–'} sub={i ? `${i.tickets.internalOpen} internal · ${i.tickets.platformOpen} with Grids` : undefined} />
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={Users}
+          label={t('web.home.people')}
+          value={i ? i.members.active.toLocaleString() : '–'}
+          sub={i ? t('web.home.invitationsPending', { count: i.members.invited }) : undefined}
+          to={`/o/${id}/people`}
+        />
+        <StatCard
+          icon={FolderKanban}
+          label={t('web.home.projects')}
+          value={i ? (i.projects.live + i.projects.draft).toLocaleString() : '–'}
+          sub={i ? `${i.projects.live} live · ${i.projects.draft} draft` : undefined}
+          tone={i?.projects.stale ? 'warn' : 'default'}
+          to={`/o/${id}/projects`}
+        />
+        <StatCard
+          icon={ClipboardCheck}
+          label="Submissions (30 days)"
+          value={i ? i.submissions30.toLocaleString() : '–'}
+          sub={change === null ? 'No earlier period' : `${change > 0 ? '+' : ''}${change}% vs previous 30 days`}
+          tone={change !== null && change > 0 ? 'good' : 'default'}
+        />
+        <StatCard
+          icon={LifeBuoy}
+          label={t('web.home.tickets')}
+          value={i ? (i.tickets.internalOpen + i.tickets.platformOpen).toLocaleString() : '–'}
+          sub={i ? `${i.tickets.internalOpen} internal · ${i.tickets.platformOpen} with Grids` : undefined}
+          tone={i?.tickets.internalOpen ? 'warn' : 'default'}
+          to={`/o/${id}/support`}
+        />
       </div>
 
       <div className="mb-6 grid gap-6 xl:grid-cols-3">
@@ -140,10 +170,13 @@ export function HomePage() {
           >
             <ol>
               {activity.data?.items.map((a) => (
-                <li key={a.id} className="border-t border-zinc-100 px-5 py-2.5 text-sm first:border-t-0">
-                  <div className="truncate">{humanAction(a.action)}</div>
-                  <div className="text-xs text-zinc-500">
-                    {a.actorEmail ?? 'System'} · {relTime(a.at)}
+                <li key={a.id} className="flex items-center gap-3 border-t border-zinc-100 px-5 py-2.5 text-sm first:border-t-0">
+                  <Avatar name={a.actorEmail ?? 'System'} className="size-7 text-[10px]" />
+                  <div className="min-w-0">
+                    <div className="truncate">{humanAction(a.action)}</div>
+                    <div className="text-xs text-zinc-500">
+                      {a.actorEmail ?? 'System'} · {relTime(a.at)}
+                    </div>
                   </div>
                 </li>
               ))}

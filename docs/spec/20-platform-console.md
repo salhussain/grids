@@ -53,4 +53,4 @@ Organisation members raise tickets for their own organisation. Staff can also op
 - **System log:** the append-only `platform_audit_log` covers every mutation, filterable by area, organisation and free text, with cursor pagination.
 - **Email log:** every transactional email attempt (template, recipient, body, delivery status and error). Delivery failures never fail the business operation that sent the email.
 
-Dev mail goes to Mailpit (http://localhost:8025).
+Dev mail stays in the platform's Email log (`SMTP_URL=log`).

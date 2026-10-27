@@ -1,0 +1,22 @@
+{
+  "name": "@grids/pay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GridPay: merchants, the payment page and card handling, kept apart from the platform API.",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node --env-file=../../.env dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@grids/db": "workspace:^",
+    "@grids/schema": "workspace:^",
+    "fastify": "^5.12.5",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1",
+    "zod": "^4.6.5"
+  }
+}

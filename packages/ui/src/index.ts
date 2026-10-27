@@ -5,3 +5,8 @@ export * from './http';
 export { BarChart, type Bar } from './BarChart';
 export * from './mode';
 export * from './listbox';
+export * from './header';
+export * from './datepicker';
+export * from './confirm';
+export { SessionPolicyPanel, ActiveSessionsList, PastSessionsList } from './sessionPolicy';
+export { FilterMenu, type FilterCategory, type FilterOption, type FilterValue } from './filterMenu';

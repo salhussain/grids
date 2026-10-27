@@ -10,12 +10,15 @@ echarts.use([LineChart, BarChart, PieChart, GaugeChart, GridComponent, TooltipCo
 export type ChartOption = echarts.EChartsCoreOption;
 
 /** Thin ECharts wrapper: canvas renderer, resizes with its container. */
-export function Chart({ option, height = '100%', label }: { option: ChartOption; height?: number | string; label: string }) {
+export function Chart({ option, height = '100%', label, onPick }: { option: ChartOption; height?: number | string; label: string; /** A bar or slice was clicked: its name. */ onPick?: (name: string) => void }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+  const pick = useRef(onPick);
+  pick.current = onPick;
   useEffect(() => {
     if (!el.current) return;
     chart.current = echarts.init(el.current, undefined, { renderer: 'canvas' });
+    chart.current.on('click', (e) => pick.current?.(String(e.name)));
     const ro = new ResizeObserver(() => chart.current?.resize());
     ro.observe(el.current);
     return () => {
@@ -27,5 +30,5 @@ export function Chart({ option, height = '100%', label }: { option: ChartOption;
   useEffect(() => {
     chart.current?.setOption(option, { notMerge: true });
   }, [option]);
-  return <div ref={el} role="img" aria-label={label} style={{ height, width: '100%' }} />;
+  return <div ref={el} role="img" aria-label={label} style={{ height, width: '100%', cursor: onPick ? 'pointer' : undefined }} />;
 }

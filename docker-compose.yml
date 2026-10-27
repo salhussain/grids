@@ -26,18 +26,6 @@ services:
       - s3data:/data
       - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
 
-  mail:
-    # Optional SMTP catcher (docker compose --profile mailpit up -d; set SMTP_URL=smtp://localhost:1025).
-    # Not needed by default: mail stays in the platform's Email log (SMTP_URL=log).
-    profiles: ['mailpit']
-    image: axllent/mailpit:v1.27
-    environment:
-      # Accept any credentials over plain SMTP in dev.
-      MP_SMTP_AUTH_ACCEPT_ANY: '1'
-      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
-    ports: ['1025:1025', '8025:8025']
-
-
 volumes:
   pgdata:
   s3data:

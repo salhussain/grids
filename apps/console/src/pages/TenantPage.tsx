@@ -17,7 +17,7 @@ import { api } from '../api';
 import { tenantRoute } from '../router';
 import { Avatar, Fact } from '../ui';
 import { useCan } from '../session';
-import { Button, Callout, ErrorNotice, Loading, Mono, Status, Tabs, useToast } from '@grids/ui';
+import { confirmDialog, Button, Callout, ErrorNotice, Loading, Mono, Status, Tabs, useToast } from '@grids/ui';
 import { relTime } from '@grids/ui';
 import { InvoiceDialog, SubscribeDialog } from './dialogs';
 import { ActivityTab } from './tenant/ActivityTab';
@@ -50,17 +50,13 @@ export function TenantPage() {
       >
         <ArrowLeft className="size-4" /> Organisations
       </Link>
-      <section className="rise relative mb-6 overflow-hidden rounded-2xl border border-zinc-200 bg-snow p-5 shadow-surface sm:p-6">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 -end-16 size-72 rounded-full bg-accent-600/10 blur-3xl"
-        />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <section className="mb-6 border border-zinc-200 bg-snow p-5 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <Avatar name={t.name} className="size-14 rounded-2xl text-lg" />
+            <Avatar name={t.name} className="size-14 text-lg" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] text-ink">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-ink">
                   {t.name}
                 </h1>
                 <Status value={t.status} />
@@ -236,7 +232,7 @@ function StatusActions({ t }: { t: TenantDetail }) {
       void qc.invalidateQueries({ queryKey: ['tenants'] });
       toast(`${res.name} is now ${res.status}`);
     },
-    onError: (e) => alert(e.message),
+    onError: (e) => toast(e.message),
   });
   if (t.status === 'cancelled') return null;
   return (
@@ -245,8 +241,7 @@ function StatusActions({ t }: { t: TenantDetail }) {
         <Button
           variant="danger"
           loading={set.isPending}
-          onClick={() =>
-            confirm(`Suspend ${t.name}? Its users lose access until reactivated.`) &&
+          onClick={async () => (await confirmDialog(`Suspend ${t.name}? Its users lose access until reactivated.`)) &&
             set.mutate('suspended')
           }
         >
@@ -262,8 +257,7 @@ function StatusActions({ t }: { t: TenantDetail }) {
         <Button
           variant="danger"
           loading={set.isPending}
-          onClick={() =>
-            confirm(`Cancel ${t.name}? This cancels the subscription and voids open invoices.`) &&
+          onClick={async () => (await confirmDialog(`Cancel ${t.name}? This cancels the subscription and voids open invoices.`)) &&
             set.mutate('cancelled')
           }
         >

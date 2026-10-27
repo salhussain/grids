@@ -14,11 +14,11 @@ export function memberSource(tenantId: string, project: string): ExplorerSource 
     },
     explore: (entity) => api.explore(tenantId, project, entity),
     overlays: () => api.overlays(tenantId, project),
-    overlay: (key, entity) => api.overlayValues(tenantId, project, key, entity),
+    overlay: (key, entity, period) => api.overlayValues(tenantId, project, key, entity, period),
     search: (q) => api.searchPlaces(tenantId, project, q),
     places: (parent) => api.places(tenantId, project, parent),
     dashboards: () => api.dashboards(tenantId, project),
-    names: async () => Object.fromEntries((await api.elements(tenantId, project)).map((e) => [e.key, e.name])),
+    names: async () => Object.fromEntries((await api.elements(tenantId, project)).map((e) => [e.ref, e.name])),
     widget: (d, w, params) => api.widget(tenantId, project, d.key, w.id, params),
   };
 }
@@ -35,7 +35,7 @@ export function publicSource(tenant: string, project: string, dashboards: Dashbo
     },
     explore: (entity) => api.publicExplore(tenant, project, entity),
     overlays: () => api.publicOverlays(tenant, project),
-    overlay: (key, entity) => api.publicOverlay(tenant, project, key, entity),
+    overlay: (key, entity, period) => api.publicOverlay(tenant, project, key, entity, period),
     search: (q) => api.publicSearch(tenant, project, q),
     places: (parent) => api.publicPlaces(tenant, project, parent),
     dashboards: async () => dashboards,

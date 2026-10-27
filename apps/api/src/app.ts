@@ -10,10 +10,12 @@ import cors from '@fastify/cors';
 import type { Problem } from '@grids/schema';
 import type { AuthDeps } from './auth/plugin.js';
 import { HttpError } from './errors.js';
+import { activityHooks } from './activity-hooks.js';
 import { adminRoutes } from './routes/admin.js';
 import { closeAllStreams } from './routes/sse.js';
 import { projectRoutes, publicProjectRoutes } from './routes/projects.js';
 import { internalRoutes } from './routes/internal.js';
+import { payInternalRoutes } from './routes/pay-internal.js';
 import { publicRoutes } from './routes/public.js';
 import { tenantRoutes } from './routes/tenant.js';
 
@@ -26,10 +28,12 @@ export interface AppDeps {
   corsOrigins?: string[];
   /** Service-to-service endpoints (mail relay); omitted when not configured. */
   internal?: { serviceToken: string; devMailbox: boolean };
+  /** GridPay's calls back to the platform. */
+  pay?: { serviceToken: string };
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const app = Fastify({ logger: deps.logger ?? false }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({ logger: deps.logger ?? false, trustProxy: process.env.TRUST_PROXY === 'true' }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cors, {
@@ -58,7 +62,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         status,
         instance: req.url,
         ...(err instanceof HttpError && err.detail && { detail: err.detail }),
+        ...(err instanceof HttpError && err.code && { code: err.code }),
         ...(err instanceof HttpError && err.errors && { errors: err.errors }),
+        ...(err instanceof HttpError && err.sql && { sql: err.sql }),
       };
     }
     void reply.status(problem.status).type('application/problem+json').send(problem);
@@ -107,11 +113,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const services = deps.platform.services;
     app.addHook('preClose', async () => closeAllStreams());
     app.addHook('onClose', async () => services.events.close());
+    activityHooks(app, services);
     await app.register(publicRoutes, deps.platform);
     await app.register(tenantRoutes, deps.platform);
     await app.register(adminRoutes, deps.platform);
     await app.register(projectRoutes, deps.platform);
     await app.register(publicProjectRoutes, deps.platform);
+    if (deps.pay) await app.register(payInternalRoutes, { payments: deps.platform.services.payments, serviceToken: deps.pay.serviceToken });
     if (deps.internal) await app.register(internalRoutes, { email: deps.platform.services.email, ...deps.internal });
   }
 

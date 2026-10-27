@@ -19,7 +19,7 @@ const CATEGORIES = [
  * Help from anywhere in the workspace: raise an issue with the organisation's own
  * admins (they can escalate it), or, for admins, straight to the Grids team.
  */
-export function SupportBubble() {
+export function SupportBubble({ collapsed = false }: { collapsed?: boolean }) {
   const ws = useWorkspace();
   const can = useCan();
   const qc = useQueryClient();
@@ -37,10 +37,12 @@ export function SupportBubble() {
   });
   if (!can('support.create')) return null;
   const admin = can('support.manage');
+  // On the left it sits just past the sidebar (16rem, or 4rem collapsed) so it never covers it.
+  const left = (ws.theme.platformHelpPosition ?? ws.theme.helpPosition) === 'left';
   return (
-    <div className="fixed end-5 bottom-5 z-40 print:hidden">
+    <div className={cx('fixed bottom-5 z-40 print:hidden', left ? (collapsed ? 'start-5 lg:start-21' : 'start-5 lg:start-69') : 'end-5')}>
       {open && (
-        <div role="dialog" aria-label="Get help" className="absolute end-0 bottom-14 w-[min(92vw,380px)] border border-zinc-300 bg-snow shadow-2xl">
+        <div role="dialog" aria-label="Get help" className={cx('absolute bottom-14 w-[min(92vw,380px)] border border-zinc-300 bg-snow shadow-2xl', left ? 'start-0' : 'end-0')}>
           <header className="flex items-center justify-between border-b border-zinc-200 bg-ink px-4 py-3 text-canvas">
             <span className="flex items-center gap-2 text-sm font-semibold">
               <LifeBuoy className="size-4" /> Get help
@@ -114,7 +116,7 @@ export function SupportBubble() {
         aria-label={open ? 'Close help' : 'Get help'}
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex size-12 items-center justify-center bg-accent-600 text-on-accent shadow-lg transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
+        className="flex size-12 items-center justify-center rounded-full bg-accent-600 text-on-accent shadow-lg transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
       >
         {open ? <X className="size-5" /> : <LifeBuoy className="size-5" />}
       </button>

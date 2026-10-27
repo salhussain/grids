@@ -4,7 +4,7 @@ import { PAYMENT_METHODS, yearlyPrice, type InvoiceDto, type PlanDto } from '@gr
 import { api } from '../api';
 import { useCan } from '../session';
 import { TenantPicker } from './shared';
-import {
+import { confirmDialog,
   Button,
   Checkbox,
   Dialog,
@@ -18,7 +18,7 @@ import {
   cx,
   useToast,
 } from '@grids/ui';
-import { date, humanize, money } from '@grids/ui';
+import { DatePicker, date, humanize, money } from '@grids/ui';
 
 const invalidateBilling = (qc: ReturnType<typeof useQueryClient>) =>
   Promise.all(
@@ -325,7 +325,7 @@ export function InvoiceDialog({
             {can('billing.invoices') && (
               <Button
                 variant="danger"
-                onClick={() => confirm(`Void ${inv.number}?`) && voidIt.mutate()}
+                onClick={async () => (await confirmDialog(`Void ${inv.number}?`)) && voidIt.mutate()}
                 loading={voidIt.isPending}
               >
                 Void
@@ -402,7 +402,7 @@ export function InvoiceDialog({
                 />
               </Field>
               <Field label="Paid on">
-                <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                <DatePicker value={paidAt} onChange={setPaidAt} clearable={false} />
               </Field>
             </div>
           )}

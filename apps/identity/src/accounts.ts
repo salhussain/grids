@@ -296,15 +296,16 @@ export class Accounts {
 
   // ---------- organisations & policy ----------
 
-  async upsertOrg(id: string, name: string, policy: { mfaRequired?: boolean; allowRegistration?: boolean } = {}) {
+  async upsertOrg(id: string, name: string, policy: { mfaRequired?: boolean; allowRegistration?: boolean; blocked?: boolean } = {}) {
     await this.db
       .insertInto('org')
-      .values({ id, name, mfa_required: policy.mfaRequired ?? false, allow_registration: policy.allowRegistration ?? true })
+      .values({ id, name, mfa_required: policy.mfaRequired ?? false, allow_registration: policy.allowRegistration ?? true, blocked: policy.blocked ?? false })
       .onConflict((oc) =>
         oc.column('id').doUpdateSet({
           name,
           ...(policy.mfaRequired !== undefined && { mfa_required: policy.mfaRequired }),
           ...(policy.allowRegistration !== undefined && { allow_registration: policy.allowRegistration }),
+          ...(policy.blocked !== undefined && { blocked: policy.blocked }),
         }),
       )
       .execute();
@@ -312,6 +313,26 @@ export class Accounts {
 
   findOrg(id: string) {
     return this.db.selectFrom('org').selectAll().where('id', '=', id).executeTakeFirst();
+  }
+
+  /** True when this sign-in is for an organisation whose subscription has ended, or the person belongs only to such ones. */
+  async signInBlocked(accountId: string, orgId: string | null): Promise<boolean> {
+    if (orgId) {
+      const org = await this.findOrg(orgId);
+      if (org?.blocked) return true;
+    }
+    const orgs = await this.db
+      .selectFrom('account_org as ao')
+      .innerJoin('org as o', 'o.id', 'ao.org_id')
+      .select('o.blocked')
+      .where('ao.account_id', '=', accountId)
+      .execute();
+    return orgs.length > 0 && orgs.every((o) => o.blocked);
+  }
+
+  async isOrgMember(accountId: string, orgId: string): Promise<boolean> {
+    const row = await this.db.selectFrom('account_org').select('account_id').where('account_id', '=', accountId).where('org_id', '=', orgId).executeTakeFirst();
+    return !!row;
   }
 
   async linkToOrg(accountId: string, orgId: string) {

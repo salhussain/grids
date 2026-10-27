@@ -6,12 +6,16 @@ export class HttpError extends Error {
     readonly detail?: string,
     /** Per-field problems (e.g. form answers), rendered as `errors` in the problem body. */
     readonly errors?: { path: string; message: string }[],
+    /** What the database said about a query that failed (see `Problem.sql`). */
+    readonly sql?: Record<string, unknown>,
+    /** A stable name for the reason (see `Problem.code`). */
+    readonly code?: string,
   ) {
     super(message);
   }
 }
 
-export const badRequest = (msg: string, detail?: string) => new HttpError(400, msg, detail);
+export const badRequest = (msg: string, detail?: string, sql?: Record<string, unknown>) => new HttpError(400, msg, detail, undefined, sql);
 export const unauthorized = (detail?: string) => new HttpError(401, 'Unauthorized', detail);
 export const forbidden = (detail?: string) => new HttpError(403, 'Forbidden', detail);
 export const notFound = (what: string) => new HttpError(404, `${what} not found`);

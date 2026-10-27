@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grids status</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#161616;--mute:#6b7280;--line:#e4e6ea;--soft:#f0f1f3;--accent:#0f62fe;--up:#198038;--degraded:#b28600;--down:#a2191f;--none:#d4d7dc}
+:root[data-theme=dark]{--bg:#111315;--card:#1a1d20;--ink:#f2f4f8;--mute:#9ca3af;--line:#2b2f34;--soft:#23272b;--accent:#78a9ff;--up:#42be65;--degraded:#f1c21b;--down:#fa4d56;--none:#3a3f45}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#111315;--card:#1a1d20;--ink:#f2f4f8;--mute:#9ca3af;--line:#2b2f34;--soft:#23272b;--accent:#78a9ff;--up:#42be65;--degraded:#f1c21b;--down:#fa4d56;--none:#3a3f45}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:28px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:20px;margin:0}
+.banner{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;margin:14px 0 18px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--c)}
+.up{--c:var(--up)}.degraded{--c:var(--degraded)}.down{--c:var(--down)}.none{--c:var(--none)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--c)}
+nav{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:20px;overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;color:var(--mute);cursor:pointer;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+nav .n{display:inline-block;min-width:18px;margin-inline-start:6px;padding:0 6px;border-radius:9px;background:var(--down);color:#fff;font-size:11px;line-height:18px;text-align:center}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
+.btn:hover{border-color:var(--mute)}.btn[disabled]{opacity:.5;cursor:default}
+.btn.ic{width:32px;height:32px;padding:0;justify-content:center;position:relative;text-decoration:none}
+.btn.ic svg{width:16px;height:16px}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:11.5px;line-height:1;padding:6px 8px;white-space:nowrap;pointer-events:none;z-index:20}
+header [data-tip]::after{bottom:auto!important;top:calc(100% + 6px)!important;left:auto!important;right:0;transform:none!important}
+.dd{position:relative;display:inline-block}
+.dd-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;min-width:150px;height:32px;padding:0 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;text-align:start}
+.dd-btn:hover,.dd.open .dd-btn{border-color:var(--mute)}
+.dd-btn .lab{color:var(--mute);margin-inline-end:6px}
+.dd-btn svg.i{width:14px;height:14px;color:var(--mute);transition:transform .15s}.dd.open .dd-btn svg.i{transform:rotate(180deg)}
+.dd-list{position:absolute;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;max-height:280px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 24px rgb(0 0 0/.14);z-index:30}
+.dd-list[hidden]{display:none}
+.dd-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+.dd-list li:hover,.dd-list li:focus{background:var(--soft);outline:0}
+.dd-list li[aria-selected=true]{font-weight:600}
+.dd-list li svg.i{width:14px;height:14px;color:var(--accent);visibility:hidden}.dd-list li[aria-selected=true] svg.i{visibility:visible}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:26px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.top{display:flex;gap:12px;align-items:flex-start}
+.ico{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--c);flex:none}
+.ico svg{width:19px;height:19px}
+.name{font-weight:600}.sub{color:var(--mute);font-size:12px;overflow-wrap:anywhere}
+.pill{margin-inline-start:auto;font-size:12px;font-weight:600;color:var(--c);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.meta{display:flex;gap:16px;color:var(--mute);font-size:12px}.meta b{color:var(--ink);font-weight:600}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.warn{display:flex;gap:8px;align-items:center;color:var(--down);font-size:12.5px}
+.bars{display:flex;gap:2px;height:28px;align-items:stretch}
+.bars i{flex:1;min-width:2px;background:var(--c);opacity:.9}.bars i.none{opacity:.5}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
+th,td{padding:10px 14px;text-align:start;border-top:1px solid var(--line);vertical-align:middle}
+thead th{border-top:0;font-size:12px;color:var(--mute);font-weight:600}
+td.num,th.num{text-align:end;font-variant-numeric:tabular-nums}
+.svc{display:flex;align-items:center;gap:10px;font-weight:600}.svc svg{color:var(--mute)}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.budget{height:6px;background:var(--soft);width:100%;min-width:90px}.budget i{display:block;height:100%;background:var(--c)}
+.chip{display:inline-block;padding:1px 8px;font-size:12px;font-weight:600;border:1px solid var(--c);color:var(--c)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);padding:12px 16px}.stat b{display:block;font-size:22px}.stat span{color:var(--mute);font-size:12px}
+.hrow{display:grid;grid-template-columns:170px 1fr 60px;gap:14px;align-items:center;padding:10px 14px;background:var(--card);border:1px solid var(--line);margin-top:-1px}
+.empty{padding:28px;text-align:center;color:var(--mute);background:var(--card);border:1px solid var(--line)}
+.foot{color:var(--mute);font-size:12px;margin-top:18px}
+.wrap{overflow-x:auto}
+@media(max-width:640px){.hrow{grid-template-columns:1fr}.hrow>:last-child{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Grids status</h1>
+  <button class="btn ic" id="refresh" type="button" data-tip="Refresh" aria-label="Refresh"></button>
+</header>
+<div class="banner none" id="banner"><span class="dot"></span><span id="bannerText">Checking…</span></div>
+<nav role="tablist" id="tabs">
+  <button role="tab" data-tab="overview">Overview</button>
+  <button role="tab" data-tab="uptime">Uptime &amp; SLA</button>
+  <button role="tab" data-tab="history">History</button>
+  <button role="tab" data-tab="incidents">Incidents <span class="n" id="incCount" hidden></span></button>
+</nav>
+<section id="view"></section>
+<p class="foot" id="foot"></p>
+</main>
+<script>
+const ICONS = {
+  server: '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  dashboard: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  briefcase: '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>',
+  login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+  drive: '<path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/>',
+  sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/>',
+  mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+};
+const icon = (k) => '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[k] || ICONS.server) + '</svg>';
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+/** Icon-only action with a tooltip. */
+const ib = (key, tip, attrs) => '<button type="button" class="btn ic" data-tip="' + esc(tip) + '" aria-label="' + esc(tip) + '" ' + (attrs || '') + '>' + icon(key) + '</button>';
+const ia = (key, tip, href) => '<a class="btn ic" data-tip="' + esc(tip) + '" aria-label="' + esc(tip) + '" href="' + esc(href) + '" target="_blank" rel="noopener">' + icon(key) + '</a>';
+/** Custom dropdown (the page script handles open, pick and keyboard). */
+const dd = (id, label, options, value) => {
+  const cur = options.find((o) => String(o[0]) === String(value)) || options[0];
+  return '<div class="dd" data-dd="' + id + '"><button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">'
+    + '<span>' + (label ? '<span class="lab">' + esc(label) + '</span>' : '') + esc(cur[1]) + '</span>' + icon('chevron') + '</button>'
+    + '<ul class="dd-list" role="listbox" hidden>' + options.map((o) => '<li role="option" tabindex="-1" data-v="' + esc(o[0]) + '" aria-selected="' + (String(o[0]) === String(value)) + '"><span>' + esc(o[1]) + '</span>' + icon('check') + '</li>').join('') + '</ul></div>';
+};
+const $ = (s) => document.querySelector(s);
+const WORD = { up: 'Operational', degraded: 'Degraded', down: 'Down', none: 'No data' };
+const get = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.json());
+
+function dur(sec) {
+  sec = Math.round(sec);
+  if (sec < 60) return sec + 's';
+  const m = Math.floor(sec / 60);
+  if (m < 60) return m + 'm ' + (sec % 60 ? (sec % 60) + 's' : '');
+  const h = Math.floor(m / 60);
+  if (h < 48) return h + 'h ' + (m % 60) + 'm';
+  return Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+}
+const when = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const pct = (v) => (v === null || v === undefined ? '–' : v >= 99.995 ? '100%' : v.toFixed(v >= 99 ? 3 : 2) + '%');
+const tone = (v, target) => (v === null ? 'none' : v >= target ? 'up' : v >= target - 1 ? 'degraded' : 'down');
+
+let tab = location.hash.slice(1) || 'overview';
+let sla = null;
+let cache = {};
+let slaTarget = null;
+
+async function render() {
+  const st = await get('/api/status');
+  cache.status = st;
+  $('#banner').className = 'banner ' + st.status;
+  const bad = st.services.filter((s) => s.status !== 'up');
+  $('#bannerText').textContent = st.status === 'up' ? 'All systems operational' : bad.length + (bad.length === 1 ? ' service is ' : ' services are ') + (st.status === 'down' ? 'down or degraded' : 'degraded');
+  const open = st.services.filter((s) => s.incident).length;
+  $('#incCount').hidden = !open;
+  $('#incCount').textContent = open;
+  $('#foot').textContent = 'Checked every ' + st.intervalSeconds + ' s · last check ' + (st.updated ? new Date(st.updated).toLocaleTimeString() : '–') + ' · available means fully up; degraded counts against uptime.';
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  const html = await ({ overview: overviewView, uptime: uptimeView, history: historyView, incidents: incidentsView }[tab] || overviewView)(st);
+  // Keep the page still while the user works in a control.
+  if (!document.querySelector('.dd.open')) $('#view').innerHTML = html;
+}
+
+/* ------------------------------------------------------------ overview */
+function overviewView(st) {
+  const groups = [...new Set(st.services.map((s) => s.group))];
+  return groups.map((g) => '<h2>' + esc(g) + '</h2><div class="grid">' + st.services.filter((s) => s.group === g).map(card).join('') + '</div>').join('');
+}
+function card(s) {
+  const status = s.status || 'none';
+  const up = s.uptime30d.total ? (s.uptime30d.up / s.uptime30d.total) * 100 : null;
+  return '<div class="card ' + status + '">'
+    + '<div class="top"><span class="ico">' + icon(s.icon) + '</span><div><div class="name">' + esc(s.name) + '</div><div class="sub">' + esc(s.what) + '</div></div>'
+    + '<span class="pill"><span class="dot"></span>' + WORD[status] + '</span></div>'
+    + '<div class="sub">' + esc(s.target) + '</div>'
+    + '<div class="meta"><span>' + esc(s.detail || '') + '</span><span>Response <b>' + (s.ms == null ? '–' : s.ms + ' ms') + '</b></span><span>30 d <b>' + pct(up) + '</b></span></div>'
+    + (s.incident ? '<div class="warn">' + icon('alert') + 'Incident open since ' + esc(when(s.incident.started)) + '</div>' : '')
+    + '<div class="acts">'
+    + (s.open ? ia('open', 'Open', s.open) : '')
+    + ib('refresh', 'Check now', 'data-check="' + esc(s.id) + '"')
+    + ib('copy', 'Copy URL', 'data-copy="' + esc(s.target) + '"')
+    + ib('list', 'Incidents', 'data-goto="incidents" data-service="' + esc(s.id) + '"')
+    + '</div></div>';
+}
+
+/* ------------------------------------------------------------ uptime & SLA */
+async function uptimeView() {
+  const d = await get('/api/uptime');
+  cache.uptime = d;
+  if (slaTarget === null) slaTarget = d.target;
+  const t = slaTarget;
+  const budget = (1 - t / 100) * 30 * 86400;
+  const targets = [99, 99.5, 99.9, 99.95, 99.99].map((v) => [v, v + '%']);
+  const rows = d.services.map((s) => {
+    const w = s.windows;
+    const used = w['30d'].downtimeSeconds;
+    const ratio = budget ? Math.min(1, used / budget) : 0;
+    const state = w['30d'].total === 0 ? 'none' : used > budget ? 'down' : ratio > 0.75 ? 'degraded' : 'up';
+    const cell = (k) => '<td class="num ' + tone(w[k].availability, t) + '"><span style="color:var(--c)">' + pct(w[k].availability) + '</span></td>';
+    return '<tr><td><span class="svc">' + icon(s.icon) + esc(s.name) + '</span></td>' + cell('24h') + cell('7d') + cell('30d') + cell('90d')
+      + '<td class="num">' + dur(used) + '</td>'
+      + '<td class="' + state + '" style="min-width:150px"><div class="budget"><i style="width:' + Math.round(ratio * 100) + '%"></i></div><span class="sub">' + (state === 'none' ? 'No data' : used > budget ? 'Breached by ' + dur(used - budget) : dur(budget - used) + ' left of ' + dur(budget)) + '</span></td>'
+      + '<td class="' + state + '"><span class="chip">' + (state === 'none' ? 'No data' : state === 'up' ? 'Met' : state === 'degraded' ? 'At risk' : 'Breached') + '</span></td></tr>';
+  }).join('');
+  return '<div class="tools">' + dd('target', 'SLA target', targets, t)
+    + '<span class="sub">Monthly downtime budget at ' + t + '%: <b>' + dur(budget) + '</b> (30 days)</span>'
+    + '<a class="btn ic" style="margin-inline-start:auto" data-tip="Export CSV" aria-label="Export CSV" href="/api/sla.csv">' + icon('download') + '</a></div>'
+    + '<div class="wrap"><table><thead><tr><th>Service</th><th class="num">24 h</th><th class="num">7 d</th><th class="num">30 d</th><th class="num">90 d</th><th class="num">Downtime (30 d)</th><th>Error budget</th><th>SLA</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<p class="foot">Figures cover the time this status service has been watching. Downtime is estimated from failed checks (' + d.intervalSeconds + ' s apart).</p>';
+}
+
+/* ------------------------------------------------------------ history */
+async function historyView() {
+  const q = historyView.service ? '?service=' + encodeURIComponent(historyView.service) : '';
+  const d = await get('/api/history' + q);
+  const names = Object.fromEntries(d.services.map((s) => [s.id, s.name]));
+  const days = [];
+  for (let i = d.days - 1; i >= 0; i--) { const x = new Date(Date.now() - i * 864e5); days.push(x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0')); }
+  const rows = d.services.map((s) => {
+    const by = Object.fromEntries(s.daily.map((r) => [r.day, r]));
+    let total = 0, up = 0;
+    const bars = days.map((day) => {
+      const r = by[day];
+      if (!r) return '<i class="none" style="--c:var(--none)" title="' + day + ': no data"></i>';
+      total += r.total; up += r.up;
+      const a = (r.up / r.total) * 100;
+      const c = r.down ? 'down' : r.degraded ? 'degraded' : 'up';
+      return '<i class="' + c + '" title="' + day + ': ' + pct(a) + ' available"></i>';
+    }).join('');
+    return '<div class="hrow"><span class="svc">' + icon(s.icon) + esc(s.name) + '</span><div class="bars">' + bars + '</div><b class="num" style="text-align:end">' + pct(total ? (up / total) * 100 : null) + '</b></div>';
+  }).join('');
+  const opts = [['', 'All services']].concat(d.services.map((s) => [s.id, s.name]));
+  const ev = d.events.length
+    ? '<div class="wrap"><table><thead><tr><th>When</th><th>Service</th><th>Change</th><th>Detail</th></tr></thead><tbody>' + d.events.map((e) =>
+        '<tr><td>' + esc(when(e.ts)) + '</td><td>' + esc(names[e.service] || e.service) + '</td><td><span class="chip ' + e.to + '">' + (e.from ? WORD[e.from] + ' → ' : '') + WORD[e.to] + '</span></td><td class="sub">' + esc(e.detail) + '</td></tr>').join('') + '</tbody></table></div>'
+    : '<div class="empty">No status changes recorded yet.</div>';
+  return '<h2 style="margin-top:0">Last ' + d.days + ' days</h2>' + rows
+    + '<h2>Status changes</h2><div class="tools">' + dd('hsvc', '', opts, historyView.service || '') + '</div>' + ev;
+}
+
+/* ------------------------------------------------------------ incidents */
+async function incidentsView() {
+  const d = await get('/api/incidents');
+  const f = incidentsView.filter || { state: 'all', service: incidentsView.service || '' };
+  incidentsView.filter = f;
+  if (incidentsView.service !== undefined) { f.service = incidentsView.service; incidentsView.service = undefined; }
+  const all = d.incidents;
+  const list = all.filter((i) => (f.state === 'all' || (f.state === 'open') === (i.ended === null)) && (!f.service || i.service === f.service));
+  const month = all.filter((i) => i.started > Date.now() - 30 * 864e5);
+  const done = month.filter((i) => i.ended);
+  const mttr = done.length ? done.reduce((a, i) => a + (i.ended - i.started), 0) / done.length / 1000 : null;
+  const stats = '<div class="stats"><div class="stat"><b>' + all.filter((i) => !i.ended).length + '</b><span>Open now</span></div><div class="stat"><b>' + month.length + '</b><span>Last 30 days</span></div><div class="stat"><b>' + (mttr === null ? '–' : dur(mttr)) + '</b><span>Mean time to resolve</span></div></div>';
+  const svcOpts = [['', 'All services']].concat(Object.entries(d.services));
+  const stateOpts = [['all', 'All'], ['open', 'Open'], ['resolved', 'Resolved']];
+  const body = list.length
+    ? '<div class="wrap"><table><thead><tr><th>Service</th><th>Severity</th><th>What happened</th><th>Started</th><th class="num">Duration</th><th>State</th></tr></thead><tbody>' + list.map((i) => {
+        const end = i.ended || Date.now();
+        return '<tr><td><b>' + esc(d.services[i.service] || i.service) + '</b></td><td class="' + i.severity + '"><span class="chip">' + (i.severity === 'down' ? 'Outage' : 'Degraded') + '</span></td><td class="sub">' + esc(i.detail) + '</td><td>' + esc(when(i.started)) + '</td><td class="num">' + dur((end - i.started) / 1000) + '</td><td class="' + (i.ended ? 'up' : 'down') + '"><span class="chip">' + (i.ended ? 'Resolved' : 'Ongoing') + '</span></td></tr>';
+      }).join('') + '</tbody></table></div>'
+    : '<div class="empty">No incidents' + (all.length ? ' match these filters.' : ' recorded. They appear here when a service stays down or degraded for two checks in a row.') + '</div>';
+  return stats + '<div class="tools">' + dd('ifstate', 'State', stateOpts, f.state) + dd('ifsvc', '', svcOpts, f.service) + '</div>' + body;
+}
+
+/* ------------------------------------------------------------ events */
+const PICK = {
+  target: (v) => (slaTarget = Number(v)),
+  hsvc: (v) => (historyView.service = v),
+  ifstate: (v) => (incidentsView.filter.state = v),
+  ifsvc: (v) => (incidentsView.filter.service = v),
+};
+const closeDd = () => document.querySelectorAll('.dd.open').forEach((d) => { d.classList.remove('open'); d.querySelector('.dd-list').hidden = true; d.querySelector('.dd-btn').setAttribute('aria-expanded', 'false'); });
+function openDd(d) {
+  closeDd();
+  d.classList.add('open');
+  d.querySelector('.dd-list').hidden = false;
+  d.querySelector('.dd-btn').setAttribute('aria-expanded', 'true');
+  (d.querySelector('[aria-selected=true]') || d.querySelector('li')).focus();
+}
+document.addEventListener('click', async (e) => {
+  const dropdown = e.target.closest('.dd');
+  if (!dropdown) closeDd();
+  const opt = e.target.closest('.dd-list li');
+  if (opt) { const id = dropdown.dataset.dd; closeDd(); PICK[id](opt.dataset.v); return render(); }
+  if (e.target.closest('.dd-btn')) { return dropdown.classList.contains('open') ? closeDd() : openDd(dropdown); }
+  const t = e.target.closest('[data-tab],[data-check],[data-copy],[data-goto]');
+  if (!t) return;
+  if (t.dataset.tab) return go(t.dataset.tab);
+  if (t.dataset.goto) { incidentsView.filter = { state: 'all', service: t.dataset.service || '' }; return go(t.dataset.goto); }
+  if (t.dataset.copy) {
+    try { await navigator.clipboard.writeText(t.dataset.copy); const old = t.innerHTML; t.innerHTML = icon('check'); setTimeout(() => (t.innerHTML = old), 1200); } catch {}
+    return;
+  }
+  if (t.dataset.check) { t.disabled = true; await fetch('/api/check/' + t.dataset.check, { method: 'POST' }); await render(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.querySelector('.dd.open')) { const b = document.querySelector('.dd.open .dd-btn'); closeDd(); b.focus(); return; }
+  const d = e.target.closest && e.target.closest('.dd');
+  if (!d) return;
+  if (e.target.matches('.dd-btn') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); return openDd(d); }
+  if (e.target.matches('.dd-list li')) {
+    const items = [...d.querySelectorAll('li')], i = items.indexOf(e.target);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(items.length - 1, i + 1)].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(0, i - 1)].focus(); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.target.click(); }
+    if (e.key === 'Tab') closeDd();
+  }
+});
+function go(name) { tab = name; location.hash = name; render(); }
+window.addEventListener('hashchange', () => { tab = location.hash.slice(1) || 'overview'; render(); });
+$('#refresh').innerHTML = icon('refresh');
+$('#refresh').addEventListener('click', render);
+render();
+setInterval(render, 10000);
+</script>
+</body>
+</html>

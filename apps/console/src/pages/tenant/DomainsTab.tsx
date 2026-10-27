@@ -3,7 +3,7 @@ import { Globe, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { DomainDto, TenantDetail } from '@grids/schema';
 import { api } from '../../api';
-import { Button, CopyField, ErrorNotice, Input, Mono, Panel, Status, useToast } from '@grids/ui';
+import { confirmDialog, Button, CopyField, ErrorNotice, Input, Mono, Panel, Status, useToast } from '@grids/ui';
 import { useCan } from '../../session';
 import { relTime } from '@grids/ui';
 
@@ -134,8 +134,7 @@ export function DomainsTab({ t }: { t: TenantDetail }) {
                       variant="ghost"
                       size="sm"
                       icon={Trash2}
-                      onClick={() =>
-                        confirm(`Remove ${d.hostname}?`) &&
+                      onClick={async () => (await confirmDialog(`Remove ${d.hostname}?`)) &&
                         action.mutate({
                           fn: () => api.removeDomain(t.id, d.id),
                           msg: 'Domain removed',

@@ -141,7 +141,7 @@ export class IdentityService {
 function readPreferences(raw: unknown): PreferencesDto {
   const parsed = PreferencesDto.partial().safeParse(raw ?? {});
   const p = parsed.success ? parsed.data : {};
-  return { colorMode: p.colorMode ?? 'system', locale: p.locale ?? null };
+  return { colorMode: p.colorMode ?? 'system', locale: p.locale ?? null, ...(p.dashboard && { dashboard: p.dashboard }) };
 }
 
 const stripUndefined = <T extends object>(o: T) =>

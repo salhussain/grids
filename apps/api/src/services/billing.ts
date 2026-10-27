@@ -8,7 +8,9 @@ import {
   type CreateSubscriptionInput,
   type InvoiceDto,
   type InvoiceListQuery,
+  type BillTo,
   type OrgBillingDto,
+  type OrgPlanDto,
   type Page,
   type SubscriptionListQuery,
   type PlanLimits,
@@ -20,6 +22,11 @@ import { conflict, notFound } from '../errors.js';
 import { requireStaff, requireTenantAccess } from './authz.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import { assertWithinLimit } from './entitlements.js';
+import { accessOf, type SubscriptionAccess } from './subscription-access.js';
+import type { UsageService } from './usage.js';
+import { billingAddressOf } from './tenants.js';
+import { PlanService } from './plans.js';
+import { renderInvoicePdf } from './invoice-pdf.js';
 import type { Provisioner } from './provisioning.js';
 import {
   addDays,
@@ -46,8 +53,16 @@ export class BillingService {
       provisioner: Provisioner;
       seatsUsed: (tenantId: string) => Promise<number>;
       projectsUsed?: (tenantId: string) => Promise<number>;
+      access?: SubscriptionAccess;
+      usage?: UsageService;
     },
   ) {}
+
+  /** After anything that changes a subscription: re-check whether the organisation may be used, and what its plan allows. */
+  private async settle(tenantId: string): Promise<void> {
+    await this.deps.access?.sync(tenantId);
+    await this.deps.usage?.pushLimits(tenantId);
+  }
 
   // ---------- subscriptions ----------
 
@@ -137,6 +152,7 @@ export class BillingService {
     } else if (tenant.status === 'pending_payment') {
       await this.deps.provisioner.provision(actor.id, tenantId);
     }
+    await this.settle(tenantId);
     return (await this.currentSubscription(tenantId))!;
   }
 
@@ -198,6 +214,7 @@ export class BillingService {
           .execute();
       await audit(this.ctx, actor.id, tenantId, 'subscription.changed', changes);
     }
+    await this.settle(tenantId);
     return (await this.currentSubscription(tenantId))!;
   }
 
@@ -223,6 +240,7 @@ export class BillingService {
       .where('status', '=', 'open')
       .execute();
     await audit(this.ctx, actor.id, tenantId, 'subscription.cancelled');
+    await this.settle(tenantId);
   }
 
   // ---------- organisation self-service (workspace › Billing) ----------
@@ -232,6 +250,26 @@ export class BillingService {
       staff: 'billing.view',
       workspace: 'billing.view',
     });
+  }
+
+  /** The public plans, for an organisation to compare with its own. */
+  async orgPlans(actor: Actor, tenantId: string): Promise<OrgPlanDto[]> {
+    await this.orgAccess(actor, tenantId);
+    const mine = (await this.currentSubscription(tenantId))?.planId;
+    return (await new PlanService(this.ctx).list())
+      .filter((p) => p.isPublic || p.id === mine)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        currency: p.currency,
+        priceMonthly: p.priceMonthly,
+        priceYearly: p.priceYearly,
+        yearlyDiscountPct: p.yearlyDiscountPct,
+        limits: p.limits,
+        features: p.features,
+        current: p.id === mine,
+      }));
   }
 
   /** Subscription, next charge, usage against limits and the outstanding balance. */
@@ -249,6 +287,7 @@ export class BillingService {
     const limits = (plan?.limits as PlanLimits | undefined) ?? null;
     const seats = await this.deps.seatsUsed(tenantId);
     const projectCount = (await this.deps.projectsUsed?.(tenantId)) ?? 0;
+    const usageItems = (await this.deps.usage?.items(tenantId)) ?? [];
 
     let upcoming: OrgBillingDto['upcoming'] = null;
     const renews =
@@ -316,11 +355,14 @@ export class BillingService {
             limits: limits ?? (Object.fromEntries(LIMIT_KEYS.map((k) => [k, null])) as PlanLimits),
           }
         : null,
-      usage: LIMIT_KEYS.map((key) => ({
-        key,
-        used: key === 'users' ? seats : key === 'projects' ? projectCount : null,
-        limit: limits?.[key] ?? null,
-      })),
+      usage: LIMIT_KEYS.map((key) => {
+        const metered = usageItems.find((u) => u.key === key);
+        return {
+          key,
+          used: metered ? metered.used : key === 'users' ? seats : key === 'projects' ? projectCount : null,
+          limit: limits?.[key] ?? null,
+        };
+      }),
       upcoming,
       outstanding: {
         currency: subscription?.currency ?? tenant.currency.trim(),
@@ -328,11 +370,62 @@ export class BillingService {
         count: Number(open.n),
         overdue: Number(open.overdue),
       },
+      access: (() => {
+        const a = accessOf(
+          subscription
+            ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt, currentPeriodEnd: subscription.currentPeriodEnd, amount: subscription.amount }
+            : null,
+          false,
+          this.ctx.now(),
+        );
+        return { state: a.state, endsAt: a.endsAt ? iso(a.endsAt) : null, daysLeft: a.daysLeft };
+      })(),
+      billTo: await this.billTo(tenantId),
       billingContact:
         billingContact?.email && billingContact.name
           ? { name: billingContact.name, email: billingContact.email }
           : null,
     };
+  }
+
+  /**
+   * Ends the subscription when the current period does (or takes that back). Nothing stops early: people keep their
+   * access until the end date, after which the organisation is closed until it is renewed. Changing plans is not done here.
+   */
+  async setCancellation(actor: Actor, tenantId: string, cancel: boolean): Promise<OrgBillingDto> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'billing.subscriptions', workspace: 'billing.manage' });
+    const sub = await this.ctx.db
+      .selectFrom('subscription')
+      .select(['id', 'cancel_at_period_end'])
+      .where('tenant_id', '=', tenantId)
+      .where('status', '<>', 'cancelled')
+      .executeTakeFirst();
+    if (!sub) throw notFound('Subscription');
+    if (sub.cancel_at_period_end !== cancel) {
+      await this.ctx.db.updateTable('subscription').set({ cancel_at_period_end: cancel }).where('id', '=', sub.id).execute();
+      await audit(this.ctx, actor.id, tenantId, cancel ? 'subscription.cancellation_requested' : 'subscription.cancellation_withdrawn');
+    }
+    return this.orgBilling(actor, tenantId);
+  }
+
+  /** Who invoices and receipts are addressed to: the organisation, at its billing address (or the registered one). */
+  async billTo(tenantId: string): Promise<BillTo> {
+    const t = await this.ctx.db
+      .selectFrom('tenant')
+      .select(['name', 'legal_name', 'tax_id', 'registration_number', 'address_line1', 'address_line2', 'city', 'region', 'postal_code', 'country', 'billing_address'])
+      .where('id', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    const own = billingAddressOf(t.billing_address);
+    const a = own ?? { line1: t.address_line1, line2: t.address_line2, city: t.city, region: t.region, postalCode: t.postal_code, country: t.country };
+    return { name: t.name, legalName: t.legal_name, taxId: t.tax_id, registrationNumber: t.registration_number, ...a };
+  }
+
+  /** An invoice, or its receipt once it is paid, as a PDF. */
+  async invoicePdf(actor: Actor, tenantId: string, invoiceId: string, kind: 'invoice' | 'receipt'): Promise<{ file: Buffer; name: string }> {
+    const invoice = await this.orgInvoice(actor, tenantId, invoiceId);
+    if (kind === 'receipt' && invoice.status !== 'paid') throw conflict('Not paid yet', 'A receipt is issued once the invoice is paid.');
+    const file = await renderInvoicePdf({ invoice, billTo: await this.billTo(tenantId), kind });
+    return { file, name: `${kind === 'receipt' ? 'Receipt' : 'Invoice'}-${invoice.number}.pdf` };
   }
 
   async orgInvoices(
@@ -372,6 +465,90 @@ export class BillingService {
     if (open) throw conflict('Invoice already open', `${open.number} is still awaiting payment.`);
     const start = sub.current_period_end;
     return this.issueInvoice(actor, sub.id, start, addInterval(start, sub.interval));
+  }
+
+  /**
+   * Bills the fees Grids charges on payments an organisation took through its forms: one invoice for each currency, kept
+   * apart from the subscription's own invoices. With `before`, only payments made before that moment (the automatic run
+   * bills each month once it has ended).
+   */
+  async issueFeeInvoices(actor: Actor | null, opts: { tenantId?: string; before?: Date } = {}): Promise<InvoiceDto[]> {
+    if (actor) requireStaff(actor, 'billing.invoices');
+    const { db } = this.ctx;
+    let q = db
+      .selectFrom('payment')
+      .select(['id', 'tenant_id', 'currency', 'project_key', 'form_key', 'amount', 'fee_amount', 'paid_at'])
+      .where('status', '=', 'succeeded')
+      .where('fee_amount', '>', 0)
+      .where('fee_invoice_id', 'is', null);
+    if (opts.tenantId) q = q.where('tenant_id', '=', opts.tenantId);
+    if (opts.before) q = q.where('paid_at', '<', opts.before);
+    const rows = await q.orderBy('paid_at').execute();
+    const groups = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const key = `${r.tenant_id}|${r.currency.trim()}`;
+      groups.set(key, [...(groups.get(key) ?? []), r]);
+    }
+    const out: InvoiceDto[] = [];
+    for (const [key, list] of groups) {
+      const [tenantId, currency] = key.split('|') as [string, string];
+      const byForm = new Map<string, typeof rows>();
+      for (const r of list) byForm.set(`${r.project_key}/${r.form_key}`, [...(byForm.get(`${r.project_key}/${r.form_key}`) ?? []), r]);
+      const lines: InvoiceLine[] = [...byForm].map(([form, ps]) => {
+        const fee = ps.reduce((n, p) => n + Number(p.fee_amount), 0);
+        const taken = ps.reduce((n, p) => n + Number(p.amount), 0);
+        return {
+          description: `Payment fees: ${form} (${ps.length} ${ps.length === 1 ? 'payment' : 'payments'}, ${formatMoney(taken, currency)} taken)`,
+          quantity: ps.length,
+          unitAmount: Math.round(fee / ps.length),
+          amount: fee,
+        };
+      });
+      const total = lines.reduce((n, l) => n + l.amount, 0);
+      const seq = await sql<{ n: string }>`select nextval('invoice_number_seq')::text as n`.execute(db);
+      const number = `INV-${this.ctx.now().getUTCFullYear()}-${seq.rows[0]!.n.padStart(5, '0')}`;
+      const id = uuidv7();
+      const dueAt = addDays(this.ctx.now(), PAYMENT_TERMS_DAYS);
+      const first = list[0]!.paid_at ?? this.ctx.now();
+      const last = list[list.length - 1]!.paid_at ?? this.ctx.now();
+      await db.transaction().execute(async (tx) => {
+        await tx
+          .insertInto('invoice')
+          .values({ id, number, tenant_id: tenantId, subscription_id: null, status: 'open', currency, subtotal: total, discount: 0, total, lines: JSON.stringify(lines), period_start: first, period_end: last, due_at: dueAt })
+          .execute();
+        await tx.updateTable('payment').set({ fee_invoice_id: id }).where('id', 'in', list.map((p) => p.id)).execute();
+      });
+      const amount = formatMoney(total, currency);
+      await audit(this.ctx, actor?.id ?? null, tenantId, 'invoice.issued', { invoice: number, amount, kind: 'payment_fees' });
+      const to = await this.billingEmail(tenantId);
+      if (to) {
+        await this.ctx.email.send('invoice_issued', tenantId, {
+          to,
+          subject: `Invoice ${number} from Grids: payment fees, ${amount}`,
+          text: `Hello,
+
+This invoice covers the fees on payments taken through your forms.
+
+Invoice:   ${number}
+Amount:    ${amount}
+Due:       ${dueAt.toDateString()}
+
+${lines.map((l) => `  ${l.description}: ${formatMoney(l.amount, currency)}`).join('\n')}
+
+Pay by bank transfer quoting ${number}, or reply to arrange card payment.
+
+— The Grids team`,
+        });
+      }
+      out.push(await this.getInvoice(id));
+    }
+    return out;
+  }
+
+  /** Bills every organisation's fees for months that have ended (run on a timer; each payment is billed once). */
+  async issueDueFeeInvoices(): Promise<void> {
+    const now = this.ctx.now();
+    await this.issueFeeInvoices(null, { before: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) });
   }
 
   async listInvoices(query: Partial<InvoiceListQuery> = {}): Promise<Page<InvoiceDto>> {
@@ -466,6 +643,7 @@ Paid on: ${paidAt.toDateString()}
 — The Grids team`,
       });
     }
+    await this.settle(inv.tenant_id);
     return this.getInvoice(invoiceId);
   }
 

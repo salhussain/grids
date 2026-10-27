@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Platform Home Options</title>
+<meta name="description" content="Four alternative designs for the platform console home page." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  .side { background: #0d0e12; color: #c9cad1; margin: 14px 0 14px 14px; height: calc(100vh - 28px); }
+  .side .org b { color: #fff; } .side .org small { color: #7d7f89; }
+  .side .nav a { color: #aeb0b9; } .side .nav a:hover { background: #1a1b21; color: #fff; }
+  .side .nav a[aria-current='page'] { background: #1e2027; color: #fff; box-shadow: none; } .side .nav a svg { color: #7d7f89; }
+  .side .eyebrow { color: #5d5f69; }
+  .staff-tag { font: 500 10px var(--mono); letter-spacing: .08em; padding: 2px 6px; background: #1e2027; color: #8fb3ff; margin-left: 6px; vertical-align: 2px; }
+
+  /* option picker */
+  .picker { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; padding: 10px 24px; background: var(--raise); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .opt { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--sheet); cursor: pointer; font-weight: 500; }
+  .opt[aria-selected='true'] { border-color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+  .opt .dot { width: 8px; height: 8px; background: var(--line-2); }
+  .opt[data-v='keep'] .dot { background: var(--good); } .opt[data-v='remove'] .dot { background: var(--bad); } .opt[data-v='remove'] { opacity: .55; text-decoration: line-through; }
+  .verdict { display: flex; align-items: center; gap: 10px; padding: 10px 32px; border-bottom: 1px solid var(--line); background: var(--sheet); }
+  .verdict .seg button[data-pick='keep'][aria-pressed='true'] { background: var(--good); color: #fff; }
+  .verdict .seg button[data-pick='remove'][aria-pressed='true'] { background: var(--bad); color: #fff; }
+  .verdict p { color: var(--ink-3); font-size: 13px; }
+
+  /* shared bits */
+  .big { font: 600 44px/1 var(--sans); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .tri { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--line); }
+  .tri > * { padding: 16px 18px; border-right: 1px solid var(--line); } .tri > *:last-child { border-right: 0; }
+  .attn { display: grid; grid-template-columns: 36px 1fr auto; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .attn:hover { background: var(--hover); } .attn:last-child { border-bottom: 0; }
+  .attn .ico { width: 36px; height: 36px; display: grid; place-items: center; background: var(--warn-soft); color: var(--warn); }
+  .attn .ico.bad { background: var(--bad-soft); color: var(--bad); } .attn .ico.brand { background: var(--brand-soft); color: var(--brand-ink); }
+  .attn b { font-weight: 500; display: block; } .attn small { color: var(--ink-3); }
+  .jump { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 18px; border: 1px solid var(--line-2); background: var(--sheet); box-shadow: var(--shadow); }
+  .jump input { border: 0; outline: 0; background: none; flex: 1; font-size: 16px; }
+  .qa { display: flex; gap: 10px; flex-wrap: wrap; }
+  .orgcard { border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; cursor: pointer; background: var(--sheet); } .orgcard:hover { border-color: var(--ink-3); }
+  .funnel { display: grid; gap: 10px; } .funnel .bar { height: 30px; background: var(--brand-soft); border: 1px solid var(--brand-line); display: flex; align-items: center; padding: 0 10px; justify-content: space-between; font-size: 13px; }
+  .strip { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); }
+  .strip > * { padding: 14px 16px; border-right: 1px solid var(--line); } .strip > *:last-child { border-right: 0; }
+  .strip .v { font: 600 22px/1.1 var(--sans); letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .feed > * { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: start; } .feed > *:last-child { border-bottom: 0; }
+  .feed small { color: var(--ink-3); }
+  @media (max-width: 1000px) { .tri, .strip { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="org"><span class="mark">G</span><div><b>Grids <span class="staff-tag">STAFF</span></b><small>Platform console</small></div></div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <div class="main"><div class="sheet">
+    <div class="picker" id="picker"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="page" id="view"></div>
+  </div></div>
+</div>
+<script src="shared/mockup.js"></script>
+<script>
+const NAV = [
+  ['Platform', [['Overview', 'home', 1], ['Organisations', 'building'], ]],
+  ['Revenue', [['Billing', 'card'], ['Plans & pricing', 'layers']]],
+  ['Operations', [['Support', 'help'], ['Email log', 'mail'], ['System log', 'list']]],
+  ['Administration', [['Staff & roles', 'badge'], ['Settings', 'gear']]],
+];
+$('#nav').innerHTML = NAV.map(([g, items]) => `<div class="nav-group"><span class="eyebrow">${g}</span>${items.map(([l, i, cur]) => `<a ${cur ? 'aria-current="page"' : ''}>${ic(i)}${l}</a>`).join('')}</div>`).join('');
+
+const MRR = [12, 15, 14, 18, 22, 21, 26, 29, 31, 30, 35, 38];
+const ORGS = [
+  ['Ministry of Health — Vanuatu', 'Enterprise', 'active', 412], ['Pacific Community (SPC)', 'Enterprise', 'active', 268],
+  ['Tonga Statistics Dept', 'Team', 'active', 54], ['Samoa Bureau of Statistics', 'Team', 'trial', 31],
+];
+const attn = [
+  ['bad', 'alert', 'Kiribati Education Office', 'Payment failed · 2 retries left', 'Past due', 'bad'],
+  ['', 'help', 'T-1048 · SSO redirect loop', 'Urgent · waiting on staff for 2 days', 'Reply', 'bad'],
+  ['brand', 'clock', 'Samoa Bureau of Statistics', 'Trial ends in 3 days · no payment method', 'Trial', 'brand'],
+  ['', 'mail', '2 emails failed in the last 24 h', 'Invitation to jean@moh.gov.vu bounced', 'Review', 'warn'],
+];
+const attnList = () => attn.map(([c, i, t, s, b, bt]) => `<div class="attn"><span class="ico ${c}">${ic(i, 18)}</span><div><b>${t}</b><small>${s}</small></div>${badge(b, bt)}</div>`).join('');
+const feed = () => [['Jean Tari invited 3 people', 'Ministry of Health', '4m'], ['Plan changed Starter → Team', 'Fiji Red Cross', '1h'], ['Domain verified: data.spc.int', 'Pacific Community', '3h'], ['New organisation created', 'Solomon Islands Met', '1d'], ['Invoice INV-2041 paid', 'Tonga Statistics Dept', '1d']]
+  .map(([a, o, t]) => `<div>${av(o, 'sm')}<div><b style="font-weight:500">${a}</b><br><small>${o}</small></div><small class="mono">${t}</small></div>`).join('');
+const date = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const newBtn = `<button class="btn primary" data-toast="New organisation">${ic('plus')}New organisation</button>`;
+
+const V = {
+  A: { name: 'A · Briefing', note: 'Action-first. Leads with what needs a human today, KPIs shrink to a single strip.', html: () => `
+    ${head(date, 'Good morning, Amara', '4 things need you today. Everything else is healthy.', newBtn)}
+    <div class="grid g21">
+      ${card('Needs attention', attnList(), { sub: '4 items', pad: false })}
+      <div class="stack">
+        ${card('Platform health', `<div class="stack" style="gap:14px">
+          ${[['Email delivery', '99.8%', 99.8, ''], ['Payments collected', '94%', 94, 'warn'], ['Support SLA', '86%', 86, 'warn']].map(([l, v, p, t]) => `<div><div class="row"><span>${l}</span><b class="end mono">${v}</b></div><div class="meter ${t}" style="margin-top:6px"><i style="width:${p}%"></i></div></div>`).join('')}</div>`)}
+        ${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}
+      </div>
+    </div>
+    <div class="strip" style="margin-top:16px">
+      ${[['Organisations', '42'], ['MRR', '$38.4k'], ['Outstanding', '$4.1k'], ['Open tickets', '7'], ['Members', '1,906']].map(([l, v]) => `<div><span class="eyebrow">${l}</span><div class="v">${v}</div></div>`).join('')}
+    </div>` },
+
+  B: { name: 'B · Command centre', note: 'Dense and numeric. KPI cards with sparklines, revenue chart and live queue on one screen.', html: () => `
+    ${head('Platform', 'Overview', `${date} · refreshed just now`, `<button class="btn" data-toast="Refreshed">${ic('activity')}Refresh</button>${newBtn}`)}
+    <div class="grid g4">
+      ${[['Organisations', '42', '+3 this month', 'building', ''], ['MRR', '$38.4k', '+6.2% vs last month', 'dollar', 'good'], ['Outstanding', '$4.1k', '1 overdue', 'card', 'bad'], ['Open tickets', '7', '1 urgent', 'help', 'warn']]
+        .map(([l, v, c, i, t], n) => `<div class="kpi"><div class="top">${l}<span class="ico ${t}">${ic(i)}</span></div><div class="val">${v}</div><div class="row" style="margin-top:8px"><span class="ctx">${c}</span><span class="end">${spark(MRR.map((x, k) => x + ((k * (n + 2)) % 5)), 80, 24)}</span></div></div>`).join('')}
+    </div>
+    <div class="grid g21" style="margin-top:16px">
+      ${card('Monthly recurring revenue', bars(MRR, 170), { sub: 'Last 12 months, USD thousands', actions: `<div class="seg"><button aria-pressed="false">3M</button><button aria-pressed="true">12M</button></div>` })}
+      ${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}
+    </div>
+    <div style="margin-top:16px">${card('Support queue', `<table class="tbl"><thead><tr><th>Ticket</th><th>Organisation</th><th>Priority</th><th>Status</th><th class="r">Updated</th></tr></thead><tbody>
+      ${[['1048', 'SSO redirect loop', 'Ministry of Health', 'urgent', 'bad', 'open', '2d'], ['1047', 'Export timing out', 'Pacific Community', 'high', 'warn', 'pending', '5h'], ['1045', 'Add custom domain', 'Tonga Statistics', 'normal', '', 'open', '1d']]
+        .map(([n, s, o, p, pt, st, t]) => `<tr class="click"><td><span class="mono muted">#${n}</span> &nbsp;${s}</td><td>${o}</td><td>${badge(p, pt)}</td><td>${badge(st, 'plain')}</td><td class="r muted">${t}</td></tr>`).join('')}</tbody></table>`, { pad: false, actions: '<a class="btn sm ghost">View all</a>' })}</div>` },
+
+  C: { name: 'C · Jump-in', note: 'Organisation-centric. Search is the hero; recents and quick actions are the daily shortcuts.', html: () => `
+    <div style="max-width:760px;margin:12px auto 28px;text-align:center">
+      <div class="eyebrow">${date}</div>
+      <h1 style="font-size:30px;letter-spacing:-.03em;margin:6px 0 18px">What are you working on, Amara?</h1>
+      <div class="jump">${ic('search', 20)}<input placeholder="Find an organisation, ticket, person or invoice…" /><span class="kbd">⌘K</span></div>
+      <div class="qa" style="justify-content:center;margin-top:14px">
+        <button class="btn" data-toast="New organisation">${ic('plus')}New organisation</button>
+        <button class="btn" data-toast="Support">${ic('help')}Open tickets <span class="badge bad plain" style="margin-left:4px">1 urgent</span></button>
+        <button class="btn" data-toast="Billing">${ic('card')}Overdue invoices</button>
+        <button class="btn" data-toast="Email">${ic('mail')}Failed emails</button>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:10px"><h2 style="font-size:14px">Recently viewed</h2><a class="end muted">All organisations →</a></div>
+    <div class="grid g4">
+      ${ORGS.map(([n, p, s, m]) => `<div class="orgcard"><div class="row">${av(n)}<span class="end">${badge(s, s === 'trial' ? 'brand' : 'good')}</span></div><div><b style="font-weight:500">${n}</b><div class="muted">${p} · ${m} people</div></div>${spark(MRR.map((x) => x + m % 7), 200, 28)}</div>`).join('')}
+    </div>
+    <div class="grid g21" style="margin-top:24px">
+      ${card('Needs attention', attnList(), { pad: false })}
+      <div class="stack"><div class="tri" style="grid-template-columns:1fr 1fr">${[['Organisations', '42'], ['MRR', '$38.4k'], ['Open tickets', '7'], ['Members', '1,906']].map(([l, v]) => `<div style="border-bottom:1px solid var(--line)"><span class="eyebrow">${l}</span><div class="v" style="font:600 22px var(--sans);margin-top:4px">${v}</div></div>`).join('')}</div></div>
+    </div>` },
+
+  D: { name: 'D · Revenue lens', note: 'Business-first. Headline MRR, plan mix and signup funnel, with attention as a side rail.', html: () => `
+    ${head('Platform', 'Overview', date, newBtn)}
+    <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+      <div class="stack">
+        <section class="card"><div class="body">
+          <div class="row" style="align-items:flex-start"><div><div class="eyebrow">Monthly recurring revenue</div><div class="big" style="margin-top:10px">$38,400</div>
+            <div class="row" style="margin-top:10px"><span class="up">▲ 6.2%</span><span class="muted">vs last month · ARR $460.8k</span></div></div>
+            <div class="seg end"><button aria-pressed="false">3M</button><button aria-pressed="true">12M</button></div></div>
+          <div style="margin-top:20px">${bars(MRR, 150)}</div>
+        </div></section>
+        <div class="grid g2">
+          ${card('Plan mix', [['Enterprise', 6, 60], ['Team', 18, 45], ['Starter', 14, 25], ['Trial', 4, 12]].map(([l, n, p]) => `<div style="margin-bottom:14px"><div class="row"><span>${l}</span><b class="end mono">${n}</b></div><div class="meter" style="margin-top:6px"><i style="width:${p}%"></i></div></div>`).join(''))}
+          ${card('Signup funnel', `<div class="funnel">${[['Created', 46, 100], ['Trialing', 31, 78], ['Paying', 24, 56]].map(([l, n, w]) => `<div class="bar" style="width:${w}%"><span>${l}</span><b class="mono">${n}</b></div>`).join('')}</div><p class="muted" style="margin-top:12px">52% trial → paid conversion, last 30 days.</p>`)}
+        </div>
+      </div>
+      <div class="stack">
+        ${card('Needs attention', attnList(), { pad: false })}
+        ${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}
+      </div>
+    </div>` },
+};
+
+const marks = JSON.parse(localStorage.homeMarks || '{}');
+let cur = localStorage.homeCur in V ? localStorage.homeCur : 'A';
+function render() {
+  localStorage.homeMarks = JSON.stringify(marks); localStorage.homeCur = cur;
+  $('#picker').innerHTML = `<span class="eyebrow" style="margin-right:6px">Options</span>` + Object.entries(V).map(([k, v]) => `<button class="opt" data-k="${k}" data-v="${marks[k] || ''}" aria-selected="${k === cur}"><span class="dot"></span>${v.name}</button>`).join('')
+    + `<span class="end muted" style="font-size:12.5px">${Object.entries(marks).filter(([, m]) => m === 'keep').map(([k]) => k).join(', ') || 'none'} kept</span>`;
+  $('#verdict').innerHTML = `<p class="grow">${V[cur].note}</p><div class="seg">${['keep', 'remove'].map((m) => `<button data-pick="${m}" aria-pressed="${marks[cur] === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`;
+  $('#view').innerHTML = V[cur].html(); wire($('#view'));
+  $$('.opt').forEach((b) => (b.onclick = () => { cur = b.dataset.k; render(); }));
+  $$('[data-pick]').forEach((b) => (b.onclick = () => { marks[cur] = marks[cur] === b.dataset.pick ? '' : b.dataset.pick; render(); }));
+}
+render();
+</script>
+</body>
+</html>

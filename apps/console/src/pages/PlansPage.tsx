@@ -230,6 +230,8 @@ type Draft = {
   price: string;
   yearlyDiscountPct: string;
   trialDays: string;
+  feePercent: string;
+  feeFixed: string;
   limits: Record<LimitKey, string>;
   features: string[];
   isPublic: boolean;
@@ -244,7 +246,9 @@ const toDraft = (p: PlanDto | null): Draft => ({
   currency: p?.currency ?? 'USD',
   price: p ? (p.priceMonthly / 100).toFixed(2) : '0.00',
   yearlyDiscountPct: String(p?.yearlyDiscountPct ?? 15),
-  trialDays: String(p?.trialDays ?? 14),
+  trialDays: String(p?.trialDays ?? 0),
+  feePercent: p?.paymentFee ? String(p.paymentFee.percent) : '',
+  feeFixed: p?.paymentFee ? (p.paymentFee.fixed / 100).toFixed(2) : '',
   limits: Object.fromEntries(
     LIMIT_KEYS.map((k) => [k, p ? (p.limits[k] === null ? '' : String(p.limits[k])) : '']),
   ) as Record<LimitKey, string>,
@@ -275,6 +279,10 @@ function PlanEditor({ plan, onClose }: { plan: PlanDto | 'new' | null; onClose: 
         priceMonthly: Math.round(Number(d.price) * 100),
         yearlyDiscountPct: Number(d.yearlyDiscountPct),
         trialDays: Number(d.trialDays),
+        paymentFee:
+          Number(d.feePercent) > 0 || Number(d.feeFixed) > 0
+            ? { percent: Number(d.feePercent) || 0, fixed: Math.round((Number(d.feeFixed) || 0) * 100) }
+            : null,
         limits: Object.fromEntries(
           LIMIT_KEYS.map((k) => [k, d.limits[k] === '' ? null : Number(d.limits[k])]),
         ) as Record<LimitKey, number | null>,
@@ -380,6 +388,19 @@ function PlanEditor({ plan, onClose }: { plan: PlanDto | 'new' | null; onClose: 
                 value={d.trialDays}
                 onChange={(e) => set('trialDays', e.target.value)}
               />
+            </Field>
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-3 border-b border-zinc-200 pb-2 text-xs font-semibold tracking-wide text-zinc-600 uppercase">
+            Fee on payments taken through forms
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Percentage of each payment" hint="Added to the organisation's invoice">
+              <Input type="number" min={0} max={100} step="0.1" placeholder="0" value={d.feePercent} onChange={(e) => set('feePercent', e.target.value)} />
+            </Field>
+            <Field label="Fixed amount per payment" hint="In the plan's currency">
+              <Input type="number" min={0} step="0.01" placeholder="0.00" value={d.feeFixed} onChange={(e) => set('feeFixed', e.target.value)} />
             </Field>
           </div>
         </div>

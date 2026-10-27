@@ -1,28 +1,37 @@
 import { cronProblem, enqueueRun, freshness, syncSchedule, syncSensor } from '@grids/data';
 import { createHash, randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
+import { isDeepStrictEqual } from 'node:util';
 import {
   FILE_MAX_BYTES,
+  isDatabaseKind,
   JobSensor,
   JobStep,
   JobTriggers,
+  DatasetSettings,
   uuidv7,
   type FileDto,
   type UploadResult,
   type DatasetDto,
+  type DatasetKind,
+  isLiveSource,
+  type DatasetSource,
   type JobDto,
   type Page,
   type RunDetail,
   type RunDto,
 } from '@grids/schema';
 import type { z } from 'zod';
-import type { DatasetInput, DatasetRowsInput, JobInput, RunQuery } from '@grids/schema';
-import { badRequest, conflict, notFound } from '../errors.js';
+import type { DatasetInput, DatasetRowsInput, DatasetVersionDto, JobInput, RunQuery } from '@grids/schema';
+import { badRequest, conflict, HttpError, LimitExceededError, notFound } from '../errors.js';
+import type { UsageService } from './usage.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
 import type { ProjectService } from './projects.js';
 
 type Tx = Parameters<Parameters<ProjectService['cellTx']>[1]>[0];
 import { iso, isoOrNull, isUniqueViolation } from './util.js';
+
+const kindOf = (s: DatasetSource): DatasetKind => (s.type === 'rows' ? 'rows' : s.type === 'connection' && s.table ? 'physical' : 'virtual');
 
 type RunRow = {
   id: string;
@@ -55,6 +64,9 @@ const toRun = (r: RunRow): RunDto => ({
 
 /** Jobs, runs and datasets of a project (M4). Execution happens in the worker. */
 export class JobService {
+  /** Set where the services are put together: the plan's allowances for storage, run minutes and rows. */
+  usage?: UsageService;
+
   constructor(
     private readonly ctx: ServiceContext,
     private readonly projects: ProjectService,
@@ -203,7 +215,8 @@ export class JobService {
 
   /** Queues a manual run (editors and managers). */
   async trigger(actor: Actor, tenantId: string, project: string, key: string): Promise<RunDto> {
-    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.usage?.assertRun(tenantId);
     const runId = await this.projects.cellTx(tenantId, async (tx) => {
       const job = await tx.selectFrom('job').select(['id']).where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
       if (!job) throw notFound('Job');
@@ -218,7 +231,7 @@ export class JobService {
    * re-running it whole is equivalent to resuming from the failed step.
    */
   async rerun(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDto> {
-    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
     const id = await this.projects.cellTx(tenantId, async (tx) => {
       const r = await tx.selectFrom('run').select(['job_id', 'status']).where('id', '=', runId).where('project_id', '=', a.project.id).executeTakeFirst();
       if (!r) throw notFound('Run');
@@ -239,7 +252,7 @@ export class JobService {
   }
 
   async cancel(actor: Actor, tenantId: string, project: string, runId: string): Promise<RunDetail> {
-    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
     await this.projects.cellTx(tenantId, async (tx) => {
       const r = await tx.selectFrom('run').select(['status']).where('id', '=', runId).where('project_id', '=', a.project.id).executeTakeFirst();
       if (!r) throw notFound('Run');
@@ -299,6 +312,11 @@ export class JobService {
     if (!/^[0-9a-f-]{36}$/.test(tenantId)) throw notFound('Webhook');
     const tenant = await this.ctx.db.selectFrom('tenant').select('status').where('id', '=', tenantId).executeTakeFirst();
     if (tenant?.status !== 'active') throw notFound('Webhook');
+    await this.usage?.recordApiCall(tenantId);
+    await this.usage?.assertRun(tenantId).catch((e) => {
+      if (e instanceof LimitExceededError) throw new HttpError(429, 'Too many requests', 'This organisation has used its allowance for the month.');
+      throw e;
+    });
     const rows = Array.isArray(body) ? body : body && typeof body === 'object' && Array.isArray((body as { rows?: unknown }).rows) ? (body as { rows: unknown[] }).rows : body ? [body] : [];
     if (rows.length > 10_000) throw badRequest('At most 10,000 rows per delivery');
     const runId = await this.projects.cellTx(tenantId, async (tx) => {
@@ -364,10 +382,11 @@ export class JobService {
    * that parse it and run on upload (the "file uploaded" trigger).
    */
   async upload(actor: Actor, tenantId: string, project: string, key: string, file: { name: string; contentType: string; content: Buffer }): Promise<UploadResult> {
-    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
     if (!/^[a-z][a-z0-9_]*$/.test(key) || key.length > 63) throw badRequest('File keys use lowercase letters, digits and underscores');
     if (!file.content.length) throw badRequest('The file is empty');
     if (file.content.length > FILE_MAX_BYTES) throw badRequest(`Files are limited to ${FILE_MAX_BYTES / 1024 / 1024} MB`);
+    await this.usage?.assertStorage(tenantId, file.content.length);
     const name = [...file.name].filter((ch) => ch >= ' ' && ch !== '/' && ch !== '\\').join('').slice(0, 200) || key;
     const runs = await this.projects.cellTx(tenantId, async (tx) => {
       await tx
@@ -427,16 +446,27 @@ export class JobService {
             ).map((r) => [r.id, r.freshness_minutes])
           : [],
       );
-      return rows.map((d) => ({
+      return rows.map((d) => {
+        const source = d.source as DatasetSource;
+        return {
         id: d.id,
         key: d.key,
         name: d.name,
         description: d.description,
         columns: d.columns as string[],
+        freshnessMinutes: d.freshness_minutes,
+        columnTypes: d.column_types,
+        source,
+        kind: kindOf(source),
+        refreshError: d.refresh_error,
+        settings: DatasetSettings.parse(d.settings ?? {}),
         rowCount: d.row_count,
         lastMaterialisedAt: isoOrNull(d.last_materialised_at),
-        freshness: freshness(d.last_materialised_at, d.freshness_minutes ?? (d.last_run_id ? (runJobs.get(d.last_run_id) ?? null) : null), this.ctx.now()),
-      }));
+        freshness: isLiveSource(source)
+          ? { status: 'fresh' as const, lastUpdated: isoOrNull(d.last_materialised_at), expectedMinutes: null, live: true }
+          : freshness(d.last_materialised_at, d.freshness_minutes ?? (d.last_run_id ? (runJobs.get(d.last_run_id) ?? null) : null), this.ctx.now()),
+        };
+      });
     });
   }
 
@@ -460,13 +490,15 @@ export class JobService {
   /** Creates (or updates the definition of) a dataset maintained by hand. */
   async saveDataset(actor: Actor, tenantId: string, project: string, input: z.output<typeof DatasetInput>, existingKey?: string): Promise<DatasetDto[]> {
     const a = await this.projects.access(actor, tenantId, project, 'manager');
-    const values = { key: input.key, name: input.name, description: input.description, columns: JSON.stringify(input.columns), freshness_minutes: input.freshnessMinutes };
+    const values = { key: input.key, name: input.name, description: input.description, columns: JSON.stringify(input.columns), freshness_minutes: input.freshnessMinutes, source: JSON.stringify(input.source), settings: JSON.stringify(input.settings) };
     try {
       await this.projects.cellTx(tenantId, async (tx) => {
+        await this.checkSource(tx, a.project.id, input.source, input.key);
         if (existingKey) {
           const r = await tx.updateTable('dataset').set(values).where('project_id', '=', a.project.id).where('key', '=', existingKey).executeTakeFirst();
           if (!r.numUpdatedRows) throw notFound('Dataset');
         } else await tx.insertInto('dataset').values({ id: uuidv7(), tenant_id: tenantId, project_id: a.project.id, ...values }).execute();
+        await this.recordVersion(tx, tenantId, a.project.id, input, actor.id);
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw conflict('Key taken', `A dataset with key "${input.key}" already exists.`);
@@ -476,9 +508,47 @@ export class JobService {
     return this.datasets(actor, tenantId, project);
   }
 
+  /** Keeps what the dataset now is as its next version, unless it is the same as the last one. */
+  private async recordVersion(tx: Tx, tenantId: string, projectId: string, input: z.output<typeof DatasetInput>, actorId: string) {
+    const ds = await tx.selectFrom('dataset').select('id').where('project_id', '=', projectId).where('key', '=', input.key).executeTakeFirstOrThrow();
+    const definition = JSON.parse(JSON.stringify({ name: input.name, description: input.description, freshnessMinutes: input.freshnessMinutes, source: input.source, settings: input.settings })) as Record<string, unknown>;
+    const last = await tx.selectFrom('dataset_version').select(['version', 'definition']).where('dataset_id', '=', ds.id).orderBy('version', 'desc').limit(1).executeTakeFirst();
+    if (last && isDeepStrictEqual(last.definition, definition)) return;
+    await tx.insertInto('dataset_version').values({ dataset_id: ds.id, tenant_id: tenantId, version: (last?.version ?? 0) + 1, definition: JSON.stringify(definition), saved_by: actorId }).execute();
+  }
+
+  /** The saved versions of a dataset, newest first. */
+  async datasetVersions(actor: Actor, tenantId: string, project: string, key: string): Promise<DatasetVersionDto[]> {
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    const rows = await this.projects.cellTx(tenantId, async (tx) => {
+      const ds = await tx.selectFrom('dataset').select('id').where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
+      if (!ds) throw notFound('Dataset');
+      return tx.selectFrom('dataset_version').selectAll().where('dataset_id', '=', ds.id).orderBy('version', 'desc').limit(200).execute();
+    });
+    const names = await this.projects.userNames(rows.map((r) => r.saved_by));
+    return rows.map((r) => {
+      const d = r.definition as Omit<DatasetVersionDto, 'version' | 'savedAt' | 'savedBy'>;
+      return { version: r.version, savedAt: iso(r.saved_at), savedBy: r.saved_by ? (names.get(r.saved_by) ?? null) : null, ...d };
+    });
+  }
+
+  /** A query-based dataset needs a database connection (or sources that exist) and no circular reads. */
+  private async checkSource(tx: Tx, projectId: string, source: DatasetSource, own: string) {
+    if (source.type === 'connection') {
+      const c = await tx.selectFrom('project_connection').select('kind').where('project_id', '=', projectId).where('key', '=', source.connection).executeTakeFirst();
+      if (!c) throw badRequest('Choose an existing connection');
+      if (!isDatabaseKind(c.kind)) throw badRequest('Choose a database connection', 'SQL runs on a database. For files and APIs, use sources of a local dataset.');
+    } else if (source.type === 'local' || source.type === 'script') {
+      const aliases = source.inputs.map((i) => i.as);
+      if (new Set(aliases).size !== aliases.length) throw badRequest('Each source needs its own name');
+      if (source.inputs.some((i) => i.kind === 'dataset' && i.ref === own)) throw badRequest('A dataset cannot read itself');
+    }
+  }
+
   /** Loads rows (e.g. a parsed CSV) into a dataset; new columns are added to its definition. */
   async uploadDatasetRows(actor: Actor, tenantId: string, project: string, key: string, input: z.output<typeof DatasetRowsInput>) {
-    const a = await this.projects.access(actor, tenantId, project, 'editor');
+    const a = await this.projects.access(actor, tenantId, project, 'manager');
+    await this.usage?.assertStorage(tenantId, JSON.stringify(input).length);
     const res = await this.projects.cellTx(tenantId, async (tx) => {
       const ds = await tx.selectFrom('dataset').select(['id', 'columns']).where('project_id', '=', a.project.id).where('key', '=', key).executeTakeFirst();
       if (!ds) throw notFound('Dataset');

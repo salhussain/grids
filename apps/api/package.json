@@ -17,7 +17,14 @@
     "test": "vitest run --passWithNoTests",
     "dev": "node --env-file=../../.env --watch dist/server.js",
     "start": "node --env-file=../../.env dist/server.js",
-    "bootstrap:idp": "node --env-file=../../.env dist/scripts/bootstrap-idp.js"
+    "bootstrap:idp": "node --env-file=../../.env dist/scripts/bootstrap-idp.js",
+    "seed:covid": "node --env-file=../../.env dist/scripts/seed-covid.js",
+    "seed:connections": "node --env-file=../../.env dist/scripts/seed-connections.js",
+    "seed:hierarchy": "node --env-file=../../.env dist/scripts/seed-hierarchy.js",
+    "seed:overlays": "node --env-file=../../.env dist/scripts/seed-overlays.js",
+    "seed:datasets": "node --env-file=../../.env dist/scripts/seed-datasets.js",
+    "seed:help-desk": "node --env-file=../../.env dist/scripts/seed-help-desk.js",
+    "seed:samples": "node --env-file=../../.env dist/scripts/seed-samples.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
@@ -26,15 +33,23 @@
     "@grids/forms": "workspace:^",
     "@grids/i18n": "workspace:^",
     "@grids/schema": "workspace:^",
+    "docx": "^9.9.0",
+    "exceljs": "^4.4.0",
+    "undici": "^8.11.2",
     "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^7.0.0",
+    "geoip-lite": "^2.0.3",
     "jose": "^6.2.12",
     "kysely": "^0.29.6",
     "nodemailer": "^10.0.13",
+    "pdfkit": "^0.20.2",
+    "read-excel-file": "^9.3.10",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.2.0",
-    "@types/nodemailer": "^8.0.2"
+    "@types/geoip-lite": "^1.4.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.6"
   }
 }

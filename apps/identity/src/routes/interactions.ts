@@ -39,14 +39,28 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
     }
   }
 
+  /** The organisation a sign-in is for: an application's own organisation, else the one asked for. */
+  async function orgOf(d: { params: Record<string, unknown> }): Promise<string | null> {
+    const client = await provider.Client.find(String(d.params.client_id));
+    const own = client?.['org_id'];
+    if (own) return String(own);
+    return d.params.organization ? String(d.params.organization) : null;
+  }
+
   /** Completes the interaction: login (if needed) plus an automatic first-party consent grant. */
   async function finish(req: FastifyRequest, reply: { raw: ServerResponse }, accountId: string, remember: boolean, loggedIn = true) {
     const d = await getDetails(req, reply);
+    const client = await provider.Client.find(String(d.params.client_id));
+    const clientOrg = client?.['org_id'] ? String(client['org_id']) : null;
+    // An organisation's own application only signs in that organisation's people.
+    if (clientOrg && !(await accounts.isOrgMember(accountId, clientOrg))) throw new AuthError('not_a_member', 403);
+    // The organisation's subscription has ended: nobody signs in until it is renewed.
+    if (await accounts.signInBlocked(accountId, await orgOf(d))) throw new AuthError('subscription_ended', 403);
     let grant = d.grantId ? await provider.Grant.find(d.grantId) : undefined;
     grant ??= new provider.Grant({ accountId, clientId: String(d.params.client_id) });
     const scope = String(d.params.scope ?? 'openid');
     grant.addOIDCScope(scope);
-    grant.addResourceScope(config.API_AUDIENCE, 'api');
+    if (!clientOrg) grant.addResourceScope(config.API_AUDIENCE, 'api');
     const grantId = await grant.save();
     const result = loggedIn ? { login: { accountId, remember }, consent: { grantId } } : { consent: { grantId } };
     const redirectTo = await provider.interactionResult(req.raw, reply.raw, result, { mergeWithLastSubmission: true });
@@ -63,7 +77,7 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
       await accounts.setPending(d.uid, accountId, 'mfa', remember);
       return { step: 'mfa' as const };
     }
-    const orgId = d.params.organization ? String(d.params.organization) : null;
+    const orgId = await orgOf(d);
     const org = orgId ? await accounts.findOrg(orgId) : undefined;
     if (org?.mfa_required || (await accounts.mfaRequired(accountId))) {
       await accounts.setPending(d.uid, accountId, 'mfa_setup', remember);
@@ -76,7 +90,7 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
     const d = await getDetails(req, reply);
     if (d.uid !== req.params.uid) throw new AuthError('session_expired', 410);
     const client = await provider.Client.find(String(d.params.client_id));
-    const orgId = d.params.organization ? String(d.params.organization) : null;
+    const orgId = await orgOf(d);
     const [branding, org] = await Promise.all([deps.branding(orgId), orgId ? accounts.findOrg(orgId) : undefined]);
 
     // Already signed in: only consent is pending → grant it for our first-party apps.
@@ -113,7 +127,7 @@ export function interactionRoutes(app: FastifyInstance, deps: Deps) {
   app.post<{ Params: { uid: string } }>('/ui/interaction/:uid/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = Register.parse(req.body);
     const d = await getDetails(req, reply);
-    const orgId = d.params.organization ? String(d.params.organization) : null;
+    const orgId = await orgOf(d);
     const org = orgId ? await accounts.findOrg(orgId) : undefined;
     if (!org?.allow_registration) throw new AuthError('registration_closed', 403);
     const account = await accounts.register({ ...body, orgId });

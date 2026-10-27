@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { FORM_LAYOUT_INFO, type FormGroupDto, type MenuForm } from '@grids/schema';
 import { Button, Dialog, Empty, ErrorNotice, Field, Input, Loading, PageHeader, Select, cx, useToast } from '@grids/ui';
-import { ArrowRight, ChevronRight, ClipboardList, FolderPlus, GitBranch, Inbox, Pencil, Plus, Search, Settings2, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronRight, ClipboardList, FolderPlus, GitBranch, Pencil, Plus, Search, Settings2, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../../api';
 import { useCan, useWorkspace } from '../../session';
@@ -22,7 +22,7 @@ const below = (children: Map<string | null, FormGroupDto[]>, id: string): Set<st
   return out;
 };
 
-export const fillHref = (tenantId: string, f: Pick<MenuForm, 'project' | 'key'>) => `/o/${tenantId}/fill/${f.project.key}/${f.key}`;
+export const fillHref = (tenantId: string, f: Pick<MenuForm, 'project' | 'key'>) => `/o/${tenantId}/forms/${f.project.key}/${f.key}`;
 
 export function useFormsMenu() {
   const ws = useWorkspace();
@@ -73,12 +73,6 @@ export function FormsHome() {
         meta={selected ? undefined : 'Everything you can fill in, organised by your organisation.'}
         actions={
           <div className="flex gap-2">
-            <Link
-              to={`/o/${ws.tenant.id}/inbox`}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-300 bg-snow px-3.5 text-sm font-medium shadow-[0_1px_2px_rgb(16_24_40/0.05)] hover:bg-zinc-50"
-            >
-              <Inbox className="size-4" /> Submissions
-            </Link>
             {admin && (
               <Button icon={FolderPlus} onClick={() => setEditing({ group: null, parentId: selected?.id ?? null })}>
                 {selected ? 'New sub-group' : 'New group'}
@@ -173,6 +167,7 @@ export function FormsHome() {
 }
 
 function FormCard({ form: f, href }: { form: MenuForm; href: string }) {
+  const FormIcon = iconOf(f.icon ?? 'clipboard');
   return (
     <Link
       to={href}
@@ -180,7 +175,7 @@ function FormCard({ form: f, href }: { form: MenuForm; href: string }) {
     >
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 text-on-accent shadow-sm">
-          <ClipboardList className="size-5" />
+          <FormIcon className="size-5" />
         </span>
         <div className="min-w-0">
           <h3 className="truncate font-semibold tracking-tight">{f.name}</h3>

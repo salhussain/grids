@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, FilePlus2 } from 'lucide-react';
+import { CreditCard, FilePlus2, FileDown, ReceiptText } from 'lucide-react';
 import { useState } from 'react';
 import type { InvoiceDto, TenantDetail } from '@grids/schema';
 import { api } from '../../api';
@@ -208,9 +208,44 @@ export function BillingTab({ t, onSubscribe }: { t: TenantDetail; onSubscribe: (
               <Td className="whitespace-nowrap text-zinc-600">{date(inv.dueAt)}</Td>
               <Td className="num text-right font-medium">{money(inv.total, inv.currency)}</Td>
               <Td className="text-right">
-                {inv.status === 'open' && (
-                  <span className="text-xs font-medium text-accent-700">Record payment →</span>
-                )}
+                <div className="flex items-center justify-end gap-1">
+                  {inv.status === 'open' && (
+                    <span className="me-2 text-xs font-medium text-accent-700">
+                      Record payment →
+                    </span>
+                  )}
+                  {(inv.status === 'paid'
+                    ? (['invoice', 'receipt'] as const)
+                    : (['invoice'] as const)
+                  ).map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      className="p-1.5 text-zinc-500 hover:text-ink"
+                      title={
+                        kind === 'receipt' ? 'Download receipt (PDF)' : 'Download invoice (PDF)'
+                      }
+                      aria-label={`${kind === 'receipt' ? 'Receipt' : 'Invoice'} ${inv.number} as PDF`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void api.invoicePdf(t.id, inv.id, kind).then((blob) => {
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${kind === 'receipt' ? 'Receipt' : 'Invoice'}-${inv.number}.pdf`;
+                          a.click();
+                          setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                        });
+                      }}
+                    >
+                      {kind === 'receipt' ? (
+                        <ReceiptText className="size-4" />
+                      ) : (
+                        <FileDown className="size-4" />
+                      )}
+                    </button>
+                  ))}
+                </div>
               </Td>
             </tr>
           ))}

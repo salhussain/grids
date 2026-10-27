@@ -18,9 +18,10 @@ const Env = z.object({
   WEB_URL: z.string().default('http://localhost:5174'),
   /** Public portal: public projects for everyone, more after signing in. */
   PORTAL_URL: z.string().default('http://localhost:5176'),
+  /** Extra sign-in return addresses for the mobile app while developing (Expo Go uses an exp:// address), separated by commas. */
+  MOBILE_DEV_REDIRECTS: z.string().default(''),
   /** `platform` = relay through the platform API (default); otherwise an SMTP URL. */
   IDENTITY_MAIL: z.string().default('platform'),
-  SMTP_URL: z.string().default('smtp://localhost:1025'),
   MAIL_FROM: z.string().default('Grids <no-reply@grids.local>'),
   /** Built login app served at /ui. */
   LOGIN_DIST: z.string().default(resolve(import.meta.dirname, '../../login/dist')),

@@ -36,10 +36,11 @@ export function InvitePage() {
 
   if (preview.isPending || email === undefined) return <FullPageSpinner />;
   const card = (title: string, body: React.ReactNode) => (
-    <div className="chrome flex min-h-full items-center justify-center bg-chrome p-4">
-      <div className="w-full max-w-md space-y-4 border-t-4 border-accent-600 bg-snow p-8 text-sm text-zinc-600">
-        <div className="text-xs font-semibold tracking-[0.18em] text-zinc-500">GRIDS</div>
-        <h1 className="text-xl font-semibold text-ink">{title}</h1>
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-canvas p-4">
+      <div className="grid-bg pointer-events-none absolute inset-0" aria-hidden />
+      <div className="relative w-full max-w-md space-y-4 border border-zinc-200 bg-snow p-8 text-sm text-zinc-600 shadow-raised">
+        <div className="font-mono text-[11px] tracking-[0.18em] text-zinc-500">GRIDS</div>
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{title}</h1>
         {body}
       </div>
     </div>

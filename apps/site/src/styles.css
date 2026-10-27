@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+@import '@grids/ui/theme.css';
+@source '../../../packages/ui/src';
+
+/* Faint square grid behind the hero, the same motif as the sign-in page. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-ink) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black 40%, transparent);
+}
+html {
+  scroll-behavior: smooth;
+}

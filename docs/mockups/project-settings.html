@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Settings Mockup</title>
+<meta name="description" content="Three clickable redesign directions for the Grids project settings page." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  /* Same system as workspace.html: sharp corners, Plex, raised white sheet on a grey canvas.
+     Chrome (focus, selection, buttons) uses the platform blue; the project's own colour only
+     paints the project's identity (icon tile, cover, preview), never the controls. */
+  :root {
+    --brand: #0f62fe;
+    --brand-soft: color-mix(in oklab, var(--brand) 9%, white);
+    --brand-line: color-mix(in oklab, var(--brand) 28%, white);
+    --brand-ink: color-mix(in oklab, var(--brand) 78%, black);
+    --on-brand: #fff;
+    --canvas: #efeff1; --sheet: #fff; --raise: #fafafb; --ink: #121316; --ink-2: #4a4c55; --ink-3: #82848d;
+    --line: #e4e4e8; --line-2: #d3d4da; --hover: #f3f3f5;
+    --shadow: 0 1px 2px rgb(16 18 24 / .05), 0 8px 28px -14px rgb(16 18 24 / .16);
+    --good: #198038; --good-soft: #e8f5ec; --warn: #b28600; --warn-soft: #fcf4d6; --bad: #da1e28; --bad-soft: #fdecec;
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    --pc: #B28600;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b); --brand-line: color-mix(in oklab, var(--brand) 45%, #17181b); --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+      --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88; --line: #26272c; --line-2: #34363c; --hover: #202126;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 32px -14px rgb(0 0 0 / .7);
+      --good: #42be65; --good-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --bad: #ff6b72; --bad-soft: #2d1416;
+    }
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b); --brand-line: color-mix(in oklab, var(--brand) 45%, #17181b); --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+    --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88; --line: #26272c; --line-2: #34363c; --hover: #202126;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 32px -14px rgb(0 0 0 / .7);
+    --good: #42be65; --good-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --bad: #ff6b72; --bad-soft: #2d1416;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* Mockup switcher */
+  .switch { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 20px; background: var(--ink); color: var(--sheet); }
+  .switch b { font-weight: 500; font-size: 13px; }
+  .switch .opts { display: flex; gap: 2px; }
+  .switch button { height: 30px; padding: 0 12px; border: 0; background: none; color: color-mix(in oklab, var(--sheet) 65%, transparent); cursor: pointer; font-size: 13px; }
+  .switch button[aria-pressed='true'] { background: var(--sheet); color: var(--ink); font-weight: 500; }
+  .switch .note { margin-left: auto; font-size: 12.5px; color: color-mix(in oklab, var(--sheet) 65%, transparent); max-width: 60ch; }
+
+  .frame { max-width: 1180px; margin: 20px auto; padding: 0 20px 80px; }
+  .sheet { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .topbar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 24px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+  .topbar b { color: var(--ink); font-weight: 500; }
+  .page { padding: 24px 28px 0; display: grid; gap: 24px; }
+  .p-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .p-ic { width: 44px; height: 44px; display: grid; place-items: center; color: #fff; background: var(--pc); flex: none; }
+  .p-ic svg.i { width: 22px; height: 22px; }
+  .p-head h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; font-weight: 600; line-height: 1.15; }
+  .p-head .chips { margin-left: auto; display: flex; gap: 6px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; margin: 0 -28px; padding: 0 28px; }
+  .tabs span { display: flex; align-items: center; height: 40px; padding: 0 12px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--ink-2); font-size: 13.5px; white-space: nowrap; }
+  .tabs span.on { border-color: var(--brand); color: var(--ink); font-weight: 500; }
+  .body { padding: 24px 28px 0; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; font-size: 11.5px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
+  .chip.good { border-color: transparent; background: var(--good-soft); color: var(--good); }
+  .chip.warn { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+  .chip.brand { border-color: transparent; background: var(--brand-soft); color: var(--brand-ink); }
+  .chip i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 1px solid var(--line-2); background: var(--sheet); color: var(--ink); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--ink-3); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; gap: 6px; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  .btn.primary:hover { background: var(--brand-ink); border-color: var(--brand-ink); }
+  .btn.primary:disabled { opacity: .4; cursor: default; }
+  .btn.ghost { border-color: transparent; background: none; color: var(--ink-2); }
+  .btn.ghost:hover { background: var(--hover); color: var(--ink); }
+  .btn.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 35%, var(--sheet)); }
+  .btn.danger:hover { background: var(--bad-soft); border-color: var(--bad); }
+
+  /* Form atoms */
+  label.lbl, .lbl { display: block; font-size: 12.5px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+  .hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .input, .area { width: 100%; border: 1px solid var(--line-2); background: var(--sheet); padding: 0 10px; height: 36px; border-radius: 0; }
+  .area { height: auto; padding: 8px 10px; min-height: 96px; resize: vertical; line-height: 1.5; }
+  .input:focus, .area:focus { outline: 1px solid var(--brand); border-color: var(--brand); }
+  .input[disabled] { background: var(--raise); color: var(--ink-3); }
+  .locked { position: relative; }
+  .locked svg { position: absolute; right: 10px; top: 10px; color: var(--ink-3); }
+  .count { float: right; font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-weight: 400; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stack { display: grid; gap: 18px; }
+
+  /* Colour + icon */
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .sw { width: 26px; height: 26px; border: 0; cursor: pointer; position: relative; }
+  .sw[aria-pressed='true']::after { content: ''; position: absolute; inset: -4px; border: 2px solid var(--ink); }
+  .hexbox { display: flex; align-items: center; gap: 8px; height: 36px; border: 1px solid var(--line-2); padding: 0 10px 0 6px; width: 140px; margin-top: 10px; }
+  .hexbox .dot { width: 22px; height: 22px; background: var(--pc); position: relative; overflow: hidden; }
+  .hexbox .dot input { position: absolute; inset: -6px; width: 40px; height: 40px; opacity: 0; cursor: pointer; }
+  .hexbox input.t { border: 0; outline: 0; width: 100%; background: none; font-family: var(--mono); font-size: 13px; }
+  .icons { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 6px; }
+  .ico { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--sheet); color: var(--ink-2); cursor: pointer; }
+  .ico:hover { border-color: var(--ink-3); color: var(--ink); }
+  .ico[aria-pressed='true'] { background: var(--pc); border-color: var(--pc); color: #fff; }
+  .ico svg.i { width: 18px; height: 18px; }
+
+  /* Images */
+  .img-slot { position: relative; border: 1px dashed var(--line-2); background: var(--raise); display: grid; place-items: center; overflow: hidden; }
+  .img-slot.square { width: 112px; height: 112px; }
+  .img-slot.wide { width: 100%; height: 112px; }
+  .img-slot img, .img-slot svg.art { max-width: 80%; max-height: 80%; }
+  .img-slot .acts { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
+  .img-slot:hover .acts, .img-slot:focus-within .acts { opacity: 1; }
+  .img-slot .acts button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line-2); background: var(--sheet); cursor: pointer; color: var(--ink-2); }
+  .img-slot .acts button:hover { color: var(--ink); border-color: var(--ink-3); }
+  .img-slot.empty { cursor: pointer; color: var(--ink-3); font-size: 12.5px; text-align: center; gap: 4px; align-content: center; }
+  .img-slot.empty:hover { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-soft); }
+  .img-slot.empty svg.i { width: 20px; height: 20px; margin: 0 auto; }
+  .img-meta { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+
+  /* Access */
+  .seg { display: inline-flex; border: 1px solid var(--line-2); }
+  .seg button { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 16px; border: 0; background: none; color: var(--ink-2); cursor: pointer; font-size: 13.5px; }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button[aria-pressed='true'] { background: var(--ink); color: var(--sheet); }
+  .radios { border: 1px solid var(--line); }
+  .radio { display: grid; grid-template-columns: 20px 20px minmax(0, 1fr); gap: 12px; align-items: start; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: var(--sheet); text-align: left; cursor: pointer; }
+  .radio:first-child { border-top: 0; }
+  .radio:hover { background: var(--hover); }
+  .radio .dot { width: 16px; height: 16px; border: 1.5px solid var(--line-2); border-radius: 50%; margin-top: 2px; display: grid; place-items: center; }
+  .radio[aria-checked='true'] { background: var(--brand-soft); }
+  .radio[aria-checked='true'] .dot { border-color: var(--brand); }
+  .radio[aria-checked='true'] .dot::after { content: ''; width: 8px; height: 8px; background: var(--brand); border-radius: 50%; }
+  .radio .t { font-weight: 500; font-size: 13.5px; }
+  .radio .s { font-size: 12.5px; color: var(--ink-3); }
+  .radio svg.i { margin-top: 2px; color: var(--ink-3); }
+  .callout { display: flex; gap: 10px; padding: 10px 12px; font-size: 12.5px; background: var(--raise); border-left: 2px solid var(--line-2); color: var(--ink-2); margin-top: 10px; }
+  .callout.warn { background: var(--warn-soft); border-color: var(--warn); }
+  .callout.good { background: var(--good-soft); border-color: var(--good); }
+  .callout svg.i { margin-top: 2px; }
+
+  /* Panels */
+  .panel { border: 1px solid var(--line); background: var(--sheet); scroll-margin-top: 70px; }
+  .panel-h { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .panel-h h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .panel-h p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-3); }
+  .panel-b { padding: 18px; }
+  .panel.danger { border-color: color-mix(in oklab, var(--bad) 30%, var(--line)); }
+  .danger-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 18px; }
+  .danger-row .t { font-weight: 500; }
+  .danger-row .s { font-size: 12.5px; color: var(--ink-3); }
+  .danger-row .btn { margin-left: auto; }
+
+  /* Preview card (matches workspace.html project cards) */
+  .pv { border: 1px solid var(--line); background: var(--sheet); overflow: hidden; box-shadow: var(--shadow); }
+  .pv .cover { position: relative; height: 96px; border-bottom: 1px solid var(--line); background-color: color-mix(in srgb, var(--pc) 8%, var(--sheet)); background-image: linear-gradient(color-mix(in srgb, var(--pc) 16%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--pc) 16%, transparent) 1px, transparent 1px); background-size: 16px 16px; display: grid; place-items: center; }
+  .pv .cover.img { background: #fff; }
+  .pv .cover svg.art { height: 70%; width: auto; }
+  .pv .ic { position: absolute; left: 16px; bottom: -1px; width: 38px; height: 38px; display: grid; place-items: center; color: #fff; background: var(--pc); }
+  .pv .ic.logo { background: #fff; border: 1px solid var(--line); border-bottom: 0; }
+  .pv .ic.logo svg.art { width: 28px; }
+  .pv .b { padding: 16px; display: grid; gap: 6px; }
+  .pv h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+  .pv p { margin: 0; font-size: 13px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .pv .f { display: flex; gap: 6px; padding: 12px 16px; border-top: 1px solid var(--line); }
+
+  /* Save bar */
+  .savebar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 12px 28px; margin-top: 28px; border-top: 1px solid var(--line); background: color-mix(in oklab, var(--sheet) 94%, transparent); backdrop-filter: blur(6px); }
+  .savebar .state { font-size: 13px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+  .savebar .state i { width: 8px; height: 8px; background: var(--good); border-radius: 50%; }
+  .savebar.dirty .state { color: var(--ink); }
+  .savebar.dirty .state i { background: var(--warn); }
+  .savebar .btn:first-of-type { margin-left: auto; }
+
+  /* Variant A: form + sticky preview */
+  .a-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  .a-cols .main { display: grid; gap: 20px; }
+  .a-cols aside { position: sticky; top: 64px; display: grid; gap: 10px; }
+  .a-cols aside .eyebrow { display: flex; justify-content: space-between; }
+  .brand-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; }
+
+  /* Variant B: anchor nav + one sheet of rows */
+  .b-cols { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .b-nav { position: sticky; top: 64px; display: grid; gap: 2px; }
+  .b-nav a { display: block; padding: 7px 12px; font-size: 13.5px; color: var(--ink-2); border-left: 2px solid var(--line); cursor: pointer; text-decoration: none; }
+  .b-nav a:hover { color: var(--ink); background: var(--hover); }
+  .b-nav a.on { color: var(--ink); font-weight: 500; border-color: var(--brand); }
+  .b-nav a.bad { color: var(--bad); }
+  .row { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; padding: 18px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .k { font-size: 13.5px; font-weight: 500; }
+  .row .d { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+  .b-sec { display: grid; gap: 10px; margin-bottom: 28px; scroll-margin-top: 70px; }
+
+  /* Variant C: the cover is the editor */
+  .c-hero { position: relative; border: 1px solid var(--line); }
+  .c-cover { position: relative; height: 200px; background-color: color-mix(in srgb, var(--pc) 8%, var(--sheet)); background-image: linear-gradient(color-mix(in srgb, var(--pc) 16%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--pc) 16%, transparent) 1px, transparent 1px); background-size: 16px 16px; display: grid; place-items: center; overflow: hidden; }
+  .c-cover.img { background: #fff; }
+  .c-cover svg.art { height: 78%; width: auto; }
+  .c-cover .acts { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
+  .c-cover .acts .btn { background: color-mix(in oklab, var(--sheet) 92%, transparent); backdrop-filter: blur(6px); }
+  .c-id { display: flex; gap: 18px; align-items: flex-end; padding: 0 20px 20px; margin-top: -36px; position: relative; flex-wrap: wrap; }
+  .c-logo { position: relative; width: 84px; height: 84px; flex: none; display: grid; place-items: center; background: var(--pc); color: #fff; border: 3px solid var(--sheet); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+  .c-logo.has { background: #fff; }
+  .c-logo svg.art { width: 66px; }
+  .c-logo svg.i { width: 34px; height: 34px; }
+  .c-logo .edit { position: absolute; right: -8px; bottom: -8px; width: 26px; height: 26px; display: grid; place-items: center; background: var(--ink); color: var(--sheet); }
+  .c-logo .edit svg.i { width: 14px; height: 14px; }
+  .c-name { flex: 1; min-width: 240px; }
+  .c-name .input { height: 44px; font-size: 22px; font-weight: 600; letter-spacing: -.02em; border-color: transparent; padding: 0 8px; margin-left: -8px; width: calc(100% + 8px); }
+  .c-name .input:hover { border-color: var(--line-2); }
+  .c-name .input:focus { border-color: var(--brand); }
+  .c-name .code { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .c-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; margin-top: 24px; align-items: start; }
+  .c-cols > div { display: grid; gap: 20px; }
+
+  @media (max-width: 900px) {
+    .a-cols, .b-cols, .c-cols { grid-template-columns: minmax(0, 1fr); }
+    .a-cols aside, .b-nav { position: static; }
+    .b-nav { display: flex; overflow-x: auto; }
+    .b-nav a { border-left: 0; border-bottom: 2px solid var(--line); white-space: nowrap; }
+    .b-nav a.on { border-color: var(--brand); }
+    .row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .page, .body { padding-left: 16px; padding-right: 16px; } .tabs { margin: 0 -16px; padding: 0 16px; } .savebar { padding: 12px 16px; }
+    .grid2 { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="switch">
+  <b>Project settings</b>
+  <div class="opts" role="group" aria-label="Direction">
+    <button data-v="a">A · Live preview</button>
+    <button data-v="b">B · Sectioned rows</button>
+    <button data-v="c">C · Cover is the editor</button>
+  </div>
+  <span class="note" id="note"></span>
+</div>
+
+<div class="frame">
+  <div class="sheet">
+    <div class="topbar">OECS <span>/</span> Projects <span>/</span> <b data-bind="name">OECS PSS 2</b></div>
+    <div class="page">
+      <div class="p-head">
+        <div class="p-ic" data-slot="hdr-icon"></div>
+        <div><div class="eyebrow mono" data-bind="code">oecs-pss-2</div><h1 data-bind="name">OECS PSS 2</h1></div>
+        <div class="chips" data-slot="chips"></div>
+      </div>
+      <div class="tabs"><span>Overview</span><span>Data</span><span>Entities</span><span>Forms</span><span>Dashboards</span><span>Jobs</span><span class="on">Settings</span></div>
+    </div>
+    <div class="body" id="view"></div>
+    <div class="savebar" id="savebar">
+      <span class="state"><i></i><span id="saveText">All changes saved</span></span>
+      <button class="btn ghost" id="discard" hidden>Discard</button>
+      <button class="btn primary" id="save" disabled>Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${d}</svg>`;
+const ICON = {
+  syringe: '<path d="m18 2 4 4M17 7l3-3M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5M9 11l4 4M5 19l-3 3M14 4l6 6"/>',
+  pulse: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7 0-3 .5-4.5 2-1.5-1.5-2.8-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>',
+  truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.7a1 1 0 0 0-.2-.6l-3-3.7a1 1 0 0 0-.8-.4H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  box: '<path d="M21 8 12 3 3 8v8l9 5 9-5ZM3 8l9 5 9-5M12 13v8"/>',
+  pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/>',
+  plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2Z"/>',
+  leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10ZM2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+  cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="0"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18ZM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/>',
+  rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09ZM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2ZM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+  draft: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  image: '<rect x="3" y="3" width="18" height="18"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  archive: '<rect x="2" y="3" width="20" height="5"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  lockSm: '<rect x="3" y="11" width="18" height="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+};
+const ic = (n) => I(ICON[n]);
+const PICK = ['syringe', 'pulse', 'heart', 'truck', 'box', 'pin', 'shield', 'users', 'plane', 'leaf', 'cart', 'globe'];
+const COLOURS = ['#B28600', '#0f62fe', '#198038', '#8a3ffc', '#da1e28', '#007d79', '#d12771', '#121316'];
+const LOGO = `<svg class="art" viewBox="0 0 150 60" role="img" aria-label="OECS PPS logo"><circle cx="19" cy="22" r="14" fill="#7ac143"/><circle cx="19" cy="22" r="8" fill="#fff"/><circle cx="19" cy="22" r="4" fill="#f4d000"/><text x="38" y="34" font-family="IBM Plex Sans,sans-serif" font-weight="700" font-size="30" fill="#7ac143">PPS</text><g stroke="#16213e" stroke-width="1.4" fill="none"><path d="M108 8 124 14 136 6M124 14 128 30 112 38 108 8M128 30 142 34"/></g><g fill="#16213e"><circle cx="108" cy="8" r="3"/><circle cx="124" cy="14" r="3"/><circle cx="136" cy="6" r="3"/><circle cx="128" cy="30" r="3"/><circle cx="112" cy="38" r="3"/><circle cx="142" cy="34" r="3"/></g><text x="6" y="48" font-family="IBM Plex Sans,sans-serif" font-weight="600" font-size="6.2" fill="#16213e">OECS POOLED PROCUREMENT &amp; SUPPLY-CHAIN</text><text x="48" y="57" font-family="IBM Plex Sans,sans-serif" font-weight="600" font-size="6.5" fill="#7ac143">MANAGEMENT</text></svg>`;
+
+const DESC = 'The OECS PPS project brings together supply chain data for health commodities across Saint Lucia, Dominica, Saint Vincent and the Grenadines, and Grenada. It follows stock from the regional pooled procurement body (OECS PPS), through each country’s Central Medical Store, to the facilities where it reaches patients.';
+const INIT = { name: 'OECS PSS 2', desc: DESC, color: '#B28600', icon: 'syringe', status: 'live', vis: 'public', logo: true, cover: true };
+let S = { ...INIT };
+
+const STATUS = {
+  draft: { icon: 'draft', t: 'Draft', s: 'Only managers see it while you set it up', note: ['warn', 'Draft projects are hidden from everyone except managers, and public dashboards are offline.'] },
+  live: { icon: 'rocket', t: 'Live', s: 'Visible to everyone it is shared with', note: ['good', 'Live. People can open it according to the visibility below.'] },
+};
+const VIS = {
+  private: { icon: 'lock', t: 'Private', s: 'Only project members' },
+  org: { icon: 'building', t: 'Organisation', s: 'Every member of the organisation can view' },
+  public: { icon: 'globe', t: 'Public', s: 'Anyone with the link can view public dashboards' },
+};
+
+/* ---------- Field builders (shared by all three directions) ---------- */
+const fName = () => `<div><label class="lbl" for="name${uid}">Name</label><input id="name${uid}" class="input" data-in="name" /></div>`;
+const fCode = () => `<div><label class="lbl">Code</label><div class="locked"><input class="input mono" value="oecs-pss-2" disabled aria-label="Code" />${ic('lockSm')}</div><div class="hint">Used in links and imports. Fixed once created.</div></div>`;
+const fDesc = () => `<div><label class="lbl" for="desc${uid}">Description <span class="count" data-count></span></label><textarea id="desc${uid}" class="area" data-in="desc" maxlength="400"></textarea><div class="hint">Shown on the project card and the project’s page. Two or three sentences is plenty.</div></div>`;
+const fColour = () => `<div><div class="lbl">Colour</div><div class="swatches" role="group" aria-label="Colour">${COLOURS.map((c) => `<button class="sw" style="background:${c}" data-colour="${c}" aria-label="${c}" aria-pressed="false"></button>`).join('')}</div><label class="hexbox"><span class="dot"><input type="color" data-in="color" aria-label="Pick a colour" /></span><input class="t" data-in="color" aria-label="Hex colour" maxlength="7" /></label></div>`;
+const fIcon = () => `<div><div class="lbl">Icon <span class="count" data-iconnote></span></div><div class="icons" role="group" aria-label="Icon">${PICK.map((n) => `<button class="ico" data-icon="${n}" aria-label="${n}" aria-pressed="false">${ic(n)}</button>`).join('')}</div></div>`;
+const fLogo = () => `<div><div class="lbl">Logo</div><div data-slot="logo-slot"></div><div class="img-meta">Square, PNG or SVG. Replaces the icon.</div></div>`;
+const fCover = () => `<div><div class="lbl">Background image</div><div data-slot="cover-slot"></div><div class="img-meta">Wide, at least 1600 px. Shown behind the project header.</div></div>`;
+const fStatus = () => `<div><div class="lbl">Status</div><div class="seg" role="radiogroup" aria-label="Status">${Object.entries(STATUS).map(([k, v]) => `<button data-status="${k}" aria-pressed="false">${ic(v.icon)}${v.t}</button>`).join('')}</div><div data-slot="status-note"></div></div>`;
+const fVis = () => `<div><div class="lbl">Visibility</div><div class="radios" role="radiogroup" aria-label="Visibility">${Object.entries(VIS).map(([k, v]) => `<button class="radio" role="radio" data-vis="${k}" aria-checked="false"><span class="dot"></span>${ic(v.icon)}<span><div class="t">${v.t}</div><div class="s">${v.s}</div></span></button>`).join('')}</div></div>`;
+const archive = () => `<div class="panel danger" id="danger"><div class="danger-row"><div><div class="t">Archive project</div><div class="s">Stops scheduled jobs and hides the project from lists. You can restore it later.</div></div><button class="btn danger">${ic('archive')}Archive project</button></div></div>`;
+const preview = () => `<div class="pv"><div class="cover" data-slot="pv-cover"></div><div class="b"><h3 data-bind="name"></h3><p data-bind="desc"></p></div><div class="f" data-slot="chips"></div></div>`;
+let uid = '';
+
+/* ---------- Three directions ---------- */
+const VIEWS = {
+  a: {
+    note: 'Edit on the left, see the project card update on the right. Image slots shrink to what they are for; access explains its own consequences.',
+    html: () => `<div class="a-cols"><div class="main">
+      <section class="panel"><div class="panel-h"><h2>Identity</h2><p>What people see in lists and on the project’s page.</p></div><div class="panel-b stack">
+        <div class="grid2">${fName()}${fCode()}</div>${fDesc()}</div></section>
+      <section class="panel"><div class="panel-h"><h2>Branding</h2><p>Colour and icon, plus an optional logo and background image.</p></div><div class="panel-b stack">
+        <div class="grid2">${fColour()}${fIcon()}</div>
+        <div class="brand-row">${fLogo()}${fCover()}</div></div></section>
+      <section class="panel"><div class="panel-h"><h2>Access</h2><p>Whether the project is live, and who can open it.</p></div><div class="panel-b stack">${fStatus()}${fVis()}</div></section>
+      ${archive()}
+    </div>
+    <aside><div class="eyebrow"><span>Preview</span><span>Project card</span></div>${preview()}
+      <div class="hint" style="margin:0">This is how the project appears in the organisation’s project list.</div></aside></div>`,
+  },
+  b: {
+    note: 'Closest to today, but tighter: one sheet per section, label and control on one row, a section nav that tracks scroll, and danger zone separated at the bottom.',
+    html: () => `<div class="b-cols"><nav class="b-nav" aria-label="Sections"><a class="on" data-jump="s-general">General</a><a data-jump="s-brand">Branding</a><a data-jump="s-access">Access</a><a class="bad" data-jump="danger">Archive</a></nav>
+      <div>
+        <div class="b-sec" id="s-general"><div class="eyebrow">General</div><section class="panel">
+          <div class="row"><div><div class="k">Name</div><div class="d">Shown in lists and on the project’s page.</div></div>${fName()}</div>
+          <div class="row"><div><div class="k">Code</div><div class="d">Used in links and imports.</div></div><div class="locked" style="max-width:260px"><input class="input mono" value="oecs-pss-2" disabled aria-label="Code" />${ic('lockSm')}<div class="hint">Fixed once created.</div></div></div>
+          <div class="row"><div><div class="k">Description</div><div class="d">Two or three sentences is plenty.</div></div>${fDesc().replace(/<label.*?<\/label>/, '')}</div></section></div>
+        <div class="b-sec" id="s-brand"><div class="eyebrow">Branding</div><section class="panel">
+          <div class="row"><div><div class="k">Colour</div><div class="d">Tints the header, cards and charts.</div></div>${fColour().replace('<div class="lbl">Colour</div>', '')}</div>
+          <div class="row"><div><div class="k">Icon</div><div class="d">Used when there is no logo.</div></div>${fIcon().replace(/<div class="lbl">.*?<\/div>/, '')}</div>
+          <div class="row"><div><div class="k">Logo</div><div class="d">Square, PNG or SVG.</div></div>${fLogo().replace(/<div class="lbl">.*?<\/div>/, '').replace(/<div class="img-meta">.*?<\/div>/, '')}</div>
+          <div class="row"><div><div class="k">Background image</div><div class="d">Wide, at least 1600 px.</div></div>${fCover().replace(/<div class="lbl">.*?<\/div>/, '').replace(/<div class="img-meta">.*?<\/div>/, '')}</div></section></div>
+        <div class="b-sec" id="s-access"><div class="eyebrow">Access</div><section class="panel">
+          <div class="row"><div><div class="k">Status</div><div class="d">Draft hides the project while you set it up.</div></div>${fStatus().replace('<div class="lbl">Status</div>', '')}</div>
+          <div class="row"><div><div class="k">Visibility</div><div class="d">Who can open it once it is live.</div></div>${fVis().replace('<div class="lbl">Visibility</div>', '')}</div></section></div>
+        <div class="b-sec"><div class="eyebrow">Danger zone</div>${archive()}</div>
+      </div></div>`,
+  },
+  c: {
+    note: 'Direct manipulation: click the cover to change the background, click the logo tile to change the logo, rename in place. Fields only for what cannot be pointed at.',
+    html: () => `<div class="c-hero"><div class="c-cover" data-slot="c-cover"><div class="acts" data-slot="c-acts"></div></div>
+      <div class="c-id"><div class="c-logo" data-slot="c-logo" tabindex="0" role="button" aria-label="Change logo"></div>
+        <div class="c-name"><input class="input" data-in="name" aria-label="Project name" /><div class="code mono">${ic('lockSm')} oecs-pss-2 · fixed once created</div></div>
+        <div data-slot="chips" style="display:flex;gap:6px;padding-bottom:6px"></div></div></div>
+      <div class="c-cols"><div>
+        <section class="panel"><div class="panel-h"><h2>About</h2></div><div class="panel-b">${fDesc().replace(/<label.*?<\/label>/, '')}</div></section>
+        <section class="panel"><div class="panel-h"><h2>Colour and icon</h2></div><div class="panel-b stack">${fColour().replace('<div class="lbl">Colour</div>', '')}${fIcon().replace(/<div class="lbl">.*?<\/div>/, '')}</div></section>
+        ${archive()}</div>
+      <div><section class="panel"><div class="panel-h"><h2>Access</h2></div><div class="panel-b stack">${fStatus()}${fVis()}</div></section></div></div>`,
+  },
+};
+
+/* ---------- Behaviour ---------- */
+const $ = (s, r = document) => [...r.querySelectorAll(s)];
+let current = 'a';
+
+function imgSlot(kind, has) {
+  const label = kind === 'logo' ? 'logo' : 'background image';
+  if (!has) return `<button class="img-slot empty ${kind === 'logo' ? 'square' : 'wide'}" data-add="${kind}">${ic('upload')}<span>Upload ${label}</span><span style="font-size:11.5px">or drop a file</span></button>`;
+  return `<div class="img-slot ${kind === 'logo' ? 'square' : 'wide'}" style="background:#fff">${LOGO}<div class="acts"><button aria-label="Replace ${label}" data-add="${kind}">${ic('upload')}</button><button aria-label="Remove ${label}" data-rm="${kind}">${ic('trash')}</button></div></div>`;
+}
+const chips = () => `<span class="chip ${S.status === 'live' ? 'good' : 'warn'}"><i></i>${STATUS[S.status].t}</span><span class="chip">${ic(VIS[S.vis].icon).replace('class="i"', 'class="i" style="width:12px;height:12px"')}${VIS[S.vis].t}</span>`;
+
+function sync(skipInputs) {
+  document.documentElement.style.setProperty('--pc', S.color);
+  $('[data-bind]').forEach((el) => { el.textContent = el.dataset.bind === 'code' ? 'oecs-pss-2' : (S[el.dataset.bind] || (el.dataset.bind === 'name' ? 'Untitled project' : 'No description yet')); });
+  if (!skipInputs) $('[data-in]').forEach((el) => { const v = S[el.dataset.in]; if (el !== document.activeElement && el.value !== v) el.value = v; });
+  $('[data-count]').forEach((el) => (el.textContent = `${S.desc.length}/400`));
+  $('[data-iconnote]').forEach((el) => (el.textContent = S.logo ? 'Hidden while a logo is set' : ''));
+  $('[data-colour]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.colour.toLowerCase() === S.color.toLowerCase()));
+  $('[data-icon]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.icon === S.icon));
+  $('[data-status]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.status === S.status));
+  $('[data-vis]').forEach((b) => b.setAttribute('aria-checked', b.dataset.vis === S.vis));
+  $('[data-slot="status-note"]').forEach((el) => (el.innerHTML = `<div class="callout ${STATUS[S.status].note[0]}">${ic('info')}<span>${STATUS[S.status].note[1]}${S.status === 'live' && S.vis === 'public' ? ' Public dashboards are reachable by anyone with the link.' : ''}</span></div>`));
+  $('[data-slot="chips"]').forEach((el) => (el.innerHTML = chips()));
+  $('[data-slot="logo-slot"]').forEach((el) => (el.innerHTML = imgSlot('logo', S.logo)));
+  $('[data-slot="cover-slot"]').forEach((el) => (el.innerHTML = imgSlot('cover', S.cover)));
+  $('[data-slot="hdr-icon"]').forEach((el) => (el.innerHTML = S.logo ? LOGO.replace('class="art"', 'class="art" style="width:34px"') : ic(S.icon)));
+  const hdr = document.querySelector('.p-ic'); hdr.style.background = S.logo ? '#fff' : ''; hdr.style.border = S.logo ? '1px solid var(--line)' : '';
+  $('[data-slot="pv-cover"]').forEach((el) => {
+    el.className = 'cover' + (S.cover ? ' img' : '');
+    el.innerHTML = (S.cover ? LOGO : '') + `<div class="ic ${S.logo ? 'logo' : ''}">${S.logo ? LOGO : ic(S.icon)}</div>`;
+  });
+  $('[data-slot="c-cover"]').forEach((el) => { el.classList.toggle('img', S.cover); el.firstElementChild.outerHTML; el.querySelectorAll('svg.art').forEach((s) => s.remove()); if (S.cover) el.insertAdjacentHTML('afterbegin', LOGO); });
+  $('[data-slot="c-acts"]').forEach((el) => (el.innerHTML = `<button class="btn sm" data-add="cover">${ic('image')}${S.cover ? 'Change background' : 'Add background'}</button>${S.cover ? `<button class="btn sm" data-rm="cover" aria-label="Remove background">${ic('trash')}</button>` : ''}`));
+  $('[data-slot="c-logo"]').forEach((el) => { el.classList.toggle('has', S.logo); el.innerHTML = (S.logo ? LOGO : ic(S.icon)) + `<span class="edit">${ic('upload')}</span>`; el.dataset.add = 'logo'; });
+  const dirty = JSON.stringify(S) !== JSON.stringify(INIT);
+  document.getElementById('savebar').classList.toggle('dirty', dirty);
+  document.getElementById('saveText').textContent = dirty ? 'Unsaved changes' : 'All changes saved';
+  document.getElementById('save').disabled = !dirty || !S.name.trim();
+  document.getElementById('discard').hidden = !dirty;
+}
+
+function show(v) {
+  current = v; uid = v;
+  document.getElementById('view').innerHTML = VIEWS[v].html();
+  document.getElementById('note').textContent = VIEWS[v].note;
+  $('.switch [data-v]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === v));
+  history.replaceState(null, '', '#' + v);
+  sync();
+}
+
+document.addEventListener('input', (e) => { const k = e.target.dataset.in; if (!k) return; let v = e.target.value; if (k === 'color') { if (!/^#[0-9a-f]{6}$/i.test(v)) { if (/^#?[0-9a-f]{6}$/i.test(v)) v = '#' + v.replace('#', ''); else return; } } S[k] = v; sync(true); $('[data-in="color"]').forEach((el) => { if (el !== e.target) el.value = S.color; }); });
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button, a, [data-add]'); if (!t) return;
+  if (t.dataset.v) return show(t.dataset.v);
+  if (t.dataset.colour) S.color = t.dataset.colour;
+  else if (t.dataset.icon) S.icon = t.dataset.icon;
+  else if (t.dataset.status) S.status = t.dataset.status;
+  else if (t.dataset.vis) S.vis = t.dataset.vis;
+  else if (t.dataset.rm) S[t.dataset.rm] = false;
+  else if (t.dataset.add) S[t.dataset.add] = true;
+  else if (t.dataset.jump) { document.getElementById(t.dataset.jump).scrollIntoView({ behavior: 'smooth' }); $('.b-nav a').forEach((a) => a.classList.toggle('on', a === t)); return; }
+  else if (t.id === 'discard') { S = { ...INIT }; }
+  else if (t.id === 'save') { Object.assign(INIT, S); }
+  else return;
+  sync();
+  if (t.dataset.colour || t.id === 'discard') $('[data-in]').forEach((el) => (el.value = S[el.dataset.in]));
+});
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.c-logo')) { e.preventDefault(); S.logo = !S.logo; sync(); } });
+show(['a', 'b', 'c'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'a');
+</script>
+</body>
+</html>

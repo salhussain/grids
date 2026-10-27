@@ -13,3 +13,4 @@ test-results/
 apps/web/.env.local
 .claude/settings.local.json
 apps/portal/.env.local
+apps/status/data/

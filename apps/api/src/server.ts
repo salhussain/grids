@@ -4,9 +4,11 @@ import { buildApp } from './app.js';
 import { JwtTokenVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { GridsIdpClient } from './idp/grids.js';
+import { GridPayClient } from './pay/grids.js';
 import { cellResolver } from './services/cells.js';
 import { EmailService, mailerFor } from './services/email.js';
 import { createServices } from './services/index.js';
+import { secretsKeyFrom } from './services/secrets.js';
 
 const config = loadConfig();
 const platformDb = createDb<PlatformDB>(config.DATABASE_URL_PLATFORM, { max: 10 });
@@ -17,15 +19,25 @@ const services = createServices(
     db: platformDb,
     cells,
     idp,
+    pay: new GridPayClient(config.PAY_URL, config.PAY_SERVICE_TOKEN),
     email: new EmailService(platformDb, mailerFor(config.SMTP_URL, config.MAIL_FROM)),
     consoleUrl: config.CONSOLE_URL,
     workspaceUrl: config.WEB_URL,
     baseDomain: config.BASE_DOMAIN,
     supportEmail: config.SUPPORT_EMAIL,
+    secretsKey: secretsKeyFrom(config.SECRETS_KEY, config.NODE_ENV === 'production'),
+    allowPrivateConnections: config.CONNECTIONS_ALLOW_PRIVATE ?? config.NODE_ENV !== 'production',
     now: () => new Date(),
   },
   { devAutoVerifyDomains: config.DOMAIN_DEV_AUTOVERIFY },
 );
+
+services.workflow.start(Number(process.env.WORKFLOW_TICK_MS ?? 15_000), (msg, extra) => console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...extra })));
+
+// Time alone ends a subscription: look for organisations whose period has run out, now and every few minutes.
+const settleAll = () => void Promise.all([services.access.syncAll(), services.usage.pushAllLimits(), services.billing.issueDueFeeInvoices()]).catch(() => undefined);
+settleAll();
+const accessTimer = setInterval(settleAll, Number(process.env.ACCESS_SYNC_MS ?? 300_000));
 
 const app = await buildApp({
   logger: true,
@@ -38,6 +50,7 @@ const app = await buildApp({
     },
   },
   internal: { serviceToken: config.IDENTITY_SERVICE_TOKEN, devMailbox: config.NODE_ENV !== 'production' },
+  pay: { serviceToken: config.PAY_SERVICE_TOKEN },
   platform: {
     services,
     idp,
@@ -46,6 +59,9 @@ const app = await buildApp({
 });
 
 const shutdown = async () => {
+  clearInterval(accessTimer);
+  await services.usage.flush().catch(() => undefined);
+  services.workflow.stop();
   await app.close();
   await Promise.all([platformDb.destroy(), cells.destroy()]);
   process.exit(0);

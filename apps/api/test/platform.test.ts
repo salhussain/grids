@@ -90,6 +90,8 @@ beforeAll(async () => {
       workspaceUrl: 'http://web',
       baseDomain: 'grids.test',
       supportEmail: 'support@grids.test',
+      secretsKey: Buffer.alloc(32, 7),
+      allowPrivateConnections: true,
       now: () => clock,
     },
     {

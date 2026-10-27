@@ -8,7 +8,7 @@ import { createServices } from '../src/services/index.js';
 import { FakeIdp, FakeMailer, fakeVerifier } from './fakes.js';
 
 /** Real Postgres + HTTP app with fake IdP/mailer. Bearer token = subject. */
-export async function startHarness() {
+export async function startHarness(opts: { fetch?: typeof fetch } = {}) {
   const dbs: TestDatabases = await startTestDatabases();
   const idp = new FakeIdp();
   const mailer = new FakeMailer();
@@ -26,9 +26,11 @@ export async function startHarness() {
       workspaceUrl: 'http://web',
       baseDomain: 'grids.test',
       supportEmail: 'support@grids.test',
+      secretsKey: Buffer.alloc(32, 7),
+      allowPrivateConnections: true,
       now: () => new Date(),
     },
-    { devAutoVerifyDomains: true },
+    { devAutoVerifyDomains: true, fetch: opts.fetch },
   );
   const app: FastifyInstance = await buildApp({
     checks: {},

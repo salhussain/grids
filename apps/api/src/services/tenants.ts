@@ -1,6 +1,11 @@
 import { sql } from 'kysely';
+import type { UsageService } from './usage.js';
 import {
   LIMIT_KEYS,
+  sessionPolicyOf,
+  type ActiveSessionsDto,
+  type PastSessionsDto,
+  type SessionPolicy,
   uuidv7,
   type Contact,
   type CreateTenantData,
@@ -31,6 +36,7 @@ export class TenantService {
       domains: DomainService;
       provisioner: Provisioner;
       projectsUsed?: (tenantId: string) => Promise<number>;
+      usage?: UsageService;
     },
   ) {}
 
@@ -81,6 +87,7 @@ export class TenantService {
     const limits = (plan?.limits as PlanLimits | undefined) ?? null;
     const seats = await this.seatsUsed(tenantId);
     const projectCount = (await this.deps.projectsUsed?.(tenantId)) ?? 0;
+    const metered = (await this.deps.usage?.items(tenantId)) ?? [];
 
     return {
       ...toSummary(t),
@@ -109,12 +116,14 @@ export class TenantService {
         billing: contact('billing'),
         technical: contact('technical'),
       },
+      billingAddress: billingAddressOf(t.billing_address),
       mfaRequired: t.mfa_required,
+      sessionPolicy: sessionPolicyOf(t.session_policy),
       subscription,
       limits,
       usage: LIMIT_KEYS.map((key) => ({
         key,
-        used: key === 'users' ? seats : key === 'projects' ? projectCount : null,
+        used: metered.find((m) => m.key === key)?.used ?? (key === 'users' ? seats : key === 'projects' ? projectCount : null),
         limit: limits?.[key] ?? null,
       })),
       domains: await this.deps.domains.list(tenantId),
@@ -295,6 +304,76 @@ export class TenantService {
     return this.get(tenantId);
   }
 
+  /** How long this organisation's people may stay signed in: idle timeout, warning and longest session. */
+  async setSessionPolicy(actor: Actor, tenantId: string, policy: SessionPolicy): Promise<TenantDetail> {
+    await requireTenantAccess(this.ctx, actor, tenantId, {
+      staff: 'tenants.security',
+      workspace: 'security.manage',
+    });
+    if (policy.warningSeconds >= policy.idleTimeoutMinutes * 60)
+      throw badRequest('The warning must start before the idle timeout.');
+    const updated = await this.ctx.db
+      .updateTable('tenant')
+      .set({ session_policy: JSON.stringify(policy) })
+      .where('id', '=', tenantId)
+      .returning('id')
+      .executeTakeFirst();
+    if (!updated) throw notFound('Organisation');
+    await audit(this.ctx, actor.id, tenantId, 'security.session_policy', { ...policy });
+    return this.get(tenantId);
+  }
+
+  /** Who is signed in to this organisation right now. */
+  async activeSessions(actor: Actor, tenantId: string): Promise<ActiveSessionsDto> {
+    const idpOrgId = await this.sessionsOrg(actor, tenantId);
+    if (!idpOrgId) return { sessions: [] };
+    const sessions = await this.ctx.idp.listSessions(idpOrgId);
+    return {
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        email: s.email,
+        name: [s.givenName, s.familyName].filter(Boolean).join(' ') || null,
+        signedInAt: s.signedInAt,
+        expiresAt: s.expiresAt,
+      })),
+    };
+  }
+
+  /** Sign-ins that are over, and failed attempts, for this organisation's people. */
+  async pastSessions(actor: Actor, tenantId: string): Promise<PastSessionsDto> {
+    const idpOrgId = await this.sessionsOrg(actor, tenantId);
+    if (!idpOrgId) return { sessions: [] };
+    const sessions = await this.ctx.idp.listPastSessions(idpOrgId);
+    return {
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        email: s.email,
+        name: [s.givenName, s.familyName].filter(Boolean).join(' ') || null,
+        at: s.at,
+        ip: s.ip,
+        success: s.success,
+      })),
+    };
+  }
+
+  /** Signs one of them out. */
+  async revokeSession(actor: Actor, tenantId: string, sessionId: string): Promise<ActiveSessionsDto> {
+    const idpOrgId = await this.sessionsOrg(actor, tenantId);
+    if (idpOrgId) await this.ctx.idp.revokeSession(idpOrgId, sessionId);
+    await audit(this.ctx, actor.id, tenantId, 'security.session_revoked', { sessionId });
+    return this.activeSessions(actor, tenantId);
+  }
+
+  private async sessionsOrg(actor: Actor, tenantId: string): Promise<string | null> {
+    await requireTenantAccess(this.ctx, actor, tenantId, {
+      staff: 'tenants.security',
+      workspace: 'security.manage',
+    });
+    const t = await this.ctx.db.selectFrom('tenant').select('idp_org_id').where('id', '=', tenantId).executeTakeFirst();
+    if (!t) throw notFound('Organisation');
+    return t.idp_org_id;
+  }
+
   /** Members plus pending invitations count against the `users` limit. */
   async seatsUsed(tenantId: string): Promise<number> {
     const row = await sql<{ n: string }>`
@@ -419,6 +498,20 @@ function toSummary(t: SummaryRow): TenantSummary {
 }
 
 /** Maps provided profile fields to columns; omitted fields are left untouched. */
+/** The stored billing address, or null when invoices go to the registered address. */
+export function billingAddressOf(stored: unknown): TenantDetail['billingAddress'] {
+  if (!stored || typeof stored !== 'object') return null;
+  const a = stored as Record<string, string | null>;
+  return {
+    line1: a.line1 ?? null,
+    line2: a.line2 ?? null,
+    city: a.city ?? null,
+    region: a.region ?? null,
+    postalCode: a.postalCode ?? null,
+    country: a.country ?? null,
+  };
+}
+
 function profileRow(p: UpdateTenantData) {
   const row: Record<string, string | null> = {};
   const set = (col: string, v: string | undefined) => {
@@ -445,6 +538,18 @@ function profileRow(p: UpdateTenantData) {
     row.postal_code = p.address.postalCode ?? null;
     row.country = p.address.country ?? null;
   }
+  if (p.billingAddress !== undefined)
+    row.billing_address =
+      p.billingAddress === null || !Object.values(p.billingAddress).some(Boolean)
+        ? null
+        : JSON.stringify({
+            line1: p.billingAddress.line1 ?? null,
+            line2: p.billingAddress.line2 ?? null,
+            city: p.billingAddress.city ?? null,
+            region: p.billingAddress.region ?? null,
+            postalCode: p.billingAddress.postalCode ?? null,
+            country: p.billingAddress.country ?? null,
+          });
   return row;
 }
 

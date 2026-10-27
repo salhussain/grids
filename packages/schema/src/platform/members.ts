@@ -105,11 +105,24 @@ export type InvitationPreview = z.infer<typeof InvitationPreview>;
 
 export const COLOR_MODES = ['light', 'dark', 'system'] as const;
 
+/** How the person likes their dashboards: the reporting period (the refresh rate is each project's own default). */
+export const DashboardPrefs = z.object({
+  /** A recent window in hours (one of the standard periods), or a custom range of days. */
+  hours: z.number().int().positive().optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  /** One of the project's own reporting periods, by id (worked out again whenever it is used). */
+  periodId: z.string().max(40).optional(),
+});
+export type DashboardPrefs = z.infer<typeof DashboardPrefs>;
+
 /** Personal preferences; they follow the person across organisations. */
 export const PreferencesDto = z.object({
   colorMode: z.enum(COLOR_MODES),
   /** Preferred interface language; null = the organisation's default. */
   locale: z.string().nullable(),
+  /** Dashboard period and refresh; absent until they choose. */
+  dashboard: DashboardPrefs.optional(),
 });
 export type PreferencesDto = z.infer<typeof PreferencesDto>;
 export const PreferencesInput = z.object({
@@ -119,6 +132,7 @@ export const PreferencesInput = z.object({
     .regex(/^[a-z]{2,3}$/)
     .nullable()
     .optional(),
+  dashboard: DashboardPrefs.optional(),
 });
 export type PreferencesInput = z.infer<typeof PreferencesInput>;
 

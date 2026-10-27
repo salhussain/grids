@@ -34,6 +34,7 @@ export interface Branding {
   primaryColor: string;
   logo: string | null;
   welcomeMessage: string;
+  signin?: { background: string; tagline: string; ownLinks: boolean; termsUrl: string; privacyUrl: string };
   languages: string[];
   defaultLanguage: string;
   overrides?: Record<string, Record<string, string>>;

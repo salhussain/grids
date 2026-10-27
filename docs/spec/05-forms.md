@@ -4,3 +4,5 @@
 - **Versioning:** you edit a draft and then publish an immutable version. Submissions pin `form_version_id`, and migrations between versions are never required.
 - **Submission storage:** `submission(id uuidv7 /* client-generated */, form_version_id, subject_entity_id, answers jsonb, submitted_by, collected_at, device_id, geo, status)`. A post-processor fans out to attribute changes and observations.
 - The builder is a drag-and-drop UI writing the same JSON. XLSForm import/export (the ODK and DHIS2 ecosystem format) comes later.
+
+**Workflow.** A form may carry a graph workflow (approvals with optional SLAs, conditions on the answers, email, webhooks, entity updates, waits). See [ADR 0007](../adr/0007-form-workflow-engine.md).

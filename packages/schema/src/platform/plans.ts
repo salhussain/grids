@@ -27,6 +27,9 @@ export const PlanLimits = z.record(LimitKey, z.number().int().nonnegative().null
 export type PlanLimits = z.infer<typeof PlanLimits>;
 
 export const FEATURE_KEYS = [
+  'help_desk',
+  'payments',
+  'authentication',
   'custom_branding',
   'custom_domain',
   'sso',
@@ -57,6 +60,8 @@ export const PlanDto = z.object({
   /** Effective yearly price after the yearly discount. */
   priceYearly: Money,
   trialDays: z.number().int(),
+  /** What Grids charges on each payment an organisation takes through a form (null: nothing). */
+  paymentFee: z.object({ percent: z.number(), fixed: z.number().int() }).nullable(),
   limits: PlanLimits,
   features: z.array(z.string()),
   isPublic: z.boolean(),
@@ -73,6 +78,7 @@ export const PlanInput = z.object({
   priceMonthly: Money,
   yearlyDiscountPct: z.number().min(0).max(100).default(0),
   trialDays: z.number().int().min(0).max(365).default(0),
+  paymentFee: z.object({ percent: z.number().min(0).max(100), fixed: z.number().int().min(0) }).nullable().default(null),
   limits: PlanLimits,
   features: z.array(FeatureKey).default([]),
   isPublic: z.boolean().default(true),

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Ticket Mockup</title>
+<meta name="description" content="Three clickable redesign options for the support ticket page." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  /* Three directions for the ticket page, one shared data set. Switch with the bar at the top.
+     Same tokens as workspace.html: sharp corners, Plex Sans for UI, Plex Mono for meta. */
+  :root {
+    --brand: #0f62fe;
+    --brand-soft: color-mix(in oklab, var(--brand) 9%, white);
+    --brand-line: color-mix(in oklab, var(--brand) 28%, white);
+    --brand-ink: color-mix(in oklab, var(--brand) 78%, black);
+    --canvas: #efeff1; --sheet: #ffffff; --raise: #fafafb;
+    --ink: #121316; --ink-2: #4a4c55; --ink-3: #82848d;
+    --line: #e4e4e8; --line-2: #d3d4da; --hover: #f3f3f5;
+    --shadow: 0 1px 2px rgb(16 18 24 / .05), 0 8px 28px -14px rgb(16 18 24 / .16);
+    --good: #198038; --good-soft: #e8f5ec;
+    --warn: #b28600; --warn-soft: #fcf4d6; --warn-line: #ecd98a;
+    --bad: #da1e28; --bad-soft: #fdecec;
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b);
+      --brand-line: color-mix(in oklab, var(--brand) 45%, #17181b);
+      --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+      --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88;
+      --line: #26272c; --line-2: #34363c; --hover: #202126;
+      --good: #42be65; --good-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --warn-line: #5a4c16; --bad: #ff6b72; --bad-soft: #2d1416;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .muted { color: var(--ink-3); }
+  svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* Option switcher */
+  .switch { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 4px; padding: 10px 16px; background: var(--ink); color: #fff; flex-wrap: wrap; }
+  .switch b { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 10px; opacity: .6; font-weight: 500; }
+  .switch button { background: transparent; border: 1px solid #ffffff30; color: #fff; padding: 5px 12px; }
+  .switch button[aria-pressed='true'] { background: #fff; color: #121316; border-color: #fff; }
+  .switch span { margin-left: auto; font-size: 12px; opacity: .65; }
+  .note { max-width: 1240px; margin: 14px auto 0; padding: 0 16px; font-size: 13px; color: var(--ink-2); }
+  .note b { color: var(--ink); }
+  .stage { max-width: 1240px; margin: 12px auto 40px; padding: 0 16px; }
+  .sheet { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); }
+
+  /* Shared bits */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--sheet); }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover { background: var(--brand-ink); }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--line); background: var(--raise); font-size: 12px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--ink-3)); flex: none; }
+  .av { width: var(--s, 32px); height: var(--s, 32px); border-radius: 50%; display: grid; place-items: center; background: var(--c, #8a3ffc); color: #fff; font-size: calc(var(--s, 32px) * .38); font-weight: 600; flex: none; }
+  .tag { font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); background: var(--raise); color: var(--ink-2); }
+  .tag.team { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); }
+  .tag.note { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn); }
+  .tag.vis { background: var(--raise); }
+  .crumb { display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+  .crumb a { color: var(--ink-2); }
+  .crumb a:hover { color: var(--ink); }
+  h1 { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; }
+
+  /* Messages */
+  .msg { display: grid; grid-template-columns: 32px 1fr; gap: 12px; }
+  .msg .body { border: 1px solid var(--line); background: var(--sheet); }
+  .msg .head { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .msg .head .when { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+  .msg .text { padding: 12px 14px; white-space: pre-wrap; }
+  .msg.team .body { background: color-mix(in oklab, var(--brand) 5%, var(--sheet)); border-color: var(--brand-line); }
+  .msg.internal .body { background: var(--warn-soft); border-color: var(--warn-line); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in oklab, var(--warn) 7%, transparent) 9px 10px); }
+  .event { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); padding: 2px 0; }
+  .event::before, .event::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .event span { display: inline-flex; align-items: center; gap: 6px; }
+  .event b { color: var(--ink-2); font-weight: 500; }
+
+  /* Composer */
+  .composer { border: 1px solid var(--line-2); background: var(--sheet); }
+  .composer.is-note { border-color: var(--warn-line); background: var(--warn-soft); }
+  .composer .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .composer .tabs button { border: 0; background: transparent; padding: 8px 14px; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; }
+  .composer .tabs button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--brand); }
+  .composer.is-note .tabs button[aria-selected='true'] { border-bottom-color: var(--warn); }
+  .composer textarea { width: 100%; min-height: 76px; border: 0; background: transparent; padding: 12px 14px; resize: vertical; outline: none; }
+  .composer .foot { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); }
+  .composer .hint { font-size: 12px; color: var(--ink-3); }
+
+  /* Property rows */
+  .prop { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; padding: 7px 0; }
+  .prop > label { color: var(--ink-3); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .sel { appearance: none; background: transparent; border: 1px solid transparent; height: 30px; padding: 0 8px; margin-left: -8px; width: calc(100% + 8px); }
+  .sel:hover { border-color: var(--line-2); background: var(--hover); }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--brand-ink); }
+  .linkbtn:hover { text-decoration: underline; }
+  .card { border: 1px solid var(--line); background: var(--sheet); padding: 14px 16px; }
+  .card h3 { margin: 0 0 8px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+  .kv span:first-child { color: var(--ink-3); }
+
+  .opt { display: none; }
+  .opt.on { display: block; }
+
+  /* ===== Option A: thread + sticky composer + slim properties rail ===== */
+  .A { display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+  .A .main { padding: 22px 28px 0; min-width: 0; }
+  .A .rail { border-left: 1px solid var(--line); background: var(--raise); padding: 22px 20px; display: grid; gap: 18px; align-content: start; }
+  .A .titlebar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin: 14px 0 6px; }
+  .A .thread { display: grid; gap: 14px; padding: 20px 0; }
+  .A .sticky { position: sticky; bottom: 0; background: linear-gradient(to top, var(--sheet) 82%, transparent); padding: 14px 0 22px; }
+  .A .rail h3, .C .rail h3 { margin: 0; }
+
+  /* ===== Option B: inbox split ===== */
+  .B { display: grid; grid-template-columns: 300px minmax(0, 1fr) 280px; min-height: 720px; }
+  .B .list { border-right: 1px solid var(--line); background: var(--raise); display: flex; flex-direction: column; }
+  .B .list header { padding: 14px 14px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+  .B .list input { height: 32px; border: 1px solid var(--line-2); background: var(--sheet); padding: 0 10px; width: 100%; }
+  .B .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .B .filters button { border: 1px solid var(--line); background: var(--sheet); padding: 2px 10px; font-size: 12px; color: var(--ink-2); }
+  .B .filters button[aria-pressed='true'] { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+  .B .row { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; border-left: 3px solid transparent; cursor: pointer; }
+  .B .row:hover { background: var(--hover); }
+  .B .row.sel { background: var(--sheet); border-left-color: var(--brand); }
+  .B .row .t { font-weight: 500; line-height: 1.3; }
+  .B .row .m { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-3); }
+  .B .center { display: flex; flex-direction: column; min-width: 0; }
+  .B .center header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .B .center .thread { padding: 20px 24px; display: grid; gap: 14px; flex: 1; align-content: start; }
+  .B .center .cmp { padding: 0 24px 20px; }
+  .B .side { border-left: 1px solid var(--line); padding: 18px; display: grid; gap: 16px; align-content: start; }
+
+  /* ===== Option C: property strip + timeline ===== */
+  .C .top { padding: 20px 32px 0; }
+  .C .titlebar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin: 14px 0 14px; }
+  .C .strip { display: flex; gap: 0; border: 1px solid var(--line); background: var(--raise); flex-wrap: wrap; }
+  .C .strip > div { padding: 8px 14px; border-right: 1px solid var(--line); min-width: 150px; flex: 1; }
+  .C .strip > div:last-child { border-right: 0; }
+  .C .strip .eyebrow { display: block; margin-bottom: 2px; }
+  .C .strip .sel { height: 26px; margin-left: -8px; }
+  .C .cols { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; padding: 24px 32px 32px; }
+  .C .tl { position: relative; display: grid; gap: 14px; }
+  .C .tl::before { content: ''; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 1px; background: var(--line-2); }
+  .C .tl .event { padding-left: 44px; }
+  .C .tl .event::before { display: none; }
+  .C .tl .event::after { display: none; }
+  .C .tl .event .ic { position: absolute; left: 7px; width: 17px; height: 17px; background: var(--sheet); display: grid; place-items: center; }
+  .C .rail { display: grid; gap: 16px; align-content: start; }
+  .C .toggle { display: inline-flex; border: 1px solid var(--line-2); }
+  .C .toggle button { border: 0; background: transparent; padding: 3px 10px; font-size: 12px; color: var(--ink-2); }
+  .C .toggle button[aria-pressed='true'] { background: var(--ink); color: var(--sheet); }
+  .C .tlhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+
+  @media (max-width: 1000px) {
+    .A, .B, .C .cols { grid-template-columns: 1fr; }
+    .A .rail, .B .side, .B .list { border: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+
+<div class="switch" role="toolbar" aria-label="Design option">
+  <b>Ticket redesign</b>
+  <button data-opt="A" aria-pressed="true">A · Thread + rail</button>
+  <button data-opt="B" aria-pressed="false">B · Inbox split</button>
+  <button data-opt="C" aria-pressed="false">C · Strip + timeline</button>
+  <span>Clickable: change stage, assign, reply or add a note</span>
+</div>
+
+<p class="note" id="note"></p>
+
+<div class="stage">
+
+<!-- ================= OPTION A ================= -->
+<section class="opt on sheet A" id="optA">
+  <div class="main">
+    <div class="crumb"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg><a href="#">Support</a> / <span class="mono">#1034</span></div>
+    <div class="titlebar">
+      <div>
+        <h1>Life expectancy overlay looks flipped</h1>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+          <span class="chip js-stage-chip"></span>
+          <span class="chip"><span class="dot" style="--c:#8a3ffc"></span>Question</span>
+          <span class="chip" style="background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-ink)"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>Help window · country-atlas</span>
+          <span class="muted mono" style="font-size:12px">Opened 11 hours ago</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px"><button class="btn"><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="8"/><path d="M3 11V3h8"/></svg>Copy link</button><button class="btn primary js-resolve"><svg viewBox="0 0 16 16"><path d="m3 8.5 3.2 3L13 4.5"/></svg>Mark resolved</button></div>
+    </div>
+    <div class="thread js-thread"></div>
+    <div class="sticky"><div class="js-composer"></div></div>
+  </div>
+  <aside class="rail">
+    <div><div class="eyebrow" style="margin-bottom:6px">Properties</div><div class="js-props"></div></div>
+    <div><div class="eyebrow" style="margin-bottom:10px">Requester</div><div class="js-requester"></div></div>
+    <div class="card" style="background:var(--sheet)"><h3 style="display:flex;gap:8px;align-items:center"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/></svg>Need Grids' help?</h3><p class="muted" style="margin:0 0 10px;font-size:13px">Only your team can see this. The requester is told the team asked for help.</p><button class="btn" style="width:100%;justify-content:center">Ask the Grids team</button></div>
+  </aside>
+</section>
+
+<!-- ================= OPTION B ================= -->
+<section class="opt sheet B" id="optB">
+  <div class="list">
+    <header>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>Support</b><span class="muted mono" style="font-size:12px">12 open</span></div>
+      <input placeholder="Search tickets" aria-label="Search tickets" />
+      <div class="filters"><button aria-pressed="true">All</button><button aria-pressed="false">Mine</button><button aria-pressed="false">Unassigned</button><button aria-pressed="false">Resolved</button></div>
+    </header>
+    <div class="row sel"><div class="t">Life expectancy overlay looks flipped</div><div class="m"><span class="dot js-stage-dot"></span><span class="mono">#1034</span><span>Tomas Reyes</span><span style="margin-left:auto">11h</span></div></div>
+    <div class="row"><div class="t">Cannot export survey results as CSV</div><div class="m"><span class="dot" style="--c:#da1e28"></span><span class="mono">#1033</span><span>Amira Nasser</span><span style="margin-left:auto">1d</span></div></div>
+    <div class="row"><div class="t">Add a Portuguese translation for the form</div><div class="m"><span class="dot" style="--c:#0f62fe"></span><span class="mono">#1031</span><span>Joana Pires</span><span style="margin-left:auto">2d</span></div></div>
+    <div class="row"><div class="t">Map tiles fail to load on mobile</div><div class="m"><span class="dot" style="--c:#198038"></span><span class="mono">#1029</span><span>Dev Patel</span><span style="margin-left:auto">4d</span></div></div>
+  </div>
+  <div class="center">
+    <header>
+      <div>
+        <div class="crumb mono" style="font-size:12px">#1034 · country-atlas · opened 11 hours ago</div>
+        <h1 style="font-size:20px;margin-top:4px">Life expectancy overlay looks flipped</h1>
+      </div>
+      <div style="display:flex;gap:8px"><button class="btn js-assign-b">Assign to me</button><button class="btn primary js-resolve"><svg viewBox="0 0 16 16"><path d="m3 8.5 3.2 3L13 4.5"/></svg>Resolve</button></div>
+    </header>
+    <div class="thread js-thread"></div>
+    <div class="cmp"><div class="js-composer"></div></div>
+  </div>
+  <aside class="side">
+    <div><div class="eyebrow" style="margin-bottom:6px">Properties</div><div class="js-props"></div></div>
+    <div><div class="eyebrow" style="margin-bottom:10px">Requester</div><div class="js-requester"></div></div>
+    <button class="btn" style="justify-content:center">Ask the Grids team</button>
+  </aside>
+</section>
+
+<!-- ================= OPTION C ================= -->
+<section class="opt sheet C" id="optC">
+  <div class="top">
+    <div class="crumb"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg><a href="#">Support</a> / <span class="mono">#1034</span></div>
+    <div class="titlebar">
+      <div>
+        <h1>Life expectancy overlay looks flipped</h1>
+        <div class="muted" style="font-size:13px;margin-top:6px">Tomas Reyes · visitor · from <span class="mono">country-atlas</span> help window · 11 hours ago</div>
+      </div>
+      <div style="display:flex;gap:8px"><button class="btn"><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="8"/><path d="M3 11V3h8"/></svg>Copy link</button><button class="btn primary js-resolve"><svg viewBox="0 0 16 16"><path d="m3 8.5 3.2 3L13 4.5"/></svg>Mark resolved</button></div>
+    </div>
+    <div class="strip js-strip"></div>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="tlhead"><b>Activity</b><div class="toggle js-toggle"><button aria-pressed="true" data-f="all">All</button><button aria-pressed="false" data-f="msg">Messages</button><button aria-pressed="false" data-f="internal">Internal</button></div></div>
+      <div class="tl js-thread"></div>
+      <div style="margin-top:20px"><div class="js-composer"></div></div>
+    </div>
+    <aside class="rail">
+      <div class="card"><div class="eyebrow" style="margin-bottom:10px">Requester</div><div class="js-requester"></div></div>
+      <div class="card"><h3>Need Grids' help?</h3><p class="muted" style="margin:0 0 10px;font-size:13px">Only your team can see this.</p><button class="btn" style="width:100%;justify-content:center">Ask the Grids team</button></div>
+    </aside>
+  </div>
+</section>
+
+</div>
+
+<script>
+  const STAGES = { 'Open': '#0f62fe', 'Under review': '#f1a100', 'In progress': '#8a3ffc', 'Resolved': '#198038' };
+  const state = {
+    stage: 'Under review', assignee: 'Kofi Mensah', mode: 'reply', filter: 'all',
+    items: [
+      { k: 'msg', who: 'Tomas Reyes', ini: 'TR', c: '#a88a1f', role: 'Requester', vis: 'Visitor', when: '11 hours ago', text: 'Green should be the higher numbers, I think? It looks the other way round to me.' },
+      { k: 'event', icon: 'tag', who: 'Salman Raza', text: 'labelled Question', when: '11 hours ago' },
+      { k: 'msg', cls: 'team', who: 'Salman Raza', ini: 'SR', c: '#8a3ffc', role: 'Team', email: 'hdrazasalman@gmail.com', when: '11 hours ago', text: 'We are looking at whether the colours are the wrong way round.' },
+      { k: 'event', icon: 'stage', who: 'Salman Raza', text: 'moved stage to In progress', when: '11 hours ago' },
+      { k: 'internal', who: 'Salman Raza', ini: 'SR', c: '#8a3ffc', email: 'hdrazasalman@gmail.com', when: '11 hours ago', text: 'Checked the legend config: the ramp is reversed for this indicator only.' },
+    ],
+  };
+  const icons = {
+    tag: '<svg viewBox="0 0 16 16"><path d="M2 8.5V2h6.5L14 7.5 8.5 13z"/><circle cx="5.2" cy="5.2" r=".8"/></svg>',
+    stage: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1.4"/></svg>',
+    lock: '<svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>',
+    flag: '<svg viewBox="0 0 16 16"><path d="M3 14V2h9l-2 3.5L12 9H3"/></svg>',
+    user: '<svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.7"/><path d="M2.5 14c.6-3 2.7-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/></svg>',
+    mail: '<svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9"/><path d="m2.5 4 5.5 4.5L13.5 4"/></svg>',
+  };
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+
+  const NOTES = {
+    A: '<b>A · Thread + rail.</b> Closest to today, tidied. The composer is pinned to the bottom so you never scroll to reply, stage and assignee are editable in place, and internal notes get a hatched amber surface so they can never be mistaken for a reply.',
+    B: '<b>B · Inbox split.</b> For people who work tickets all day. The queue sits beside the conversation, so moving to the next ticket is one click. Details collapse to a narrow right column.',
+    C: '<b>C · Strip + timeline.</b> Properties become one editable strip under the title, giving the thread the full width. Messages and events share one timeline, filterable to messages or internal only.',
+  };
+
+  function stageChip() { return `<span class="dot" style="--c:${STAGES[state.stage]}"></span>${state.stage}`; }
+
+  function msgHTML(m) {
+    if (m.k === 'event') return `<div class="event" data-k="event"><span class="ic">${icons[m.icon]}</span><span><b>${m.who}</b> ${m.text} · ${m.when}</span></div>`;
+    const internal = m.k === 'internal';
+    const tags = internal ? `<span class="tag note">Internal note</span>` : m.role === 'Team' ? `<span class="tag team">Team</span>` : `<span class="tag">Requester</span>${m.vis ? `<span class="tag team" style="background:#e5f0ff">${m.vis}</span>` : ''}`;
+    return `<div class="msg ${internal ? 'internal' : m.role === 'Team' || m.team ? 'team' : ''}" data-k="${internal ? 'internal' : 'msg'}">
+      <div class="av" style="--c:${m.c}">${m.ini}</div>
+      <div class="body"><div class="head"><b>${m.who}</b>${tags}${m.email ? `<span class="muted" style="font-size:12px">${m.email}</span>` : ''}${internal ? `<span class="muted" title="Only your team sees this">${icons.lock}</span>` : ''}<span class="when">${m.when}</span></div><div class="text">${esc(m.text)}</div></div></div>`;
+  }
+
+  function composerHTML() {
+    const note = state.mode === 'note';
+    return `<div class="composer ${note ? 'is-note' : ''}">
+      <div class="tabs" role="tablist"><button role="tab" aria-selected="${!note}" data-mode="reply">Reply to requester</button><button role="tab" aria-selected="${note}" data-mode="note">${icons.lock}Internal note</button></div>
+      <textarea placeholder="${note ? 'Only your team will see this' : 'Write a reply to Tomas'}" aria-label="Message"></textarea>
+      <div class="foot"><span class="hint">${note ? 'Visible to your team only' : 'Sent to tomas.reyes@example.org'}</span><span style="margin-left:auto"></span><button class="btn primary js-send">${note ? 'Add note' : 'Send reply'}</button></div></div>`;
+  }
+
+  function propsHTML() {
+    const opts = Object.keys(STAGES).map((s) => `<option ${s === state.stage ? 'selected' : ''}>${s}</option>`).join('');
+    return `<div class="prop"><label>${icons.stage}Stage</label><select class="sel js-stage" aria-label="Stage">${opts}</select></div>
+      <div class="prop"><label>${icons.flag}Priority</label><select class="sel" aria-label="Priority"><option>Normal</option><option>High</option><option>Low</option></select></div>
+      <div class="prop"><label>${icons.user}Assignee</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${state.assignee ? `<span class="av" style="--s:22px;--c:#198038">${state.assignee.split(' ').map((w) => w[0]).join('')}</span>${state.assignee}` : '<span class="muted">Unassigned</span>'}${state.assignee === 'Salman Raza' ? '' : '<button class="linkbtn js-assign">Assign to me</button>'}</div></div>
+      <div class="prop"><label>${icons.tag}Labels</label><span class="chip"><span class="dot" style="--c:#8a3ffc"></span>Question</span></div>`;
+  }
+
+  const requesterHTML = () => `<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><span class="av" style="--c:#a88a1f">TR</span><div><b>Tomas Reyes</b><div class="muted" style="font-size:12px">tomas.reyes@example.org</div></div></div>
+    <div class="kv"><span>Account</span><span>No account (visitor)</span></div><div class="kv"><span>Came from</span><span class="mono">country-atlas</span></div><div class="kv"><span>Opened</span><span>11 hours ago</span></div><div class="kv"><span>Messages</span><span class="mono">${state.items.filter((i) => i.k !== 'event').length}</span></div>`;
+
+  function stripHTML() {
+    const opts = Object.keys(STAGES).map((s) => `<option ${s === state.stage ? 'selected' : ''}>${s}</option>`).join('');
+    return `<div><span class="eyebrow">Stage</span><select class="sel js-stage" aria-label="Stage">${opts}</select></div>
+      <div><span class="eyebrow">Priority</span><select class="sel" aria-label="Priority"><option>Normal</option><option>High</option><option>Low</option></select></div>
+      <div><span class="eyebrow">Assignee</span><div style="height:26px;display:flex;align-items:center;gap:8px">${state.assignee || '<span class="muted">Unassigned</span>'}${state.assignee === 'Salman Raza' ? '' : '<button class="linkbtn js-assign">Assign to me</button>'}</div></div>
+      <div><span class="eyebrow">Label</span><div style="height:26px;display:flex;align-items:center"><span class="chip"><span class="dot" style="--c:#8a3ffc"></span>Question</span></div></div>`;
+  }
+
+  function render() {
+    $$('.js-thread').forEach((el) => {
+      const f = state.filter;
+      el.innerHTML = state.items.filter((i) => f === 'all' || (f === 'msg' && i.k === 'msg') || (f === 'internal' && i.k === 'internal')).map(msgHTML).join('');
+    });
+    $$('.js-composer').forEach((el) => (el.innerHTML = composerHTML()));
+    $$('.js-props').forEach((el) => (el.innerHTML = propsHTML()));
+    $$('.js-requester').forEach((el) => (el.innerHTML = requesterHTML()));
+    $$('.js-strip').forEach((el) => (el.innerHTML = stripHTML()));
+    $$('.js-stage-chip').forEach((el) => (el.innerHTML = stageChip()));
+    $$('.js-stage-dot').forEach((el) => el.style.setProperty('--c', STAGES[state.stage]));
+    $$('.js-assign-b').forEach((el) => (el.hidden = state.assignee === 'Salman Raza'));
+  }
+
+  function event(text, icon) { state.items.push({ k: 'event', icon, who: 'Salman Raza', text, when: 'just now' }); }
+
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.opt) {
+      $$('.switch button').forEach((b) => b.setAttribute('aria-pressed', String(b === t)));
+      $$('.opt').forEach((s) => s.classList.toggle('on', s.id === 'opt' + t.dataset.opt));
+      document.getElementById('note').innerHTML = NOTES[t.dataset.opt];
+    } else if (t.dataset.mode) { state.mode = t.dataset.mode; render(); }
+    else if (t.classList.contains('js-assign') || t.classList.contains('js-assign-b')) { state.assignee = 'Salman Raza'; event('assigned the ticket to themselves', 'user'); render(); }
+    else if (t.classList.contains('js-resolve')) { state.stage = 'Resolved'; event('marked the ticket resolved', 'stage'); render(); }
+    else if (t.dataset.f) { state.filter = t.dataset.f; $$('.js-toggle button').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); render(); }
+    else if (t.classList.contains('js-send')) {
+      const ta = t.closest('.composer').querySelector('textarea'); const v = ta.value.trim(); if (!v) { ta.focus(); return; }
+      const note = state.mode === 'note';
+      state.items.push({ k: note ? 'internal' : 'msg', cls: 'team', who: 'Salman Raza', ini: 'SR', c: '#8a3ffc', role: note ? undefined : 'Team', email: 'hdrazasalman@gmail.com', when: 'just now', text: v });
+      render();
+    }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('js-stage')) { state.stage = e.target.value; event(`moved stage to ${state.stage}`, 'stage'); render(); }
+  });
+  render();
+  document.getElementById('note').innerHTML = NOTES.A;
+</script>
+</body>
+</html>

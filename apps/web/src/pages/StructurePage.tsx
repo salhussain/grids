@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Network, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Building2, Network, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import type { OrgUnitDto } from '@grids/schema';
 import {
+  confirmDialog,
+  cx,
   Button,
   Dialog,
   Empty,
@@ -91,11 +93,16 @@ export function StructurePage() {
                 role="treeitem"
                 aria-level={u.depth + 1}
                 aria-label={u.name}
-                className="group flex items-center gap-3 py-2.5 pr-3 hover:bg-zinc-50 sm:pe-5"
-                style={{ paddingInlineStart: 16 + u.depth * 20 }}
+                className="group relative flex items-center gap-3 py-2.5 pe-3 transition-colors hover:bg-zinc-50 sm:pe-5"
+                style={{ paddingInlineStart: 16 + u.depth * 28 }}
               >
-                <span className="flex size-6 shrink-0 items-center justify-center border border-zinc-300 bg-snow text-[10px] font-semibold text-zinc-500">
-                  {u.depth + 1}
+                <span
+                  className={cx(
+                    'flex size-8 shrink-0 items-center justify-center border',
+                    u.depth === 0 ? 'border-accent-600 bg-accent-600 text-on-accent' : 'border-accent-100 bg-accent-50 text-accent-700',
+                  )}
+                >
+                  {u.depth === 0 ? <Building2 className="size-4" strokeWidth={1.75} /> : <Network className="size-4" strokeWidth={1.75} />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate">
@@ -104,8 +111,8 @@ export function StructurePage() {
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                     {u.levelLabel && <Tag>{u.levelLabel}</Tag>}
-                    <span className="num">
-                      {u.memberCount} {u.memberCount === 1 ? 'person' : 'people'}
+                    <span className="num inline-flex items-center gap-1">
+                      <Users className="size-3" /> {u.memberCount} {u.memberCount === 1 ? 'person' : 'people'}
                     </span>
                   </div>
                 </div>
@@ -133,7 +140,7 @@ export function StructurePage() {
                       variant="ghost"
                       size="sm"
                       icon={Trash2}
-                      onClick={() => confirm(`Delete ${u.name}?`) && remove.mutate(u)}
+                      onClick={async () => (await confirmDialog(`Delete ${u.name}?`)) && remove.mutate(u)}
                       aria-label={`Delete ${u.name}`}
                     />
                   </div>

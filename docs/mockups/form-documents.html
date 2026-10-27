@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Form documents tab: four designs</title>
+<meta name="description" content="Four layout options for the form builder's Documents tab." />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  :root { --ink:#16181d; --mute:#6b6f7a; --line:#e3e5ea; --bg:#f4f5f7; --snow:#fff; --a:#0f766e; --a50:#ecf8f6; --a700:#0b5f58; --warn:#f59e0b; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#eceef2; --mute:#9a9ea9; --line:#2b2d34; --bg:#101114; --snow:#17181c; --a:#2dd4bf; --a50:#12302d; --a700:#5eead4; } }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 14px/1.45 'IBM Plex Sans', system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .pick { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; padding: 10px 16px; background: var(--snow); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .pick b { margin-right: 8px; }
+  .pick button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: var(--snow); color: var(--ink); cursor: pointer; }
+  .pick button[aria-pressed=true] { background: var(--a); color: #fff; border-color: var(--a); }
+  .opt { display: none; padding: 16px; max-width: 1400px; margin: 0 auto; }
+  .opt.on { display: block; }
+  .note { color: var(--mute); font-size: 13px; margin: 0 0 14px; max-width: 70ch; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); background: var(--snow); font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .btn.p { background: var(--a); border-color: var(--a); color: #fff; }
+  .btn.d:hover { color: #b91c1c; border-color: #b91c1c; }
+  .ic { width: 32px; height: 32px; display: grid; place-items: center; background: var(--a50); color: var(--a700); flex: none; }
+  .card { background: var(--snow); border: 1px solid var(--line); }
+  .badge { font-size: 10.5px; font-weight: 500; padding: 1px 6px; background: var(--bg); color: var(--mute); }
+  small, .mute { color: var(--mute); font-size: 12px; }
+  .paper { background: #fff; color: #222; aspect-ratio: 1/1.25; padding: 28px 32px; font-size: 12px; box-shadow: 0 1px 3px #0003; }
+  .paper h4 { font-size: 13px; letter-spacing: .04em; margin: 14px 0 8px; } .paper i { display: block; height: 7px; background: #e5e7eb; margin: 7px 0; }
+  .paper .f { border: 1px solid #ccc; padding: 6px 8px; margin: 4px 0 10px; }
+  .stage { background: var(--bg); border: 1px solid var(--line); padding: 16px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .fold { border: 1px solid var(--line); background: var(--snow); margin-top: -1px; } .fold > div { display:flex; justify-content:space-between; padding: 12px 14px; font-weight: 500; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); } .tabs span { padding: 10px 16px; color: var(--mute); border-bottom: 2px solid transparent; margin-bottom: -1px; } .tabs span.on { color: var(--ink); border-color: var(--a); font-weight: 500; }
+  .field { margin-top: 12px; } .field label { display:block; font-weight: 500; font-size: 13px; } .field .in { margin-top: 4px; height: 34px; border: 1px solid var(--line); background: var(--snow); padding: 7px 10px; color: var(--mute); }
+
+  /* A */ .A { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+  .A .list .it { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+  .A .list .it.on { border-left-color: var(--a); background: var(--a50); } .A .list .it b { display: block; font-size: 13.5px; }
+  .A .main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* B */ .B .head { padding: 18px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; } .B .head h2 { font-size: 18px; } .B .head .grow { flex: 1; min-width: 200px; }
+  .B .seg { display: flex; gap: 10px; margin: 14px 0; overflow-x: auto; } .B .seg .it { display: flex; gap: 10px; padding: 10px 14px; background: var(--snow); border: 1px solid var(--line); min-width: 230px; } .B .seg .it.on { border-color: var(--a); box-shadow: inset 0 -3px 0 var(--a); }
+  .B .body { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* C */ .C { display: grid; grid-template-columns: 220px 1fr 1fr; gap: 16px; align-items: start; }
+  .C .nav .it { display: flex; gap: 8px; align-items: center; padding: 9px 12px; border-left: 3px solid transparent; } .C .nav .it.on { border-color: var(--a); background: var(--a50); font-weight: 500; }
+  .C .nav .sub { padding: 8px 12px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); }
+  /* D */ .D .bar { display: flex; gap: 10px; align-items: center; padding: 10px 14px; flex-wrap: wrap; } .D .pre { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 14px; align-items: start; }
+  .D .stage .paper { max-width: 520px; margin: 0 auto; }
+  @media (max-width: 1000px) { .A, .A .main, .B .body, .C, .D .pre { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="1"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="dl" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+  <symbol id="img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-8 8"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</defs></svg>
+
+<nav class="pick" aria-label="Design options">
+  <b>Documents tab</b>
+  <button aria-pressed="true" data-o="A">A · Document list</button>
+  <button aria-pressed="false" data-o="B">B · Header and strip</button>
+  <button aria-pressed="false" data-o="C">C · Three columns</button>
+  <button aria-pressed="false" data-o="D">D · Preview first</button>
+</nav>
+
+<!-- A -->
+<section class="opt on" id="A">
+  <p class="note"><b>A. Document list on the left.</b> Documents are a vertical list with icon, name and description, like the entity and workflow pages. The actions live in the list header; settings and preview sit side by side. Scales to many documents.</p>
+  <div class="A">
+    <div class="card list">
+      <div class="row" style="padding:12px 14px;border-bottom:1px solid var(--line)"><b style="flex:1">Documents</b><button class="btn" title="New"><svg><use href="#plus"/></svg>New</button></div>
+      <div class="it on"><span class="ic"><svg><use href="#doc"/></svg></span><span><b>Submission record <span class="badge">Default</span></b><small>Every question and its answer, for any submission</small></span></div>
+      <div class="it"><span class="ic" style="background:var(--bg);color:var(--mute)"><svg><use href="#doc"/></svg></span><span><b>Approval letter</b><small>Sent when a payment is approved</small></span></div>
+      <div class="it"><span class="ic" style="background:var(--bg);color:var(--mute)"><svg><use href="#doc"/></svg></span><span><b>Certificate</b><small>Pre-printed layout, answers placed</small></span></div>
+    </div>
+    <div class="main">
+      <div>
+        <div class="card" style="padding:14px"><div class="row"><b style="flex:1">Submission record</b><button class="btn"><svg><use href="#copy"/></svg>Duplicate</button><button class="btn d"><svg><use href="#trash"/></svg>Delete</button></div></div>
+        <div class="fold"><div><span>Details</span><small>Every question and its answer</small></div></div>
+        <div class="fold"><div><span>Contents</span><small>As the form</small></div></div>
+        <div class="fold"><div><span>Logo, watermark and background</span><small>None</small></div></div>
+      </div>
+      <div>
+        <div class="row" style="margin-bottom:8px"><b style="flex:1">Preview</b><button class="btn p"><svg><use href="#dl"/></svg>Download PDF</button></div>
+        <div class="stage"><div class="paper"><small>Facility visit</small><h4>YOUR PROJECT</h4><i></i><i style="width:70%"></i><div class="f">Sample place</div><div class="f">Sample place</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- B -->
+<section class="opt" id="B">
+  <p class="note"><b>B. Header and card strip.</b> The chosen document gets a proper header: big name, description, and all actions in one row. Other documents are a card strip underneath, like the form's other tabs. Compact; best with a few documents.</p>
+  <div class="card head">
+    <span class="ic" style="width:44px;height:44px"><svg style="width:22px;height:22px"><use href="#doc"/></svg></span>
+    <div class="grow"><h2>Submission record <span class="badge">Default</span></h2><small>Every question and its answer, for any submission</small></div>
+    <button class="btn"><svg><use href="#copy"/></svg>Duplicate</button><button class="btn d"><svg><use href="#trash"/></svg>Delete</button><button class="btn p"><svg><use href="#dl"/></svg>Download PDF</button>
+  </div>
+  <div class="seg">
+    <div class="it on"><span class="ic"><svg><use href="#doc"/></svg></span><span><b>Submission record</b><br /><small>Default</small></span></div>
+    <div class="it"><span class="ic" style="background:var(--bg);color:var(--mute)"><svg><use href="#doc"/></svg></span><span><b>Approval letter</b><br /><small>Sent when a payment is approved</small></span></div>
+    <div class="it" style="border-style:dashed;color:var(--a700);align-items:center"><svg><use href="#plus"/></svg><b>New document</b></div>
+  </div>
+  <div class="body">
+    <div>
+      <div class="fold"><div><span>Details</span><small>Name, paper, layout</small></div></div>
+      <div class="fold"><div><span>Contents</span><small>As the form</small></div></div>
+      <div class="fold"><div><span>Logo, watermark and background</span><small>None</small></div></div>
+    </div>
+    <div class="stage"><div class="paper"><small>Facility visit</small><h4>YOUR PROJECT</h4><i></i><i style="width:70%"></i><div class="f">Sample place</div><div class="f">Sample place</div></div></div>
+  </div>
+</section>
+
+<!-- C -->
+<section class="opt" id="C">
+  <p class="note"><b>C. Three columns, settings as sections.</b> Left: documents, then the sections of the selected one (Details, Contents, Branding) as a nav. Middle: only that section's fields, so nothing is folded away. Right: live preview. Closest to a settings app; no long scrolling.</p>
+  <div class="C">
+    <div class="card nav">
+      <div class="sub">Documents</div>
+      <div class="it on"><svg><use href="#doc"/></svg>Submission record <span class="badge">Default</span></div>
+      <div class="it"><svg><use href="#doc"/></svg>Approval letter</div>
+      <div class="it" style="color:var(--a700)"><svg><use href="#plus"/></svg>New document</div>
+      <div class="sub" style="margin-top:8px">Settings</div>
+      <div class="it" style="padding-left:24px"><svg><use href="#gear"/></svg>Details</div>
+      <div class="it" style="padding-left:24px"><svg><use href="#list"/></svg>Contents</div>
+      <div class="it" style="padding-left:24px"><svg><use href="#img"/></svg>Branding</div>
+      <div class="row" style="padding:12px;border-top:1px solid var(--line);margin-top:8px;gap:6px"><button class="btn" style="flex:1;justify-content:center"><svg><use href="#copy"/></svg>Copy</button><button class="btn d" style="flex:1;justify-content:center"><svg><use href="#trash"/></svg>Delete</button></div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div class="row"><span class="ic"><svg><use href="#gear"/></svg></span><div><b>Details</b><br /><small>Name, description, paper and layout</small></div></div>
+      <div class="field"><label>Name</label><div class="in">Submission record</div></div>
+      <div class="field"><label>Description</label><div class="in">Every question and its answer</div></div>
+      <div class="field"><label>Paper</label><div class="in">A4</div></div>
+    </div>
+    <div>
+      <div class="row" style="margin-bottom:8px"><b style="flex:1">Preview</b><button class="btn p"><svg><use href="#dl"/></svg>Download PDF</button></div>
+      <div class="stage"><div class="paper"><small>Facility visit</small><h4>YOUR PROJECT</h4><i></i><div class="f">Sample place</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- D -->
+<section class="opt" id="D">
+  <p class="note"><b>D. Preview first.</b> The page is the preview, big and centred. A toolbar on top switches documents (dropdown) and holds every action; settings are in a right-hand panel with tabs. Best for judging how the paper looks.</p>
+  <div class="card bar">
+    <span class="ic"><svg><use href="#doc"/></svg></span>
+    <button class="btn" style="min-width:260px;justify-content:space-between"><b>Submission record</b><span class="badge">Default</span><svg><use href="#chev" style="transform:rotate(90deg)"/></svg></button>
+    <button class="btn"><svg><use href="#plus"/></svg>New</button>
+    <span style="flex:1"></span>
+    <button class="btn"><svg><use href="#copy"/></svg>Duplicate</button><button class="btn d"><svg><use href="#trash"/></svg>Delete</button><button class="btn p"><svg><use href="#dl"/></svg>Download PDF</button>
+  </div>
+  <div class="pre">
+    <div class="stage"><div class="paper"><small>Facility visit</small><h4>YOUR PROJECT</h4><i></i><i style="width:70%"></i><div class="f">Sample place</div><div class="f">Sample place</div><div class="f">Sample place</div></div></div>
+    <div class="card">
+      <div class="tabs"><span class="on">Details</span><span>Contents</span><span>Branding</span></div>
+      <div style="padding:0 16px 16px"><div class="field"><label>Name</label><div class="in">Submission record</div></div><div class="field"><label>Description</label><div class="in">Every question and its answer</div></div><div class="field"><label>Paper</label><div class="in">A4</div></div></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const btns = document.querySelectorAll('.pick button');
+  btns.forEach((b) => b.addEventListener('click', () => {
+    btns.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('.opt').forEach((s) => s.classList.toggle('on', s.id === b.dataset.o));
+  }));
+</script>
+</body>
+</html>

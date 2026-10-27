@@ -115,7 +115,7 @@ export function FullPageSpinner() {
 export function Centered({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="chrome flex min-h-full items-center justify-center bg-chrome p-4">
-      <div className="w-full max-w-md space-y-4 rounded-2xl border-t-4 border-accent-600 bg-snow p-8 text-sm text-zinc-600">
+      <div className="w-full max-w-md space-y-4 border-t-4 border-accent-600 bg-snow p-8 text-sm text-zinc-600">
         <Logo />
         <h1 className="pt-2 text-xl font-semibold text-ink">{title}</h1>
         {children}
@@ -124,7 +124,7 @@ export function Centered({ title, children }: { title: ReactNode; children: Reac
   );
 }
 
-export function Logo({ dark, subtitle }: { dark?: boolean; subtitle?: string }) {
+export function Logo({ dark, subtitle, compact }: { dark?: boolean; subtitle?: string; compact?: boolean }) {
   const platform = usePlatform();
   const t = useT();
   const b = platform.data?.branding;
@@ -134,26 +134,19 @@ export function Logo({ dark, subtitle }: { dark?: boolean; subtitle?: string }) 
         <img
           src={b.logo}
           alt=""
-          className="size-8 shrink-0 rounded-lg bg-white object-contain p-0.5"
+          className="size-8 shrink-0 object-contain"
         />
       ) : (
         <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-          <rect width="32" height="32" rx="9" className="fill-accent-600" />
-          <path d="M8 8h7v7H8zM17 8h7v7h-7zM8 17h7v7H8z" fill="white" />
-          <path d="M17 17h7v7h-7z" fill="white" fillOpacity=".45" />
+          <rect width="32" height="32" className="fill-accent-600" />
+          <path d="M9 9h6v6H9zM17 9h6v6h-6zM9 17h6v6H9zM17 17h6v6h-6z" className="fill-on-accent" />
         </svg>
       )}
-      <div className="leading-tight">
-        <div
-          className={
-            dark
-              ? 'text-sm font-semibold tracking-[0.18em] text-white uppercase'
-              : 'text-sm font-semibold tracking-[0.18em] text-ink uppercase'
-          }
-        >
+      <div className={compact ? 'hidden' : 'min-w-0 leading-tight'}>
+        <div className={dark ? 'truncate text-sm font-semibold text-white' : 'truncate text-sm font-semibold text-ink'}>
           {b?.appName ?? 'Grids'}
         </div>
-        <div className={dark ? 'text-[11px] text-zinc-400' : 'text-[11px] text-zinc-500'}>
+        <div className={dark ? 'truncate text-[11px] text-zinc-500' : 'truncate text-[11px] text-zinc-500'}>
           {subtitle ?? t('console.shell.subtitle')}
         </div>
       </div>

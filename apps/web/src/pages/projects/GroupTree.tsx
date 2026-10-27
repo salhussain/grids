@@ -1,4 +1,4 @@
-import { Button, Dialog, ErrorNotice, Field, Input, Listbox, Panel } from '@grids/ui';
+import { confirmDialog, Button, Dialog, EmptyState, ErrorNotice, Field, Input, Listbox, Panel, SectionHead } from '@grids/ui';
 import { CornerDownRight, FolderTree, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -34,6 +34,7 @@ export function GroupTree({
   title,
   description,
   noun,
+  emptyText,
   groups,
   canEdit,
   onSave,
@@ -44,6 +45,8 @@ export function GroupTree({
   description: string;
   /** "overlay", "form" (for counts). */
   noun: string;
+  /** Shown when there are no groups yet: what groups are for here. */
+  emptyText: string;
   groups: TreeGroup[];
   canEdit: boolean;
   onSave(input: { name: string; parentId: string | null }, id?: string): Promise<unknown>;
@@ -83,9 +86,19 @@ export function GroupTree({
     return out;
   };
   return (
-    <Panel flush title={title} description={description} actions={canEdit ? <Button size="sm" variant="secondary" icon={Plus} onClick={() => setEditing({ name: '', parentId: null })}>Add group</Button> : undefined}>
+    <>
+      <SectionHead title={title} description={description} actions={canEdit ? <Button size="sm" icon={Plus} onClick={() => setEditing({ name: '', parentId: null })}>Add group</Button> : undefined} />
       <ErrorNotice error={error} />
-      {rows.length ? (
+      {!rows.length ? (
+        <EmptyState
+          icon={FolderTree}
+          title="No groups yet"
+          action={canEdit ? <Button icon={Plus} onClick={() => setEditing({ name: '', parentId: null })}>Add your first group</Button> : undefined}
+        >
+          {emptyText}
+        </EmptyState>
+      ) : (
+      <Panel flush>
         <ul>
           {rows.map((g) => (
             <li key={g.id} className="group flex items-center gap-2 border-t border-zinc-100 px-4 py-2 first:border-t-0">
@@ -102,7 +115,7 @@ export function GroupTree({
                   <button type="button" aria-label={`Edit ${g.name}`} className="p-1 text-zinc-500 hover:text-ink" onClick={() => setEditing({ id: g.id, name: g.name, parentId: g.parentId })}>
                     <Pencil className="size-3.5" />
                   </button>
-                  <button type="button" aria-label={`Delete ${g.name}`} className="p-1 text-zinc-500 hover:text-red-700" onClick={() => confirm(`Delete the group “${g.name}”? Its ${noun}s stay, ungrouped.`) && void onDelete(g.id)}>
+                  <button type="button" aria-label={`Delete ${g.name}`} className="p-1 text-zinc-500 hover:text-red-700" onClick={async () => (await confirmDialog(`Delete the group “${g.name}”? Its ${noun}s stay, ungrouped.`)) && void onDelete(g.id)}>
                     <Trash2 className="size-3.5" />
                   </button>
                 </span>
@@ -110,8 +123,7 @@ export function GroupTree({
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="px-4 py-5 text-sm text-zinc-500">No groups yet. Groups (and groups inside groups) organise long lists into levels.</p>
+      </Panel>
       )}
       {editing && (
         <Dialog
@@ -145,6 +157,7 @@ export function GroupTree({
           </div>
         </Dialog>
       )}
-    </Panel>
+
+    </>
   );
 }

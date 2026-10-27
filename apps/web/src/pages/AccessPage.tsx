@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { KeyRound, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import {
   SCOPABLE_PERMISSIONS,
@@ -7,7 +7,7 @@ import {
   type WorkspacePermission,
   type WorkspaceRoleDto,
 } from '@grids/schema';
-import {
+import { confirmDialog,
   Button,
   Checkbox,
   Dialog,
@@ -23,10 +23,12 @@ import {
   Td,
   Textarea,
   useToast,
+  Select,
 } from '@grids/ui';
 import { api } from '../api';
 import { NoAccess, useCan, useWorkspace } from '../session';
 import { useT } from '../i18n';
+import { IconTile } from '../ui';
 import { AccessDialog } from './PeoplePage';
 
 type Tab = 'roles' | 'grants' | 'matrix';
@@ -79,42 +81,37 @@ function Roles() {
   const manage = can('roles.manage');
   return (
     <>
-      <Panel
-        flush
-        title="Roles"
-        actions={
-          manage && (
-            <Button icon={Plus} onClick={() => setEditing('new')}>
-              New role
-            </Button>
-          )
-        }
-      >
-        <ErrorNotice error={roles.error ?? remove.error} />
-        <Table head={['Role', 'Permissions', 'Grants', 'Type', '']}>
-          {roles.data?.map((r) => (
-            <tr key={r.id}>
-              <Td>
-                <div className="flex items-center gap-2 font-medium">
-                  {r.locked && <Lock className="size-3.5 text-zinc-500" />}
-                  {r.name}
-                </div>
-                <div className="text-xs text-zinc-500">{r.description}</div>
-              </Td>
-              <Td>
-                <div className="flex max-w-md flex-wrap gap-1">
-                  {r.permissions.map((p) => (
-                    <Tag key={p}>{p}</Tag>
-                  ))}
-                </div>
-              </Td>
-              <Td className="num text-right">
-                {r.key === 'member' ? 'Everyone' : r.key === 'org_admin' ? 'Admins' : r.grantCount}
-              </Td>
-              <Td>
-                <Tag>{r.isSystem ? 'Built-in' : 'Custom'}</Tag>
-              </Td>
-              <Td className="text-right whitespace-nowrap">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-zinc-600">Roles bundle permissions. Grant them to people for the whole organisation or one unit.</p>
+        {manage && (
+          <Button icon={Plus} onClick={() => setEditing('new')}>
+            New role
+          </Button>
+        )}
+      </div>
+      <ErrorNotice error={roles.error ?? remove.error} />
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {roles.data?.map((r) => (
+          <li key={r.id} className="flex flex-col border border-zinc-200 bg-snow p-5 transition-colors hover:border-zinc-400">
+            <div className="flex items-start gap-3">
+              <IconTile icon={r.locked ? Lock : KeyRound} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{r.name}</div>
+                <div className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{r.description}</div>
+              </div>
+              <Tag>{r.isSystem ? 'Built-in' : 'Custom'}</Tag>
+            </div>
+            <div className="mt-4 flex max-h-20 flex-wrap gap-1 overflow-hidden">
+              {r.permissions.slice(0, 8).map((p) => (
+                <Tag key={p}>{p}</Tag>
+              ))}
+              {r.permissions.length > 8 && <Tag>+{r.permissions.length - 8}</Tag>}
+            </div>
+            <div className="mt-auto flex items-center justify-between border-t border-zinc-100 pt-4 text-xs text-zinc-500">
+              <span className="num">
+                {r.key === 'member' ? 'Everyone' : r.key === 'org_admin' ? 'Admins' : `${r.grantCount} grant${r.grantCount === 1 ? '' : 's'}`}
+              </span>
+              <span className="flex">
                 {manage && !r.locked && (
                   <Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditing(r)}>
                     Edit
@@ -125,18 +122,16 @@ function Roles() {
                     variant="ghost"
                     size="sm"
                     icon={Trash2}
-                    onClick={() =>
-                      confirm(`Delete ${r.name}? Its grants are removed.`) && remove.mutate(r)
-                    }
+                    onClick={async () => (await confirmDialog(`Delete ${r.name}? Its grants are removed.`)) && remove.mutate(r)}
                   >
                     Delete
                   </Button>
                 )}
-              </Td>
-            </tr>
-          ))}
-        </Table>
-      </Panel>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
       <RoleDialog role={editing} onClose={() => setEditing(null)} />
     </>
   );
@@ -265,12 +260,7 @@ function Grants() {
         actions={
           can('roles.manage') && (
             <div className="flex">
-              <select
-                aria-label="Person"
-                value={person}
-                onChange={(e) => setPerson(e.target.value)}
-                className="h-9 w-56 border border-r-0 border-zinc-300 bg-snow px-2 text-sm"
-              >
+              <Select aria-label="Person" value={person} onChange={(e) => setPerson(e.target.value)} className="w-56">
                 <option value="">Choose a person…</option>
                 {members.data?.members
                   .filter((m) => m.role !== 'org_admin')
@@ -279,7 +269,7 @@ function Grants() {
                       {m.email}
                     </option>
                   ))}
-              </select>
+              </Select>
               <Button icon={Plus} disabled={!selected} onClick={() => setOpen(true)}>
                 Grant access
               </Button>

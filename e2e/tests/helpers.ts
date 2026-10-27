@@ -1,6 +1,14 @@
 import { expect, type Browser, type Page } from '@playwright/test';
 
-export const PLATFORM_ADMIN = { login: 'admin@grids.local', password: 'Password1!' };
+const need = (name: string): string => {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} is not set (it is read from .env)`);
+  return v;
+};
+export const PLATFORM_ADMIN = {
+  login: process.env.PLATFORM_ADMIN_EMAIL ?? 'admin@grids.local',
+  password: need('PLATFORM_ADMIN_PASSWORD'),
+};
 /** Passes the identity service's password policy (10+ characters, not common). */
 export const NEW_PASSWORD = 'Lagoon-sunrise-2026';
 export const IDP = process.env.IDP_URL ?? 'http://localhost:4100';
@@ -38,7 +46,7 @@ export async function gridsRegister(
 }
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
-const SERVICE_TOKEN = process.env.IDENTITY_SERVICE_TOKEN ?? 'dev-service-token-change-me';
+const SERVICE_TOKEN = need('IDENTITY_SERVICE_TOKEN');
 
 /** Polls the platform's development mailbox for the newest message to `to` and returns its text. */
 export async function latestEmail(to: string, since: Date): Promise<string> {

@@ -20,6 +20,9 @@ import type {
   StaffDto,
   SubscriptionDto,
   TenantDetail,
+  SessionPolicy,
+  ActiveSessionsDto,
+  PastSessionsDto,
   TenantSummary,
   TicketDetail,
   TicketSummary,
@@ -73,12 +76,25 @@ export const api = {
     request<TenantDetail>('PUT', `${pt(id)}/status`, input),
   setSecurity: (id: string, mfaRequired: boolean) =>
     request<TenantDetail>('PUT', `${t(id)}/security`, { mfaRequired }),
+  activeSessions: (id: string) => request<ActiveSessionsDto>('GET', `${t(id)}/sessions`),
+  pastSessions: (id: string) => request<PastSessionsDto>('GET', `${t(id)}/sessions/past`),
+  revokeSession: (id: string, sessionId: string) =>
+    request<ActiveSessionsDto>('DELETE', `${t(id)}/sessions/${sessionId}`),
+  setSessionPolicy: (id: string, policy: SessionPolicy) =>
+    request<TenantDetail>('PUT', `${t(id)}/session-policy`, policy),
 
   // billing
   subscribe: (id: string, input: In<typeof S.CreateSubscriptionInput>) =>
     request<SubscriptionDto>('POST', `${pt(id)}/subscription`, input),
   changeSubscription: (id: string, input: In<typeof S.ChangeSubscriptionInput>) =>
     request<SubscriptionDto>('PATCH', `${pt(id)}/subscription`, input),
+  /** An invoice, or the receipt for a paid one, as PDF bytes (the API needs the sign-in token). */
+  invoicePdf: async (tenantId: string, invoiceId: string, kind: 'invoice' | 'receipt'): Promise<Blob> => {
+    const token = (await currentUser())?.access_token;
+    const res = await fetch(`${env.apiUrl}${t(tenantId)}/billing/invoices/${invoiceId}/pdf?kind=${kind}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error('The PDF could not be created');
+    return res.blob();
+  },
   issueRenewal: (id: string) => request<InvoiceDto>('POST', `${pt(id)}/invoices`),
   billingOverview: () => request<BillingOverview>('GET', '/platform/billing/overview'),
   subscriptions: (q: { status?: string } & PageArgs = {}) =>
@@ -125,7 +141,7 @@ export const api = {
     request<TicketDetail>('PATCH', `/tickets/${id}`, input),
 
   // logs
-  auditLog: (q: { tenantId?: string; action?: string; q?: string } & PageArgs = {}) =>
+  auditLog: (q: { tenantId?: string; action?: string; q?: string; category?: string; project?: string; ip?: string } & PageArgs = {}) =>
     request<AuditPage>('GET', `/platform/logs/audit${qs(q)}`),
   emailLog: (q: { tenantId?: string; status?: string; q?: string } & PageArgs = {}) =>
     request<Page<EmailLogDto>>('GET', `/platform/logs/emails${qs(q)}`),

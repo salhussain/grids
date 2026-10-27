@@ -2,6 +2,7 @@ import { useIsFetching, useQueryClient, type QueryKey } from '@tanstack/react-qu
 import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { cx } from './components';
+import { Listbox } from './listbox';
 
 // ---------------------------------------------------------------- auto refresh
 
@@ -133,18 +134,14 @@ export function Pagination({
     >
       <div className="flex items-center gap-2">
         <span className="hidden sm:inline">Rows per page</span>
-        <select
-          aria-label="Rows per page"
-          value={pageSize}
-          onChange={(e) => onChange({ page: 1, pageSize: Number(e.target.value) })}
-          className="h-8 border border-zinc-300 bg-snow px-2 text-sm focus:border-accent-600 focus:outline-none"
-        >
-          {sizes.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <Listbox
+          compact
+          label="Rows per page"
+          className="w-24"
+          value={String(pageSize)}
+          onChange={(v) => onChange({ page: 1, pageSize: Number(v) })}
+          options={sizes.map((n) => ({ value: String(n), label: String(n) }))}
+        />
       </div>
       <div className="flex items-center gap-3">
         <span className="num" aria-live="polite">

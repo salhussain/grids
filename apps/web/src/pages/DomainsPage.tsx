@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Globe, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { IconTile } from '../ui';
 import type { DomainDto } from '@grids/schema';
-import {
+import { confirmDialog,
   Button,
   CopyField,
   ErrorNotice,
@@ -49,7 +50,7 @@ export function DomainsPage() {
         meta={<span>Use your own address for this workspace, e.g. data.example.org.</span>}
       />
       {!featured && (
-        <div className="mb-6 border-s-4 border-amber-500 bg-amber-50 px-5 py-3 text-sm">
+        <div className="mb-6 border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
           Custom domains are available on higher plans. Contact Grids support to upgrade.
         </div>
       )}
@@ -85,10 +86,10 @@ export function DomainsPage() {
         <div className="space-y-3">
           <ErrorNotice error={domains.error ?? run.error} />
           {domains.data?.map((d) => (
-            <div key={d.id} className="border border-zinc-200">
+            <div key={d.id} className="border border-zinc-200 bg-snow shadow-surface">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <Globe className="size-4 shrink-0 text-zinc-500" />
+                  <IconTile icon={Globe} />
                   <Mono className="truncate font-medium">{d.hostname}</Mono>
                   {d.isPrimary && <Status value="primary" tone="accent" />}
                   <Status value={d.status} />
@@ -129,8 +130,7 @@ export function DomainsPage() {
                       variant="ghost"
                       size="sm"
                       icon={Trash2}
-                      onClick={() =>
-                        confirm(`Remove ${d.hostname}?`) &&
+                      onClick={async () => (await confirmDialog(`Remove ${d.hostname}?`)) &&
                         run.mutate({ fn: () => api.removeDomain(id, d.id), msg: 'Domain removed' })
                       }
                     >

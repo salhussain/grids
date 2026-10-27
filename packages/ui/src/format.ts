@@ -56,6 +56,9 @@ export const TIMEZONES: string[] = (
 ).supportedValuesOf('timeZone');
 
 const FEATURE_LABELS: Record<string, string> = {
+  help_desk: 'Help desk',
+  payments: 'Payments',
+  authentication: 'Authentication',
   custom_branding: 'Custom branding',
   custom_domain: 'Custom domain',
   sso: 'SSO / identity federation',

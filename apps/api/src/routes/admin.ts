@@ -170,6 +170,11 @@ export const adminRoutes: FastifyPluginAsyncZod<AuthDeps> = async (app, deps) =>
     async (req, reply) =>
       reply.status(201).send(await s.billing.issueRenewal(actorOf(req), req.params.tenantId)),
   );
+  app.post(
+    '/platform/tenants/:tenantId/fee-invoices',
+    { preHandler: need('billing.invoices'), schema: { params: T, response: { 200: z.array(InvoiceDto) } } },
+    (req) => s.billing.issueFeeInvoices(actorOf(req), { tenantId: req.params.tenantId }),
+  );
   app.get(
     '/platform/billing/overview',
     { preHandler: need('billing.view'), schema: { response: { 200: BillingOverview } } },

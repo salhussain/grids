@@ -1,6 +1,7 @@
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef } from 'react';
+import { ensureMarkerImages, HAS_MARKER_IMAGE, MARKER_LAYOUT, markerImageId } from './markers';
 import { STATUS, useScheme, type Scheme } from './scheme';
 
 export interface FeatureCollection {
@@ -23,6 +24,15 @@ export interface MapOptions {
   color?: string;
   onSelect?: (properties: Record<string, unknown>) => void;
 }
+
+const POLY = [
+  'match',
+  ['geometry-type'],
+  ['Polygon', 'MultiPolygon'],
+  true,
+  false,
+] as maplibregl.ExpressionSpecification;
+const POINT = ['==', ['geometry-type'], 'Point'] as maplibregl.ExpressionSpecification;
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -51,17 +61,65 @@ export function MapView({ data, options = {}, height = '100%', label }: { data: 
           st.good,
         ] as maplibregl.ExpressionSpecification
       : (o.color ?? ['coalesce', ['get', 'color'], '#0f62fe']);
-    const fc = d ?? { type: 'FeatureCollection', features: [] };
+    // Pins and icons are images in the point's colour (its status colour with thresholds).
+    const colorOf = (p: Record<string, unknown>): string => {
+      if (!thresholds) return o.color ?? (p.color as string | undefined) ?? '#0f62fe';
+      const v = p.value === null || p.value === undefined ? null : Number(p.value);
+      if (v === null) return st.none;
+      if (o.alert !== undefined && v >= o.alert) return st.bad;
+      if (o.warn !== undefined && v >= o.warn) return st.warn;
+      return st.good;
+    };
+    const fc = {
+      type: 'FeatureCollection' as const,
+      features: (d?.features ?? []).map((f) => ({
+        ...f,
+        properties: {
+          ...f.properties,
+          markerImage:
+            f.geometry.type === 'Point'
+              ? markerImageId(f.properties.marker, f.properties.icon, colorOf(f.properties))
+              : null,
+        },
+      })),
+    };
+    void ensureMarkerImages(
+      m,
+      fc.features.map((f) => f.properties.markerImage),
+    ).then((added) => {
+      if (added && map.current === m)
+        (m.getSource('features') as GeoJSONSource | undefined)?.setData(fc as never);
+    });
     const src = m.getSource('features') as GeoJSONSource | undefined;
     if (src) src.setData(fc as never);
     else {
       m.addSource('features', { type: 'geojson', data: fc as never });
-      m.addLayer({ id: 'areas', type: 'fill', source: 'features', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': color, 'fill-opacity': 0.35 } });
+      m.addLayer({
+        id: 'areas',
+        type: 'fill',
+        source: 'features',
+        filter: POLY,
+        paint: { 'fill-color': color, 'fill-opacity': 0.35 },
+      });
+      m.addLayer({
+        id: 'outlines',
+        type: 'line',
+        source: 'features',
+        filter: POLY,
+        paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': 0.8 },
+      });
+      m.addLayer({
+        id: 'markers',
+        type: 'symbol',
+        source: 'features',
+        filter: ['all', POINT, HAS_MARKER_IMAGE],
+        layout: MARKER_LAYOUT,
+      });
       m.addLayer({
         id: 'points',
         type: 'circle',
         source: 'features',
-        filter: ['==', ['geometry-type'], 'Point'],
+        filter: ['all', POINT, ['!', HAS_MARKER_IMAGE]],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3.5, 8, 6, 12, 9],
           'circle-color': color,
@@ -83,6 +141,7 @@ export function MapView({ data, options = {}, height = '100%', label }: { data: 
     if (m.getLayer('points')) {
       m.setPaintProperty('points', 'circle-color', color);
       m.setPaintProperty('areas', 'fill-color', color);
+      m.setPaintProperty('outlines', 'line-color', color);
     }
     // Fit to the data once; later refreshes keep the viewer's position.
     if (!fitted.current && fc.features.length) {
@@ -104,7 +163,7 @@ export function MapView({ data, options = {}, height = '100%', label }: { data: 
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     m.on('load', paint);
     const popup = new maplibregl.Popup({ closeButton: false, offset: 10, maxWidth: '260px' });
-    m.on('mouseenter', 'points', (e) => {
+    const onEnter = (e: maplibregl.MapLayerMouseEvent) => {
       m.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
@@ -116,15 +175,18 @@ export function MapView({ data, options = {}, height = '100%', label }: { data: 
         .setLngLat((f.geometry as { coordinates: [number, number] }).coordinates)
         .setHTML(`<div class="font-medium">${esc(p.name)}</div>${extra}${value}`)
         .addTo(m);
-    });
-    m.on('mouseleave', 'points', () => {
-      m.getCanvas().style.cursor = '';
-      popup.remove();
-    });
-    m.on('click', 'points', (e) => {
-      const f = e.features?.[0];
-      if (f) latest.current.options.onSelect?.(f.properties as Record<string, unknown>);
-    });
+    };
+    for (const layer of ['points', 'markers']) {
+      m.on('mouseenter', layer, onEnter);
+      m.on('mouseleave', layer, () => {
+        m.getCanvas().style.cursor = '';
+        popup.remove();
+      });
+      m.on('click', layer, (e) => {
+        const f = e.features?.[0];
+        if (f) latest.current.options.onSelect?.(f.properties as Record<string, unknown>);
+      });
+    }
     const ro = new ResizeObserver(() => m.resize());
     ro.observe(el.current);
     return () => {

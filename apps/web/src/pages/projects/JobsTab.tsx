@@ -1,33 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FILE_MAX_BYTES, JOB_EVENTS, JobInput, type JobDto, type JobEvent, type RunDto, type RunStatus, type UploadResult } from '@grids/schema';
-import {
-  Button,
-  CopyField,
-  Dialog,
-  Empty,
-  ErrorNotice,
-  Field,
-  Input,
-  Pagination,
-  Panel,
-  RefreshControl,
-  Select,
-  SwitchField,
-  Table,
-  Td,
-  Textarea,
-  cx,
-  dateTime,
-  relTime,
-  useLiveInterval,
-  usePagination,
-  useToast,
-} from '@grids/ui';
+import { confirmDialog, Button, CopyField, Dialog, Empty, ErrorNotice, Field, Input, Pagination, Panel, RefreshControl, Select, SwitchField, Table, Td, Textarea, cx, dateTime, relTime, useLiveInterval, usePagination, useToast, SectionHead, EmptyState, Loading } from '@grids/ui';
 import { CircleCheck, CircleX, Clock, Loader, FileUp, Pencil, Play, Plus, Radar, RotateCcw, Trash2, Upload, Webhook, Workflow, Zap, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
 import { env } from '../../env';
 import { FreshnessBadge } from '@grids/viz';
+import { DurationInput, fromMinutes, toMinutes } from './Duration';
 import { useProject } from './context';
 
 const STATUS: Record<RunStatus, { icon: typeof Clock; cls: string; label: string }> = {
@@ -83,24 +62,31 @@ export function JobsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-600">Pipelines that pull data in, map it to entities and observations, and keep datasets fresh.</p>
-        <div className="flex items-center gap-2">
-          <RefreshControl queryKeys={[['jobs', tenantId, project.key], ['runs', tenantId, project.key]]} />
-          {can('manager') && (
-            <Button icon={Plus} onClick={() => setEditing('new')}>
-              New job
-            </Button>
-          )}
-        </div>
-      </div>
+      <SectionHead
+        title="Jobs"
+        description="Pipelines that pull data in, map it to entities and observations, and keep datasets fresh."
+        actions={
+          <>
+            <RefreshControl queryKeys={[['jobs', tenantId, project.key], ['runs', tenantId, project.key]]} />
+            {can('manager') && (
+              <Button size="sm" icon={Plus} onClick={() => setEditing('new')}>
+                New job
+              </Button>
+            )}
+          </>
+        }
+      />
       <ErrorNotice error={jobs.error ?? run.error} />
-      {jobs.data && !jobs.data.length ? (
-        <div className="border border-zinc-200 bg-snow">
-          <Empty icon={Workflow} title="No jobs yet">
-            A job fetches from an API or file, transforms rows, and writes entities, observations or datasets on a schedule.
-          </Empty>
-        </div>
+      {jobs.isPending ? (
+        <Loading />
+      ) : jobs.data && !jobs.data.length ? (
+        <EmptyState
+          icon={Workflow}
+          title="No jobs yet"
+         
+        >
+          A job fetches from an API or file, transforms the rows, and writes entities, observations or datasets, on a schedule or when something happens.
+        </EmptyState>
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2">
           {jobs.data?.map((j) => (
@@ -142,7 +128,7 @@ export function JobsTab() {
                 </div>
               </dl>
               <div className="mt-4 flex gap-2 border-t border-zinc-100 pt-4">
-                {can('editor') && (
+                {can('manager') && (
                   <Button size="sm" icon={Play} onClick={() => run.mutate(j.key)} loading={run.isPending && run.variables === j.key}>
                     Run now
                   </Button>
@@ -172,7 +158,7 @@ export function JobsTab() {
           </Select>
         }
       >
-        <Table head={['Job', 'Status', 'Trigger', 'Queued', 'Duration', 'Result']} empty={<Empty icon={Clock} title="No runs yet" />}>
+        <Table head={['Job', 'Status', 'Trigger', 'Queued', 'Duration', 'Result']} tintEmpty empty={runs.data ? <Empty icon={Clock} title="No runs yet">Runs appear here each time a job runs, with its status and result.</Empty> : undefined}>
           {runs.data?.items.map((r) => (
             <tr key={r.id} className="cursor-pointer border-t border-zinc-100 hover:bg-zinc-50" onClick={() => setOpenRun(r.id)}>
               <Td className="font-medium">{r.jobName}</Td>
@@ -201,6 +187,7 @@ const EVENT_INFO: Record<JobEvent, { label: string; ref: string }> = {
   'submission.created': { label: 'A form is submitted', ref: 'Form' },
   'submission.approved': { label: 'A submission is approved', ref: 'Form' },
   'submission.rejected': { label: 'A submission is rejected', ref: 'Form' },
+  'submission.returned': { label: 'A submission is sent back for changes', ref: 'Form' },
   'entity.changed': { label: 'Entities change', ref: 'Entity type' },
   'dataset.materialised': { label: 'A dataset is refreshed', ref: 'Dataset' },
   'job.succeeded': { label: 'Another job succeeds', ref: 'Job' },
@@ -339,13 +326,13 @@ function FilesPanel({ onRun }: { onRun(id: string): void }) {
     mutationFn: (key: string) => api.deleteFile(tenantId, project.key, key),
     onSuccess: (data) => qc.setQueryData(['files', tenantId, project.key], data),
   });
-  if (!files.data?.length && !can('editor')) return null;
+  if (!files.data?.length && !can('manager')) return null;
   return (
     <Panel
       flush
       title="Files"
       actions={
-        can('editor') && (
+        can('manager') && (
           <Button size="sm" variant="secondary" icon={Upload} onClick={() => setUploading('new')}>
             Upload file
           </Button>
@@ -353,7 +340,7 @@ function FilesPanel({ onRun }: { onRun(id: string): void }) {
       }
     >
       <ErrorNotice error={files.error ?? remove.error} />
-      <Table head={['Key', 'File', 'Size', 'Uploaded', 'Used by', '']} empty={<Empty icon={FileUp} title="No files yet">Upload CSV or JSON files for jobs to parse with a file.parse step.</Empty>}>
+      <Table head={['Key', 'File', 'Size', 'Uploaded', 'Used by', '']} tintEmpty empty={files.data ? <Empty icon={FileUp} title="No files yet">Upload CSV or JSON files for jobs to parse with a file.parse step.</Empty> : undefined}>
         {files.data?.map((f) => (
           <tr key={f.key} className="border-t border-zinc-100">
             <Td className="font-mono text-xs">{f.key}</Td>
@@ -368,13 +355,13 @@ function FilesPanel({ onRun }: { onRun(id: string): void }) {
             </Td>
             <Td className="text-xs text-zinc-600">{f.jobs.map((j) => `${j.name}${j.runOnUpload ? ' (on upload)' : ''}`).join(', ') || '—'}</Td>
             <Td className="text-end whitespace-nowrap">
-              {can('editor') && (
+              {can('manager') && (
                 <Button size="sm" variant="ghost" icon={Upload} onClick={() => setUploading(f.key)}>
                   Replace
                 </Button>
               )}
               {can('manager') && (
-                <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Delete ${f.key}`} onClick={() => confirm(`Delete ${f.key} and all its versions?`) && remove.mutate(f.key)} />
+                <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Delete ${f.key}`} onClick={async () => (await confirmDialog(`Delete ${f.key} and all its versions?`)) && remove.mutate(f.key)} />
               )}
             </Td>
           </tr>
@@ -482,7 +469,7 @@ function RunDialog({ runId, onClose, onOpen }: { runId: string; onClose(): void;
       onClose={onClose}
       title={d ? `${d.jobName} · run` : 'Run'}
       footer={
-        d && can('editor') ? (
+        d && can('manager') ? (
           active ? (
             <Button variant="danger" onClick={() => cancel.mutate()} loading={cancel.isPending}>Cancel run</Button>
           ) : (
@@ -590,7 +577,7 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
       footer={
         <>
           {job && (
-            <Button variant="danger" className="me-auto" onClick={() => confirm(`Delete ${job.name} and its run history?`) && remove.mutate()}>
+            <Button variant="danger" className="me-auto" onClick={async () => (await confirmDialog(`Delete ${job.name} and its run history?`)) && remove.mutate()}>
               Delete
             </Button>
           )}
@@ -618,8 +605,8 @@ function JobEditor({ job, onClose }: { job: JobDto | null; onClose(): void }) {
           <Field label="Time zone">
             <Input value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} />
           </Field>
-          <Field label="Expected every (minutes)" hint="Drives the freshness badge">
-            <Input type="number" min={1} value={f.freshnessMinutes ?? ''} onChange={(e) => setF({ ...f, freshnessMinutes: e.target.value ? Number(e.target.value) : null })} />
+          <Field label="Expected every" hint="Drives the freshness badge">
+            <DurationInput value={fromMinutes(f.freshnessMinutes)} onChange={(d) => setF({ ...f, freshnessMinutes: toMinutes(d) })} />
           </Field>
           <Field label="Retries">
             <Input type="number" min={0} max={10} value={f.maxRetries} onChange={(e) => setF({ ...f, maxRetries: Number(e.target.value) })} />

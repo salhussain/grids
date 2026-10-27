@@ -1,0 +1,15 @@
+{
+  "name": "@grids/status",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Health of every Grids service on one page (and as JSON).",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node --env-file=../../.env dist/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0"
+  }
+}

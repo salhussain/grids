@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Branding page: design options</title>
+<meta name="description" content="Three design options for Settings → Branding. Everything on the page is live: change the name, colour and sidebar and watch the preview." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  :root { --brand: #007d79; }
+  body { padding: 24px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  .head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .head h1 { margin: 2px 0 0; font-size: 26px; letter-spacing: -.01em; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .opts { display: inline-flex; border: 1px solid var(--line-2); background: var(--sheet); }
+  .opts button { border: 0; background: none; padding: 9px 16px; cursor: pointer; font-weight: 500; color: var(--ink-2); border-inline-end: 1px solid var(--line); }
+  .opts button:last-child { border-inline-end: 0; }
+  .opts button[aria-pressed=true] { background: var(--brand); color: var(--on-brand); }
+  .note { color: var(--ink-2); margin: 0 0 18px; max-width: 78ch; }
+  .sheetx { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 28px; }
+  .pagehead { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+  .pagehead h2 { margin: 2px 0 4px; font-size: 28px; letter-spacing: -.01em; }
+  .pagehead p { margin: 0; color: var(--ink-2); }
+  .actions { display: flex; gap: 8px; align-items: center; }
+  /* the mini app used by every option */
+  .mini { display: grid; grid-template-columns: 168px 1fr; border: 1px solid var(--line-2); background: var(--canvas); min-height: 300px; overflow: hidden; }
+  .mini .sb { display: flex; flex-direction: column; font-size: 12.5px; }
+  .mini .sb.dark { background: #161616; color: #c6c6c6; } .mini .sb.light { background: #fff; color: var(--ink-2); border-inline-end: 1px solid var(--line); } .mini .sb.brand { background: color-mix(in oklab, var(--brand) 82%, black); color: #fff; }
+  .mini .sb .top { display: flex; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent); font-weight: 600; }
+  .mini .sb .mk { width: 24px; height: 24px; background: var(--brand); color: var(--on-brand); display: grid; place-items: center; font-size: 12px; font-weight: 600; overflow: hidden; }
+  .mini .sb .mk img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .mini .sb .it { padding: 7px 12px; border-inline-start: 3px solid transparent; display: flex; gap: 8px; align-items: center; }
+  .mini .sb .it.on { border-color: var(--brand); background: color-mix(in oklab, var(--brand) 14%, transparent); color: inherit; }
+  .mini .sb.brand .it.on { border-color: #fff; background: rgb(0 0 0 / .2); }
+  .mini .pg { padding: 16px; display: grid; gap: 10px; align-content: start; }
+  .mini .pg h4 { margin: 0; font-size: 15px; } .mini .pg .w { color: var(--ink-2); font-size: 12.5px; }
+  .mini .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mini .b { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; }
+  .mini .b.p { background: var(--brand); color: var(--on-brand); } .mini .b.s { background: #fff; border: 1px solid var(--line-2); }
+  .mini .card { background: #fff; border: 1px solid var(--line); padding: 10px; font-size: 12.5px; display: grid; gap: 8px; }
+  .mini .bar { height: 5px; background: var(--line); } .mini .bar i { display: block; height: 100%; width: 66%; background: var(--brand); }
+  .mini .note2 { border-inline-start: 4px solid var(--brand); background: var(--brand-soft); padding: 8px 10px; font-size: 12.5px; }
+  /* controls */
+  .sw { display: flex; flex-wrap: wrap; gap: 8px; } .sw button { width: 32px; height: 32px; border: 2px solid transparent; cursor: pointer; padding: 0; } .sw button[aria-pressed=true] { border-color: var(--ink); box-shadow: inset 0 0 0 2px #fff; }
+  .hex { display: flex; gap: 8px; align-items: center; margin-top: 10px; } .hex input[type=color] { width: 34px; height: 34px; padding: 0; border: 1px solid var(--line-2); background: none; }
+  .sbpick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .sbpick button { border: 1px solid var(--line-2); background: var(--sheet); padding: 8px; text-align: start; cursor: pointer; font-weight: 500; }
+  .sbpick button[aria-pressed=true] { border-color: var(--brand); background: var(--brand-soft); }
+  .sbpick i { display: block; height: 46px; margin-bottom: 6px; }
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo .drop { width: 72px; height: 72px; border: 1px dashed var(--line-2); background: var(--raise); display: grid; place-items: center; color: var(--ink-3); font-size: 11px; overflow: hidden; } .logo .drop img { width: 100%; height: 100%; object-fit: contain; }
+  .grid2 { display: grid; gap: 20px; } @media (min-width: 900px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .box { border: 1px solid var(--line); background: var(--sheet); } .box > header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); } .box > header b { font-size: 14px; } .box > header small { display: block; color: var(--ink-3); font-size: 12px; }
+  .box > header .ico { width: 30px; height: 30px; background: var(--brand-soft); color: var(--brand-ink); display: grid; place-items: center; font-size: 15px; }
+  .box > .body { padding: 16px; display: grid; gap: 14px; }
+  /* option B: setting rows */
+  .rows > div { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--line); align-items: start; }
+  .rows > div:last-child { border-bottom: 0; } .rows b { display: block; } .rows small { color: var(--ink-3); }
+  .kit { display: grid; gap: 24px; } @media (min-width: 1000px) { .kit { grid-template-columns: 360px 1fr; } }
+  .kit aside { position: sticky; top: 16px; align-self: start; display: grid; gap: 14px; }
+  .brandcard { border: 1px solid var(--line); background: var(--sheet); } .brandcard .hero { padding: 22px; background: var(--brand); color: var(--on-brand); display: flex; gap: 14px; align-items: center; }
+  .brandcard .hero .mk { width: 48px; height: 48px; background: rgb(255 255 255 / .18); display: grid; place-items: center; font-size: 22px; font-weight: 600; overflow: hidden; } .brandcard .hero .mk img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .brandcard .hero b { font-size: 18px; display: block; } .brandcard .hero small { opacity: .85; }
+  .signin { padding: 18px; display: grid; gap: 10px; background: var(--canvas); } .signin .c { background: #fff; border: 1px solid var(--line); padding: 14px; display: grid; gap: 8px; font-size: 12.5px; }
+  .signin .c .i { height: 26px; border: 1px solid var(--line-2); } .signin .c .b { height: 28px; background: var(--brand); }
+  /* option C: click the preview */
+  .stage { position: relative; }
+  .hot { outline: 2px dashed transparent; outline-offset: 2px; cursor: pointer; transition: outline-color .15s; } .hot:hover { outline-color: var(--brand); }
+  .pop { position: absolute; z-index: 5; background: var(--sheet); border: 1px solid var(--line-2); box-shadow: var(--shadow); padding: 14px; width: 300px; display: grid; gap: 10px; }
+  .tabs2 { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 14px; } .tabs2 button { border: 0; background: none; padding: 9px 14px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--ink-2); } .tabs2 button[aria-pressed=true] { border-color: var(--brand); color: var(--ink); font-weight: 500; }
+  .hint { color: var(--ink-3); font-size: 12.5px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div><div class="eyebrow">Design options</div><h1>Settings → Branding</h1></div>
+    <div class="opts" role="group" aria-label="Option">
+      <button data-o="a" aria-pressed="true">A · Studio</button>
+      <button data-o="b" aria-pressed="false">B · Brand kit</button>
+      <button data-o="c" aria-pressed="false">C · Click to edit</button>
+    </div>
+  </div>
+  <p class="note" id="note"></p>
+  <div class="sheetx" id="stage"></div>
+</div>
+
+<script>
+const S = { name: 'Ministry of Health', color: '#007d79', sb: 'dark', logo: null, welcome: 'Welcome to the Ministry of Health. Start from a project, or ask the team if you are stuck.', day: '', night: '' };
+const SW = ['#0f62fe', '#198038', '#8a3ffc', '#da1e28', '#007d79', '#ff832b', '#161616', '#b28600'];
+const NOTES = {
+  a: 'A · Studio. The preview comes first and fills the width, so you see the result of every change straight away. Controls sit underneath in three compact boxes (Identity, Colour & sidebar, Maps). Best when people want to try colours and see them.',
+  b: 'B · Brand kit. A plain settings list: each row has the setting on the left and its control on the right, with no boxes. A sticky brand card on the side shows the logo, name and colour as a small identity sheet, plus the sign-in page. Best for quiet, fast editing.',
+  c: 'C · Click to edit. The preview is the page: click the logo or name to change them, the sidebar to change its style, the button to pick the colour. Map styles and the welcome message sit in a short panel below. Best for people who think visually.',
+};
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let option = 'a', pop = null, tab = 'work';
+
+function mini(clickable = false) {
+  const mark = S.logo ? `<img src="${S.logo}" alt="">` : esc(S.name.slice(0, 1));
+  const h = (k, c) => (clickable ? `class="${c} hot" data-hot="${k}"` : `class="${c}"`);
+  return `<div class="mini"><div ${h('sidebar', 'sb ' + S.sb)}>
+    <div class="top"><span ${h('logo', 'mk')}>${mark}</span><span ${h('name', '')} style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(S.name)}</span></div>
+    <div class="it">⌂ Home</div><div class="it on">☺ People</div><div class="it">⌗ Structure</div><div class="it">▤ Projects</div></div>
+    <div class="pg"><h4>People</h4><div class="w">${esc(S.welcome)}</div>
+    <div class="row"><span ${h('colour', 'b p')}>Invite people</span><span class="b s">Export</span></div>
+    <div class="card"><div style="display:flex;justify-content:space-between"><span>Ana Smith</span><span style="color:var(--good)">● Active</span></div><div class="bar"><i></i></div></div>
+    <div class="note2">Your branding applies to everyone in ${esc(S.name)}.</div></div></div>`;
+}
+function swatches() {
+  return `<div class="sw" role="radiogroup" aria-label="Brand colour">${SW.map((c) => `<button data-c="${c}" aria-pressed="${S.color === c}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>
+  <div class="hex"><input type="color" data-color value="${S.color}" aria-label="Any colour"><input class="input" data-hex value="${S.color}" style="width:120px;font-family:var(--mono)" aria-label="Colour code"><small style="color:var(--ink-3)">Or pick any colour</small></div>`;
+}
+function sbPick() {
+  const st = { dark: '#161616', light: '#fff;border:1px solid var(--line)', brand: 'color-mix(in oklab, var(--brand) 82%, black)' };
+  return `<div class="sbpick" role="radiogroup" aria-label="Sidebar">${['dark', 'light', 'brand'].map((k) => `<button data-sb="${k}" aria-pressed="${S.sb === k}"><i style="background:${st[k]}"></i>${k === 'brand' ? 'Brand colour' : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div>`;
+}
+const logoField = () => `<div class="logo"><div class="drop">${S.logo ? `<img src="${S.logo}" alt="">` : 'No logo'}</div><div><label class="btn" style="cursor:pointer">⬆ Upload<input type="file" accept="image/*" data-logo hidden></label>${S.logo ? ' <button class="btn ghost sm" data-nologo>Remove</button>' : ''}<div class="hint">Square works best. PNG, SVG, JPEG or WebP, under 200 KB.</div></div></div>`;
+const nameField = () => `<div class="field"><label>Workspace name</label><input class="input" data-name value="${esc(S.name)}" maxlength="40"><small>Shown at the top of the sidebar and on the sign-in page.</small></div>`;
+const welcomeField = () => `<div class="field"><label>Welcome message</label><textarea class="textarea" data-welcome rows="3" maxlength="500">${esc(S.welcome)}</textarea><small>Shown on everyone’s home page.</small></div>`;
+const mapsFields = () => `<div class="field"><label>Day map style URL</label><input class="input" data-day value="${esc(S.day)}" placeholder="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"></div><div class="field"><label>Night map style URL</label><input class="input" data-night value="${esc(S.night)}" placeholder="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"></div>`;
+const head = (sub) => `<div class="pagehead"><div><div class="eyebrow">Settings</div><h2>Branding</h2><p>${sub}</p></div><div class="actions"><button class="btn ghost">Discard changes</button><button class="btn primary">Save</button></div></div>`;
+const box = (ico, t, d, body) => `<section class="box"><header><span class="ico">${ico}</span><div><b>${t}</b><small>${d}</small></div></header><div class="body">${body}</div></section>`;
+
+const VIEWS = {
+  a: () => `${head('Make the workspace look like ' + esc(S.name) + '.')}
+    <div class="eyebrow" style="margin-bottom:8px">Live preview</div>${mini()}
+    <div class="grid2" style="margin-top:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+      ${box('▣', 'Identity', 'Name, logo and welcome message', nameField() + logoField() + welcomeField())}
+      ${box('◐', 'Colour & sidebar', 'Buttons, links and the menu', swatches() + '<div class="field"><label>Sidebar</label></div>' + sbPick())}
+      ${box('◫', 'Maps', 'Basemaps for the explorer', mapsFields())}
+    </div>`,
+  b: () => `${head('Make the workspace look like ' + esc(S.name) + '.')}
+    <div class="kit"><aside>
+      <div class="brandcard"><div class="hero"><span class="mk">${S.logo ? `<img src="${S.logo}" alt="">` : esc(S.name.slice(0, 1))}</span><div><b>${esc(S.name)}</b><small>${S.color}</small></div></div>
+      <div class="signin"><div class="eyebrow">Sign-in page</div><div class="c"><b>Sign in to ${esc(S.name)}</b><div class="i"></div><div class="i"></div><div class="b"></div></div></div></div>
+      ${mini().replace('min-height: 300px', '')}
+    </aside>
+    <div class="rows">
+      <div><span><b>Name</b><small>Shown at the top of the sidebar and on the sign-in page.</small></span><span>${nameField().replace(/<label>.*?<\/label>/, '').replace(/<small>.*?<\/small>/, '')}</span></div>
+      <div><span><b>Logo</b><small>Square works best, under 200 KB.</small></span>${logoField().replace(/<div class="hint">.*?<\/div>/, '')}</div>
+      <div><span><b>Welcome message</b><small>Shown on everyone’s home page.</small></span><textarea class="textarea" data-welcome rows="3">${esc(S.welcome)}</textarea></div>
+      <div><span><b>Brand colour</b><small>Buttons, links and the highlighted menu entry.</small></span><span>${swatches()}</span></div>
+      <div><span><b>Sidebar</b><small>How the menu down the left looks.</small></span>${sbPick()}</div>
+      <div><span><b>Day map</b><small>Leave blank for the default.</small></span><input class="input" data-day value="${esc(S.day)}" placeholder="https://basemaps.cartocdn.com/…"></div>
+      <div><span><b>Night map</b><small>Used in dark mode.</small></span><input class="input" data-night value="${esc(S.night)}" placeholder="https://basemaps.cartocdn.com/…"></div>
+    </div></div>`,
+  c: () => `${head('Click anything in the preview to change it.')}
+    <div class="tabs2"><button data-t="work" aria-pressed="${tab === 'work'}">Workspace</button><button data-t="sign" aria-pressed="${tab === 'sign'}">Sign-in page</button></div>
+    <div class="stage" id="cstage">${tab === 'work' ? mini(true) : `<div class="signin" style="min-height:300px;place-items:center;border:1px solid var(--line-2)"><div class="c" style="width:300px"><span class="hot" data-hot="logo" style="display:flex;gap:10px;align-items:center"><span class="mk" style="width:28px;height:28px;background:var(--brand);color:#fff;display:grid;place-items:center">${S.logo ? `<img src="${S.logo}" style="width:100%">` : esc(S.name.slice(0, 1))}</span><b class="hot" data-hot="name">${esc(S.name)}</b></span><div class="i"></div><div class="i"></div><div class="b hot" data-hot="colour"></div></div></div>`}
+      <div id="popwrap"></div></div>
+    <p class="hint">Dashed outlines show what you can click.</p>
+    <div class="grid2" style="margin-top:20px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+      ${box('✎', 'Welcome message', 'Shown on everyone’s home page', welcomeField())}
+      ${box('◫', 'Maps', 'Basemaps for the explorer', mapsFields())}
+    </div>`,
+};
+
+function render(keepFocus) {
+  const a = document.activeElement, key = a && a.dataset ? Object.keys(a.dataset)[0] : null, pos = a && a.selectionStart;
+  document.documentElement.style.setProperty('--brand', S.color);
+  const on = parseInt(S.color.slice(1), 16), L = ((on >> 16) * 0.299 + ((on >> 8) & 255) * 0.587 + (on & 255) * 0.114);
+  document.documentElement.style.setProperty('--on-brand', L > 160 ? '#161616' : '#fff');
+  $('#note').textContent = NOTES[option];
+  document.querySelectorAll('.opts button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.o === option));
+  $('#stage').innerHTML = VIEWS[option]();
+  if (pop) showPop();
+  if (keepFocus && key) { const n = $(`[data-${key}]`); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch {} } }
+}
+function showPop() {
+  const t = $(`[data-hot="${pop}"]`); const w = $('#popwrap'); if (!t || !w) return;
+  const r = t.getBoundingClientRect(), s = $('#cstage').getBoundingClientRect();
+  const body = { name: nameField(), logo: logoField(), colour: swatches(), sidebar: sbPick() }[pop];
+  w.innerHTML = `<div class="pop" style="left:${Math.min(r.left - s.left, s.width - 320)}px;top:${r.bottom - s.top + 8}px">${body}<button class="btn sm" data-close>Done</button></div>`;
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button,[data-hot]'); if (!t) { if (pop && !e.target.closest('.pop')) { pop = null; render(); } return; }
+  if (t.dataset.o) { option = t.dataset.o; pop = null; render(); }
+  else if (t.dataset.c) { S.color = t.dataset.c; render(); }
+  else if (t.dataset.sb) { S.sb = t.dataset.sb; render(); }
+  else if (t.dataset.t) { tab = t.dataset.t; pop = null; render(); }
+  else if (t.dataset.nologo !== undefined) { S.logo = null; render(); }
+  else if (t.dataset.close !== undefined) { pop = null; render(); }
+  else if (t.dataset.hot) { pop = t.dataset.hot; render(); e.stopPropagation(); }
+});
+document.addEventListener('input', (e) => {
+  const d = e.target.dataset;
+  if (d.name !== undefined) S.name = e.target.value || 'Workspace';
+  else if (d.welcome !== undefined) S.welcome = e.target.value;
+  else if (d.day !== undefined) S.day = e.target.value;
+  else if (d.night !== undefined) S.night = e.target.value;
+  else if (d.color !== undefined) S.color = e.target.value;
+  else if (d.hex !== undefined) { if (/^#[0-9a-f]{6}$/i.test(e.target.value)) S.color = e.target.value; else return; }
+  else return;
+  render(true);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.dataset.logo !== undefined && e.target.files[0]) { const r = new FileReader(); r.onload = () => { S.logo = r.result; render(); }; r.readAsDataURL(e.target.files[0]); }
+});
+render();
+</script>
+</body>
+</html>

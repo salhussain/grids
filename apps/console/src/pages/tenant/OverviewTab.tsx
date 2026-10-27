@@ -18,6 +18,7 @@ import { countryName, dateTime } from '@grids/ui';
 import { UsageMeter } from '../PlansPage';
 import {
   AddressFields,
+  BillingAddressFields,
   BusinessFields,
   ContactFields,
   PreferenceFields,
@@ -78,6 +79,26 @@ export function OverviewTab({ t }: { t: TenantDetail }) {
               </address>
             ) : (
               <p className="text-sm text-zinc-500">No address on file.</p>
+            )}
+          </Panel>
+          <Panel title="Billing address">
+            {t.billingAddress ? (
+              <address className="text-sm leading-relaxed not-italic">
+                {[
+                  t.billingAddress.line1,
+                  t.billingAddress.line2,
+                  [t.billingAddress.city, t.billingAddress.region, t.billingAddress.postalCode]
+                    .filter(Boolean)
+                    .join(' '),
+                  countryName(t.billingAddress.country),
+                ]
+                  .filter(Boolean)
+                  .map((l) => (
+                    <div key={l}>{l}</div>
+                  ))}
+              </address>
+            ) : (
+              <p className="text-sm text-zinc-500">Same as the registered address.</p>
             )}
           </Panel>
           <Panel title="Contacts">
@@ -179,6 +200,16 @@ const toForm = (t: TenantDetail): ProfileForm => ({
     postalCode: t.address.postalCode ?? '',
     country: t.address.country ?? '',
   },
+  billingAddress: t.billingAddress
+    ? {
+        line1: t.billingAddress.line1 ?? '',
+        line2: t.billingAddress.line2 ?? '',
+        city: t.billingAddress.city ?? '',
+        region: t.billingAddress.region ?? '',
+        postalCode: t.billingAddress.postalCode ?? '',
+        country: t.billingAddress.country ?? '',
+      }
+    : null,
   timezone: t.timezone,
   locale: t.locale,
   currency: t.currency as ProfileForm['currency'],
@@ -259,6 +290,14 @@ export function EditProfileDialog({
         </Section>
         <Section title="Address">
           <AddressFields v={v.address} set={(a) => set('address', a)} errors={errors} />
+        </Section>
+        <Section title="Billing address">
+          <BillingAddressFields
+            v={v.billingAddress}
+            set={(a) => set('billingAddress', a)}
+            registered={v.address}
+            errors={errors}
+          />
         </Section>
         <Section title="Primary contact">
           <ContactFields

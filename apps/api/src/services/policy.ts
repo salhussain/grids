@@ -8,6 +8,7 @@ import {
   type WorkspacePermission,
 } from '@grids/schema';
 import type { Actor, ServiceContext } from './context.js';
+import { HttpError } from '../errors.js';
 
 export interface ScopedGrant {
   permission: string;
@@ -101,6 +102,9 @@ export async function workspacePolicy(
     .where('user_id', '=', actor.id)
     .executeTakeFirst();
   if (!m || m.status !== 'active') return null;
+  // The organisation's subscription has ended: nobody gets in until it is renewed.
+  const t = await ctx.db.selectFrom('tenant').select('access_blocked').where('id', '=', tenantId).executeTakeFirst();
+  if (t?.access_blocked) throw new HttpError(403, 'Subscription ended', 'This organisation’s subscription has ended. Contact the organisation’s administrator or the Grids team to renew it.', undefined, undefined, 'subscription_ended');
   if (m.role === 'org_admin')
     return new WorkspacePolicy('org_admin', new Set(WORKSPACE_PERMISSIONS), []);
 

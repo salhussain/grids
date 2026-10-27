@@ -1,5 +1,5 @@
 import type { TokenVerifier } from '../src/auth/tokens.js';
-import type { IdentityProvider, UserProfile } from '../src/idp/types.js';
+import type { CreatedOrgClient, IdentityProvider, OrgClient, UserProfile } from '../src/idp/types.js';
 import type { Mailer, OutgoingEmail } from '../src/services/email.js';
 
 export class FakeIdp implements IdentityProvider {
@@ -27,6 +27,10 @@ export class FakeIdp implements IdentityProvider {
   async getUserSecondFactors(subject: string) {
     return this.secondFactors.get(subject) ?? [];
   }
+  blocked = new Map<string, boolean>();
+  async setOrganizationBlocked(orgId: string, blocked: boolean) {
+    this.blocked.set(orgId, blocked);
+  }
   async setOrganizationMfaRequired(orgId: string, required: boolean) {
     this.mfaPolicy.set(orgId, required);
   }
@@ -39,6 +43,40 @@ export class FakeIdp implements IdentityProvider {
   async setUserActive(subject: string, active: boolean) {
     if (active) this.inactive.delete(subject);
     else this.inactive.add(subject);
+  }
+  clients: (OrgClient & { orgId: string })[] = [];
+  async listClients(orgId: string) {
+    return { issuer: 'http://idp.test/oidc', clients: this.clients.filter((c) => c.orgId === orgId) };
+  }
+  async createClient(orgId: string, input: { name: string; redirectUris: string[]; postLogoutRedirectUris: string[]; confidential: boolean }): Promise<CreatedOrgClient> {
+    const c = { orgId, clientId: `gc_${this.clients.length + 1}`, name: input.name, redirectUris: input.redirectUris, postLogoutRedirectUris: input.postLogoutRedirectUris, confidential: input.confidential, disabled: false, createdAt: new Date().toISOString() };
+    this.clients.push(c);
+    return { ...c, clientSecret: input.confidential ? 'secret-1' : null };
+  }
+  async updateClient(orgId: string, clientId: string, patch: Partial<OrgClient>) {
+    const c = this.clients.find((x) => x.orgId === orgId && x.clientId === clientId);
+    if (!c) throw new Error('missing');
+    Object.assign(c, patch);
+    return c;
+  }
+  async rotateClientSecret(orgId: string, clientId: string): Promise<CreatedOrgClient> {
+    const c = this.clients.find((x) => x.orgId === orgId && x.clientId === clientId)!;
+    return { ...c, clientSecret: 'secret-2' };
+  }
+  async deleteClient(orgId: string, clientId: string) {
+    this.clients = this.clients.filter((x) => !(x.orgId === orgId && x.clientId === clientId));
+  }
+  sessions: { orgId: string; id: string; email: string }[] = [];
+  async listSessions(orgId: string) {
+    return this.sessions
+      .filter((s) => s.orgId === orgId)
+      .map((s) => ({ id: s.id, email: s.email, givenName: null, familyName: null, signedInAt: null, expiresAt: null }));
+  }
+  async listPastSessions(_orgId: string) {
+    return [];
+  }
+  async revokeSession(orgId: string, sessionId: string) {
+    this.sessions = this.sessions.filter((s) => !(s.orgId === orgId && s.id === sessionId));
   }
 }
 

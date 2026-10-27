@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import type { User } from 'oidc-client-ts';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { MeDto, WorkspaceDto, WorkspacePermission } from '@grids/schema';
-import { Spinner } from '@grids/ui';
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { DEFAULT_SESSION_POLICY, type MeDto, type SessionPolicy, type WorkspaceDto, type WorkspacePermission } from '@grids/schema';
+import { LogOut, ShieldCheck, Timer } from 'lucide-react';
+import { Button, Dialog, Spinner } from '@grids/ui';
 import { api } from './api';
-import { currentUser, signIn, userManager } from './auth';
+import { ApiError } from '@grids/ui';
+import { currentUser, endSession, signIn, signOut, userManager } from './auth';
 import { I18nProvider, workspaceLocale } from './i18n';
 import { useColorModePreference } from './prefs';
 
@@ -14,6 +16,116 @@ export const useMe = () => {
   if (!me) throw new Error('useMe outside <RequireAuth>');
   return me;
 };
+
+const ACTIVITY_KEY = 'grids.lastActivity';
+
+// The organisation's session settings, published by the workspace once it has loaded (the defaults outside one).
+let published: SessionPolicy = DEFAULT_SESSION_POLICY;
+const listeners = new Set<() => void>();
+const publish = (p: SessionPolicy) => {
+  if (p === published) return;
+  published = p;
+  listeners.forEach((l) => l());
+};
+const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+
+/**
+ * Signs the person out after the organisation's idle timeout without activity in any tab (the last activity is shared
+ * through localStorage), or once its longest session has run. The warning counts down before the idle sign-out; only
+ * `stay` (not the mouse) keeps the session.
+ */
+function useIdleSignOut(active: boolean, authTime: number | undefined) {
+  const policy = useSyncExternalStore(subscribe, () => published);
+  const [left, setLeft] = useState<number | null>(null);
+  const stayRef = useRef<() => void>(() => undefined);
+  const { idleTimeoutMinutes, warningSeconds, maxSessionHours } = policy;
+  useEffect(() => {
+    if (!active) return;
+    const idleMs = idleTimeoutMinutes * 60_000;
+    const warningMs = Math.min(warningSeconds * 1000, idleMs / 2);
+    const read = () => {
+      try {
+        return Number(localStorage.getItem(ACTIVITY_KEY)) || 0;
+      } catch {
+        return 0;
+      }
+    };
+    let last = Date.now();
+    let warning = false;
+    const mark = () => {
+      last = Date.now();
+      try {
+        localStorage.setItem(ACTIVITY_KEY, String(last));
+      } catch {
+        /* storage unavailable: this tab's own clock is used */
+      }
+    };
+    const touch = () => {
+      if (warning || Date.now() - last < 2000) return;
+      mark();
+    };
+    stayRef.current = () => {
+      warning = false;
+      mark();
+      setLeft(null);
+    };
+    mark();
+    const events = ['pointerdown', 'keydown', 'scroll', 'visibilitychange'] as const;
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    const timer = window.setInterval(() => {
+      const remaining = idleMs - (Date.now() - Math.max(last, read()));
+      warning = remaining <= warningMs;
+      setLeft(warning ? Math.max(0, Math.ceil(remaining / 1000)) : null);
+      const tooLong = authTime !== undefined && Date.now() / 1000 - authTime >= maxSessionHours * 3600;
+      if (remaining <= 0 || tooLong) signOut().catch((e) => console.warn('sign-out failed', e));
+    }, 1_000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch));
+      window.clearInterval(timer);
+    };
+  }, [active, authTime, idleTimeoutMinutes, warningSeconds, maxSessionHours]);
+  return { left, stay: () => stayRef.current() };
+}
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+/** "Are you still there?": shown shortly before the idle sign-out. */
+function IdleWarning({ left, onStay }: { left: number; onStay(): void }) {
+  // Opening the window moves focus to its first control (the × button); nothing should look pre-selected, so let go of it.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <Dialog
+      open
+      onClose={onStay}
+      title="Session expiring"
+      footer={
+        <>
+          <Button variant="ghost" icon={LogOut} onClick={() => void signOut()}>
+            Sign out
+          </Button>
+          <Button icon={ShieldCheck} onClick={onStay}>
+            Stay signed in
+          </Button>
+        </>
+      }
+    >
+      <div className="flex items-center gap-4">
+        <Timer className="size-9 shrink-0 text-accent-600" aria-hidden />
+        <div>
+          <p className="text-sm text-zinc-700">You’ll be signed out due to inactivity in</p>
+          <p className="text-3xl font-semibold tabular-nums" role="timer" aria-live="polite">
+            {clock(left)}
+          </p>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
 
 /** Signs the user in and loads /me. */
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -27,20 +139,35 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user === null) void signIn();
   }, [user]);
+  const idle = useIdleSignOut(!!user, user?.profile.auth_time);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !!user });
   useColorModePreference(me.data);
+  // The API refused the token (revoked or expired elsewhere): sign in again rather than show the error.
+  const unauthorised = me.error instanceof ApiError && me.error.status === 401;
+  useEffect(() => {
+    if (unauthorised) void endSession();
+  }, [unauthorised]);
   if (!user || me.isPending) return <FullPageSpinner />;
+  if (unauthorised) return <FullPageSpinner />;
   if (me.isError) return <p className="p-8 text-sm text-red-700">{me.error.message}</p>;
   // Outside a workspace (e.g. the organisation picker) any language is available.
   return (
     <MeCtx.Provider value={me.data}>
+      {idle.left !== null && <IdleWarning left={idle.left} onStay={idle.stay} />}
       <I18nProvider locale={workspaceLocale(me.data.preferences.locale)}>{children}</I18nProvider>
     </MeCtx.Provider>
   );
 }
 
 const WorkspaceCtx = createContext<WorkspaceDto | null>(null);
-export const WorkspaceProvider = WorkspaceCtx.Provider;
+/** Provides the workspace, and applies its organisation's session settings while it is open. */
+export function WorkspaceProvider({ value, children }: { value: WorkspaceDto; children: ReactNode }) {
+  useEffect(() => {
+    publish(value.sessionPolicy ?? DEFAULT_SESSION_POLICY);
+    return () => publish(DEFAULT_SESSION_POLICY);
+  }, [value.sessionPolicy]);
+  return <WorkspaceCtx.Provider value={value}>{children}</WorkspaceCtx.Provider>;
+}
 export function useWorkspace() {
   const ws = useContext(WorkspaceCtx);
   if (!ws) throw new Error('useWorkspace outside a workspace');

@@ -18,6 +18,7 @@ import {
   useLiveInterval,
   usePagination,
 } from '@grids/ui';
+import { AUDIT_CATEGORIES, AUDIT_CATEGORY_LABEL } from '@grids/schema';
 import { api } from '../api';
 import { NoAccess, useCan } from '../session';
 import { DetailsLine, TenantPicker } from './shared';
@@ -40,12 +41,14 @@ export function SystemLogPage() {
   const live = useLiveInterval();
   const [action, setAction] = useState('');
   const [tenantId, setTenantId] = useState('');
+  const [category, setCategory] = useState('');
   const [q, setQ] = useState('');
-  const [page, setPage] = usePagination([action, tenantId, q], 50);
+  const [page, setPage] = usePagination([action, tenantId, q, category], 50);
   const query = {
     action: action || undefined,
     tenantId: tenantId || undefined,
     q: q || undefined,
+    category: category || undefined,
     ...page,
   };
   const log = useQuery({
@@ -76,7 +79,7 @@ export function SystemLogPage() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search actor, details"
+                placeholder="Search actor, address, place, details"
                 className="w-56 pl-8"
                 aria-label="Search log"
               />
@@ -94,6 +97,14 @@ export function SystemLogPage() {
                 </option>
               ))}
             </Select>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Kind" className="w-40">
+              <option value="">All kinds</option>
+              {AUDIT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {AUDIT_CATEGORY_LABEL[c]}
+                </option>
+              ))}
+            </Select>
             <TenantPicker value={tenantId} onChange={setTenantId} />
           </>
         }
@@ -104,7 +115,7 @@ export function SystemLogPage() {
         ) : (
           <>
             <Table
-              head={['Time', 'Action', 'Organisation', 'Actor', 'Details']}
+              head={['Time', 'Action', 'Organisation', 'Actor', 'From', 'Details']}
               empty="No events match."
             >
               {d?.items.map((e) => (
@@ -127,8 +138,13 @@ export function SystemLogPage() {
                     ) : (
                       <span className="text-zinc-400">Platform</span>
                     )}
+                    {e.project && <div className="text-xs text-zinc-500">{e.project}</div>}
                   </Td>
-                  <Td className="text-zinc-600">{e.actorEmail ?? 'system'}</Td>
+                  <Td className="text-zinc-600">{e.actorEmail ?? (e.category === 'public' ? 'visitor' : 'system')}</Td>
+                  <Td className="text-xs whitespace-nowrap">
+                    <div className="font-mono text-zinc-700">{e.ip ?? '–'}</div>
+                    <div className="text-zinc-500">{e.location ?? ''}</div>
+                  </Td>
                   <Td className="max-w-lg">
                     <DetailsLine details={e.details} />
                   </Td>

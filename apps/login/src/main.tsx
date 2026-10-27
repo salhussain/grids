@@ -1,3 +1,4 @@
+import { applyColorMode } from '@grids/ui';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AccountPage } from './pages/Account';
@@ -12,6 +13,10 @@ function NotFound() {
   const t = useT();
   return <StepHeader title={t('auth.errors.invalid_link')} />;
 }
+
+// An app linking here passes the person's colour mode (it can't share storage across origins).
+const mode = new URLSearchParams(location.search).get('mode');
+if (mode === 'light' || mode === 'dark' || mode === 'system') applyColorMode(mode);
 
 /** Four pages, so a path switch is enough (no router dependency). */
 function App() {

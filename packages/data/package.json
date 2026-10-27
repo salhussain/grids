@@ -6,20 +6,37 @@
   "description": "Canonical-model writes (entities, observations, datasets), freshness, and the job engine shared by the API and the worker.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "warm": "node scripts/warm.mjs"
   },
   "dependencies": {
+    "@duckdb/node-api": "1.5.6-r.1",
     "@grids/db": "workspace:^",
     "@grids/schema": "workspace:^",
     "cron-parser": "^5.4.0",
+    "jose": "^6.2.12",
     "jsonata": "^2.1.0",
-    "kysely": "^0.29.6"
+    "kysely": "^0.29.6",
+    "mysql2": "^3.24.5",
+    "oracledb": "^7.0.1",
+    "pg": "^8.23.1",
+    "pyodide": "^314.0.7",
+    "quickjs-emscripten": "^0.32.0",
+    "tedious": "^20.3.3",
+    "webr": "^0.6.0"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^12.2.0"
+    "@testcontainers/postgresql": "^12.2.0",
+    "@types/oracledb": "^7.0.3",
+    "@types/pg": "^8.23.1"
   }
 }

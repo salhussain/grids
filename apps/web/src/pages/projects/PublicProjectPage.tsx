@@ -3,11 +3,12 @@ import { useParams } from '@tanstack/react-router';
 import { ErrorNotice, Spinner } from '@grids/ui';
 import { useEffect, useMemo } from 'react';
 import { api } from '../../api';
-import { Explorer } from '@grids/viz';
+import { Explorer, SupportWidget } from '@grids/viz';
 import { publicSource } from '../../explorer/source';
 import { usePublicEvents } from '../../live';
-import { applyTheme } from '../../theme';
+import { applyTheme, tabTitle } from '../../theme';
 import { LiveIndicator } from '@grids/viz';
+import { visitorSupport } from '../../support/clients';
 
 /** Anonymous, read-only explorer of a public project (spec §13): public overlays and dashboards only. */
 export function PublicProjectPage() {
@@ -16,9 +17,11 @@ export function PublicProjectPage() {
   const live = usePublicEvents(tenant, project);
   useEffect(() => {
     if (!view.data) return;
-    applyTheme({ primaryColor: view.data.tenant.primaryColor } as never);
-    document.title = `${view.data.project.name} · ${view.data.tenant.name}`;
+    const t = view.data.tenant;
+    applyTheme({ primaryColor: view.data.project.color || t.primaryColor, favicon: t.favicon, logo: t.logo, chartColors: t.chartColors } as never);
+    document.title = `${view.data.project.name} · ${t.name}`;
   }, [view.data]);
+  const support = useMemo(() => visitorSupport(tenant), [tenant]);
   const source = useMemo(() => (view.data ? publicSource(tenant, project, view.data.dashboards, view.data.elements) : null), [tenant, project, view.data]);
 
   if (view.isPending)
@@ -35,12 +38,14 @@ export function PublicProjectPage() {
     );
   const v = view.data;
   return (
+    <>
     <Explorer
       source={source}
       title={v.project.name}
       accent={v.tenant.primaryColor}
       mapStyles={v.tenant.mapStyles}
       subtitle={v.tenant.name}
+      helpCorner={v.tenant.helpPosition === 'right'}
       logo={
         v.tenant.logo ? (
           <img src={v.tenant.logo} alt="" className="size-9 rounded-xl object-contain" />
@@ -49,7 +54,13 @@ export function PublicProjectPage() {
         )
       }
       live={<LiveIndicator status={live} />}
-      actions={<span className="hidden px-2 text-xs text-zinc-500 lg:inline">Powered by Grids</span>}
+      actions={
+        v.tenant.poweredBy || v.tenant.footer ? (
+          <span className="hidden px-2 text-xs text-zinc-500 lg:inline">{[v.tenant.footer, v.tenant.poweredBy && 'Powered by Grids'].filter(Boolean).join(' · ')}</span>
+        ) : undefined
+      }
     />
+    <SupportWidget client={support} project={project} side={v.tenant.helpPosition === 'right' ? 'end' : 'start'} className={v.tenant.helpPosition === 'right' ? 'bottom-5!' : undefined} />
+    </>
   );
 }

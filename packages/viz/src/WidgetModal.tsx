@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { PERIOD_HOURS, type DashboardParams, type QueryResult, type Widget } from '@grids/schema';
-import { cx, ErrorNotice, Select, Spinner } from '@grids/ui';
+import { cx, DatePicker, ErrorNotice, Select, Spinner } from '@grids/ui';
 import { BarChart3, Download, Table2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { InfoTip } from './richtext';
 import { FreshnessBadge } from './Freshness';
 import { WidgetBody } from './WidgetView';
 
@@ -87,11 +88,16 @@ export function WidgetModal({
 
   // A portal, so it sits above every panel whatever stacking context opened it.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={widget.title || 'Chart'} className="flex h-[min(760px,92vh)] w-[min(1180px,96vw)] flex-col border border-zinc-200 bg-snow shadow-2xl">
+    <div data-widget-modal className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={widget.title || 'Chart'} className="flex h-[min(760px,92vh)] w-[min(1180px,96vw)] flex-col overflow-hidden rounded-[20px] border border-zinc-200 bg-snow shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 pt-5 pb-4">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-tight">{widget.title || 'Chart'}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-tight" style={widget.options.titleColor ? { color: widget.options.titleColor } : undefined}>
+                {widget.title || 'Chart'}
+              </h2>
+              {widget.options.info && <InfoTip html={widget.options.info} />}
+            </div>
             {q.data && (
               <div className="mt-1.5">
                 <FreshnessBadge value={q.data.freshness} />
@@ -116,9 +122,9 @@ export function WidgetModal({
               </Select>
               {period === 'custom' && (
                 <span className="flex items-center gap-1.5 text-sm text-zinc-600">
-                  <input type="date" aria-label="From" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="h-9 border border-zinc-300 bg-snow px-2 text-sm" />
+                  <DatePicker aria-label="From" value={from} max={to || undefined} onChange={setFrom} className="w-40" />
                   –
-                  <input type="date" aria-label="To" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="h-9 border border-zinc-300 bg-snow px-2 text-sm" />
+                  <DatePicker aria-label="To" value={to} min={from || undefined} max={today} onChange={setTo} className="w-40" />
                 </span>
               )}
             </>
@@ -191,11 +197,15 @@ export function WidgetModal({
               </table>
             </div>
           ) : (
-            <div className={cx('h-full', widget.type === 'kpi' && 'mx-auto flex max-w-md items-center')}>
-              <div className="h-full w-full">
+            widget.type === 'kpi' ? (
+              <div className="flex h-full items-center justify-center">
+                <WidgetBody widget={widget} result={q.data} names={names} onSelectEntity={onSelectEntity} large />
+              </div>
+            ) : (
+              <div className="h-full">
                 <WidgetBody widget={widget} result={q.data} names={names} onSelectEntity={onSelectEntity} />
               </div>
-            </div>
+            )
           )}
         </div>
       </div>

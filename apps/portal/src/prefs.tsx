@@ -1,6 +1,11 @@
 import { catalogs, interpolate, isRtl, LOCALES, resolveLocale, type LocaleCode } from '@grids/i18n';
-import { applyColorMode, Listbox, ModeSwitch, storedColorMode, type ColorMode } from '@grids/ui';
-import { Globe } from 'lucide-react';
+import {
+  applyColorMode,
+  LanguageMenu,
+  storedColorMode,
+  ThemeToggle,
+  type ColorMode,
+} from '@grids/ui';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 const KEY = 'grids.locale';
@@ -44,23 +49,33 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18n.Provider value={value}>{children}</I18n.Provider>;
 }
 
-/** Language and appearance: the same controls, top right, on every page. */
+/** Language and appearance: the same controls, top right, on every page (as on the sign-in page). */
 export function HeaderControls() {
   const { locale, setLocale, t } = useI18n();
   const [mode, setMode] = useState<ColorMode>(storedColorMode);
   useEffect(() => applyColorMode(mode), [mode]);
   return (
     <div className="flex items-center gap-2">
-      <Listbox
-        compact
-        align="end"
-        label={t('common.language')}
-        className="w-36"
+      <LanguageMenu
+        rounded
         value={locale as string}
         onChange={(v) => setLocale(v as LocaleCode)}
-        options={LOCALES.map((l) => ({ value: l.code as string, label: l.nativeName, text: l.nativeName, icon: Globe }))}
+        label={t('common.language')}
+        draftLabel={t('common.draftTranslation')}
+        options={LOCALES.map((l) => ({
+          code: l.code as string,
+          label: l.nativeName,
+          draft: l.status === 'draft',
+        }))}
       />
-      <ModeSwitch value={mode} onChange={setMode} labels={{ light: t('common.light'), dark: t('common.dark'), system: t('common.system'), group: t('common.appearance') }} />
+      <ThemeToggle
+        mode={mode}
+        onChange={setMode}
+        labels={{
+          toLight: `${t('common.appearance')}: ${t('common.light')}`,
+          toDark: `${t('common.appearance')}: ${t('common.dark')}`,
+        }}
+      />
     </div>
   );
 }

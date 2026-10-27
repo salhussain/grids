@@ -7,7 +7,7 @@ import {
   type StaffRoleDto,
   type StaffUserDto,
 } from '@grids/schema';
-import {
+import { confirmDialog,
   Button,
   Checkbox,
   Dialog,
@@ -271,8 +271,7 @@ function StaffDialog({
             ) : (
               <Button
                 variant="danger"
-                onClick={() =>
-                  confirm(`Suspend ${existing.name}? They can no longer sign in.`) &&
+                onClick={async () => (await confirmDialog(`Suspend ${existing.name}? They can no longer sign in.`)) &&
                   status.mutate('suspended')
                 }
                 loading={status.isPending}
@@ -417,8 +416,7 @@ function Roles() {
                     variant="ghost"
                     size="sm"
                     icon={Trash2}
-                    onClick={() =>
-                      confirm(`Delete the ${r.name} role? Staff lose its permissions.`) &&
+                    onClick={async () => (await confirmDialog(`Delete the ${r.name} role? Staff lose its permissions.`)) &&
                       remove.mutate(r)
                     }
                   >

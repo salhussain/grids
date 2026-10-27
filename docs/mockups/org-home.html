@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Organisation Home Options</title>
+<meta name="description" content="Four alternative designs for the organisation workspace home page." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  .picker { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; padding: 10px 24px; background: var(--raise); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .opt { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--sheet); cursor: pointer; font-weight: 500; }
+  .opt[aria-selected='true'] { border-color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+  .opt .dot { width: 8px; height: 8px; background: var(--line-2); }
+  .opt[data-v='keep'] .dot { background: var(--good); } .opt[data-v='remove'] .dot { background: var(--bad); } .opt[data-v='remove'] { opacity: .55; text-decoration: line-through; }
+  .verdict { display: flex; align-items: center; gap: 10px; padding: 10px 32px; border-bottom: 1px solid var(--line); background: var(--sheet); }
+  .verdict .seg button[data-pick='keep'][aria-pressed='true'] { background: var(--good); color: #fff; }
+  .verdict .seg button[data-pick='remove'][aria-pressed='true'] { background: var(--bad); color: #fff; }
+  .verdict p { color: var(--ink-3); font-size: 13px; }
+  .big { font: 600 44px/1 var(--sans); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .attn { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .attn:hover { background: var(--hover); } .attn:last-child { border-bottom: 0; }
+  .attn .ico { width: 32px; height: 32px; display: grid; place-items: center; background: var(--warn-soft); color: var(--warn); } .attn .ico.brand { background: var(--brand-soft); color: var(--brand-ink); } .attn .ico.bad { background: var(--bad-soft); color: var(--bad); }
+  .proj { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); cursor: pointer; } .proj:hover { background: var(--hover); } .proj:last-child { border-bottom: 0; }
+  .pi { width: 32px; height: 32px; display: grid; place-items: center; color: #fff; flex: none; }
+  .pcard { border: 1px solid var(--line); background: var(--sheet); cursor: pointer; display: grid; } .pcard:hover { border-color: var(--ink-3); }
+  .pcard .cap { height: 6px; } .pcard .in { padding: 16px; display: grid; gap: 12px; }
+  .fresh { font-size: 12px; color: var(--ink-3); display: inline-flex; gap: 6px; align-items: center; } .fresh i { width: 7px; height: 7px; background: var(--good); } .fresh.stale i { background: var(--warn); }
+  .feed > * { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: start; } .feed > *:last-child { border-bottom: 0; } .feed small { color: var(--ink-3); }
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); } .strip > * { padding: 14px 16px; border-right: 1px solid var(--line); } .strip > *:last-child { border-right: 0; }
+  .strip .v { font: 600 22px/1.1 var(--sans); letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .step { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); } .step:last-child { border: 0; }
+  .step .n { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line-2); font: 500 12px var(--mono); } .step.done .n { background: var(--good); border-color: var(--good); color: #fff; }
+  @media (max-width: 1000px) { .strip { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="org"><span class="mark">M</span><div><b>Ministry of Health</b><small>Vanuatu · Enterprise</small></div></div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <div class="main"><div class="sheet">
+    <div class="picker" id="picker"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="page" id="view"></div>
+  </div></div>
+</div>
+<script src="shared/mockup.js"></script>
+<script>
+const NAV = [
+  [null, [['Home', 'home', '', 1], ['Projects', 'folder', '4'], ['People', 'users', '214'], ['Structure', 'network'], ['Roles & access', 'key']]],
+  ['Settings', [['Branding', 'palette'], ['Security', 'shield'], ['Billing', 'card']]],
+  ['Help', [['Support', 'help'], ['Activity', 'activity']]],
+];
+$('#nav').innerHTML = NAV.map(([g, items]) => `<div class="nav-group">${g ? `<span class="eyebrow">${g}</span>` : ''}${items.map(([l, i, c, cur]) => `<a ${cur ? 'aria-current="page"' : ''}>${ic(i)}${l}${c ? `<span class="count">${c}</span>` : ''}</a>`).join('')}</div>`).join('');
+
+const SUB = [22, 31, 28, 40, 36, 52, 48, 61, 55, 49, 66, 72, 64, 80];
+const PROJ = [
+  ['Immunisation Coverage', '#0f62fe', 'form', 1840, 6, 4, 'Updated 2h ago', 0], ['Disease Surveillance', '#da1e28', 'activity', 5210, 9, 7, 'Updated 12m ago', 0],
+  ['Clinic Staffing', '#007d79', 'users', 612, 3, 2, 'Updated 9 days ago', 1], ['Supply Chain', '#8a3ffc', 'layers', 0, 0, 1, 'Draft', 2],
+];
+const attn = [['', 'check', '7 submissions waiting for review', 'Immunisation Coverage', 'Review'], ['', 'alert', 'Clinic Staffing has stale data', 'Last update 9 days ago', 'Open'], ['brand', 'mail', '3 invitations not yet accepted', 'People', 'Remind'], ['bad', 'card', '1 overdue invoice', 'Billing', 'Pay']];
+const attnList = (n = 4) => attn.slice(0, n).map(([c, i, t, s, b]) => `<div class="attn"><span class="ico ${c}">${ic(i, 16)}</span><div><b style="font-weight:500;display:block">${t}</b><small class="muted">${s}</small></div><span class="btn sm">${b}</span></div>`).join('');
+const projList = (n = 4) => PROJ.slice(0, n).map(([nm, c, i, e, d, f, fr, st]) => `<div class="proj"><span class="pi" style="background:${c}">${ic(i)}</span><div class="grow"><b style="font-weight:500;display:block">${nm}${st === 2 ? ' ' + badge('draft', 'warn') : ''}</b><small class="muted">${e.toLocaleString()} entities · ${d} dashboards · ${f} forms</small></div><span class="fresh ${st ? 'stale' : ''}"><i></i>${fr}</span></div>`).join('');
+const feed = () => [['Jean Tari approved 12 submissions', 'Immunisation Coverage', '4m'], ['Marie Obed published a dashboard', 'Disease Surveillance', '1h'], ['Peter Kalo was invited', 'People', '3h'], ['Role “Data manager” updated', 'Access', '1d']]
+  .map(([a, o, t]) => `<div>${av(a.split(' ').slice(0, 2).join(' '), 'sm')}<div><b style="font-weight:500">${a}</b><br><small>${o}</small></div><small class="mono">${t}</small></div>`).join('');
+const date = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const chart = (h = 170) => bars(SUB, h);
+
+const V = {
+  A: { name: 'A · Inbox-first', note: 'Starts with your work: review queue and attention, then projects. Stats become a quiet strip.', html: () => `
+    ${head('Ministry of Health', 'Welcome back, Jean', '7 submissions are waiting for your review.', `<button class="btn primary" data-toast="Review inbox">${ic('check')}Review submissions</button>`)}
+    <div class="grid g21">
+      <div class="stack">${card('Needs attention', attnList(), { pad: false })}${card('Projects', projList(), { pad: false, actions: '<a class="btn sm ghost">View all</a>' })}</div>
+      <div class="stack">${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}</div>
+    </div>
+    <div class="strip" style="margin-top:16px">${[['People', '214'], ['Projects', '4'], ['Submissions · 30d', '3,214'], ['Open tickets', '2']].map(([l, v]) => `<div><span class="eyebrow">${l}</span><div class="v">${v}</div></div>`).join('')}</div>` },
+
+  B: { name: 'B · Dashboard', note: 'Closest to today but tighter: KPI cards with trend, submissions chart, projects and activity.', html: () => `
+    ${head('Ministry of Health', 'Welcome back, Jean', 'Enterprise plan · ' + date)}
+    <div class="grid g4">${[['People', '214', '3 invitations pending', 'users', ''], ['Projects', '4', '3 live · 1 draft', 'folder', 'warn'], ['Submissions · 30d', '3,214', '<span class="up">+12%</span> vs previous', 'form', 'good'], ['Open tickets', '2', '1 internal · 1 with Grids', 'help', '']].map(([l, v, c, i, t]) => kpi(l, v, c, i, t)).join('')}</div>
+    <div class="grid g21" style="margin-top:16px">${card('Submissions per day', chart(), { sub: 'All projects, last 14 days' })}${card('Needs attention', attnList(), { pad: false })}</div>
+    <div class="grid g21" style="margin-top:16px">${card('Projects', projList(), { pad: false })}${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}</div>` },
+
+  C: { name: 'C · Project gallery', note: 'Projects are the product, so they lead as cards. Attention is a slim banner above.', html: () => `
+    ${head('Ministry of Health', 'Welcome back, Jean', 'Welcome to the national health data workspace.', `<button class="btn" data-toast="New project">${ic('plus')}New project</button>`)}
+    <div class="notice warn" style="margin-bottom:20px">${ic('alert')}<div class="grow"><b>3 things need you:</b> 7 submissions to review · stale data in Clinic Staffing · 1 overdue invoice</div><a class="btn sm">Show all</a></div>
+    <div class="grid g3">${PROJ.map(([nm, c, i, e, d, f, fr, st]) => `<div class="pcard"><div class="cap" style="background:${c}"></div><div class="in"><div class="row"><span class="pi" style="background:${c}">${ic(i)}</span><b class="grow" style="font-weight:600">${nm}</b>${st === 2 ? badge('draft', 'warn') : ''}</div>${spark(SUB.map((x) => x + e % 9), 260, 34, c)}<div class="row muted" style="font-size:12.5px"><span>${e.toLocaleString()} entities</span><span>·</span><span>${d} dashboards</span><span class="fresh end ${st ? 'stale' : ''}"><i></i>${fr}</span></div></div></div>`).join('')}
+      <div class="pcard" style="place-items:center;min-height:150px;border-style:dashed;color:var(--ink-3)"><div style="text-align:center">${ic('plus', 22)}<div>Create project</div></div></div></div>
+    <div class="grid g21" style="margin-top:20px">${card('Submissions per day', chart(130), { sub: 'Last 14 days' })}${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}</div>` },
+
+  D: { name: 'D · Setup & pulse', note: 'For new or small orgs: a setup checklist alongside the pulse. Collapses to stats once complete.', html: () => `
+    ${head('Ministry of Health', 'Welcome to Grids, Jean', 'Three steps to get your team collecting data.')}
+    <div class="grid g21">
+      <div class="stack">
+        ${card('Get started', `<div class="meter" style="margin-bottom:6px"><i style="width:50%"></i></div><small class="muted">2 of 4 complete</small>
+          ${[['Define your structure', 'Regions, facilities and entity types', 1], ['Invite your team', '3 invitations pending', 1], ['Create your first project', 'Forms, dashboards and data in one place', 0], ['Publish a form', 'Start collecting submissions', 0]].map(([t, s, d], i) => `<div class="step ${d ? 'done' : ''}"><span class="n">${d ? ic('check', 14) : i + 1}</span><div><b style="font-weight:500;display:block">${t}</b><small class="muted">${s}</small></div>${d ? badge('done', 'good') : '<button class="btn sm primary">Start</button>'}</div>`).join('')}`)}
+        ${card('Submissions per day', chart(130), { sub: 'Last 14 days' })}
+      </div>
+      <div class="stack">
+        ${card('Pulse', `<div class="stack" style="gap:16px">${[['People', '214', 'users'], ['Projects', '4', 'folder'], ['Submissions · 30d', '3,214', 'form']].map(([l, v, i]) => `<div class="row"><span class="ico" style="width:32px;height:32px;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink)">${ic(i)}</span><span class="grow">${l}</span><b class="mono" style="font-size:18px">${v}</b></div>`).join('')}</div>`)}
+        ${card('Needs attention', attnList(3), { pad: false })}
+        ${card('Recent activity', `<div class="feed">${feed()}</div>`, { pad: false })}
+      </div>
+    </div>` },
+};
+const marks = JSON.parse(localStorage.homeMarks || '{}');
+let cur = localStorage.homeCur in V ? localStorage.homeCur : 'A';
+function render() {
+  localStorage.homeMarks = JSON.stringify(marks); localStorage.homeCur = cur;
+  $('#picker').innerHTML = `<span class="eyebrow" style="margin-right:6px">Options</span>` + Object.entries(V).map(([k, v]) => `<button class="opt" data-k="${k}" data-v="${marks[k] || ''}" aria-selected="${k === cur}"><span class="dot"></span>${v.name}</button>`).join('')
+    + `<span class="end muted" style="font-size:12.5px">${Object.entries(marks).filter(([, m]) => m === 'keep').map(([k]) => k).join(', ') || 'none'} kept</span>`;
+  $('#verdict').innerHTML = `<p class="grow">${V[cur].note}</p><div class="seg">${['keep', 'remove'].map((m) => `<button data-pick="${m}" aria-pressed="${marks[cur] === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`;
+  $('#view').innerHTML = V[cur].html(); wire($('#view'));
+  $$('.opt').forEach((b) => (b.onclick = () => { cur = b.dataset.k; render(); }));
+  $$('[data-pick]').forEach((b) => (b.onclick = () => { marks[cur] = marks[cur] === b.dataset.pick ? '' : b.dataset.pick; render(); }));
+}
+render();
+</script>
+</body>
+</html>

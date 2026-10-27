@@ -85,6 +85,7 @@ function toRow(p: PlanInput) {
     price_monthly: p.priceMonthly,
     yearly_discount_pct: p.yearlyDiscountPct,
     trial_days: p.trialDays,
+    payment_fee: p.paymentFee ? JSON.stringify(p.paymentFee) : null,
     limits: JSON.stringify(p.limits),
     features: JSON.stringify(p.features),
     is_public: p.isPublic,
@@ -101,6 +102,7 @@ export function toPlanDto(p: {
   price_monthly: number;
   yearly_discount_pct: string;
   trial_days: number;
+  payment_fee: unknown;
   limits: unknown;
   features: unknown;
   is_public: boolean;
@@ -118,6 +120,7 @@ export function toPlanDto(p: {
     yearlyDiscountPct: discount,
     priceYearly: yearlyPrice(p.price_monthly, discount),
     trialDays: p.trial_days,
+    paymentFee: (p.payment_fee as { percent: number; fixed: number } | null) ?? null,
     limits: p.limits as PlanLimits,
     features: p.features as string[],
     isPublic: p.is_public,

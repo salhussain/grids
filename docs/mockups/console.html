@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Platform Console Mockup</title>
+<meta name="description" content="Clickable mockup of every page in the Grids platform console." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  /* The console is staff-only, so it gets dark chrome and a staff marker; the sheet stays shared with the workspace. */
+  .side { background: #0d0e12; color: #c9cad1; margin: 14px 0 14px 14px; height: calc(100vh - 28px); }
+  .side .org b { color: #fff; } .side .org small { color: #7d7f89; }
+  .side .nav a { color: #aeb0b9; } .side .nav a:hover { background: #1a1b21; color: #fff; }
+  .side .nav a[aria-current='page'] { background: #1e2027; color: #fff; box-shadow: none; } .side .nav a svg { color: #7d7f89; }
+  .side .eyebrow { color: #5d5f69; } .side .side-foot { border-color: #23242b; } .side .me b { color: #fff; } .side .me small { color: #7d7f89; }
+  .side .icon-btn { color: #aeb0b9; } .side .icon-btn:hover { background: #1a1b21; color: #fff; }
+  .staff-tag { font: 500 10px var(--mono); letter-spacing: .08em; padding: 2px 6px; background: #1e2027; color: #8fb3ff; margin-left: 6px; vertical-align: 2px; }
+  .ticket-msg { padding: 16px 18px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 30px 1fr; gap: 12px; }
+  .ticket-msg.internal { background: var(--warn-soft); }
+  .plan-col { display: grid; gap: 14px; } .price { font: 600 28px var(--sans); letter-spacing: -.03em; } .price small { font-size: 13px; color: var(--ink-3); font-weight: 400; }
+  .log-line { font: 12.5px/1.5 var(--mono); padding: 8px 18px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 150px 70px 160px 1fr; gap: 12px; } .log-line:last-child { border: 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="org"><span class="mark">G</span><div><b>Grids <span class="staff-tag">STAFF</span></b><small>Platform console</small></div></div>
+    <button class="search-btn" data-toast="Command palette — jump to any organisation, ticket or page">${''}Search or jump to…<span class="kbd">⌘K</span></button>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot"><span class="avatar" style="background:#6929c4">AK</span><div class="me grow"><b style="font-size:13px;font-weight:500;display:block">Amara Kone</b><small>Platform admin</small></div><button class="icon-btn" id="theme" aria-label="Toggle colour mode"></button><button class="icon-btn" data-go="" aria-label="Sign out"></button></div>
+  </aside>
+  <div class="main"><div class="sheet"><div class="topbar"><div class="crumbs" id="crumbs"></div><div class="end row"><button class="btn sm ghost">EN ▾</button></div></div><div class="page" id="view"></div></div></div>
+</div>
+<script src="shared/mockup.js"></script>
+<script>
+const NAV = [
+  ['Platform', [['', 'Overview', 'home'], ['tenants', 'Organisations', 'building', '42']]],
+  ['Revenue', [['billing', 'Billing', 'card'], ['plans', 'Plans & pricing', 'layers']]],
+  ['Operations', [['support', 'Support', 'help', '3'], ['logs/emails', 'Email log', 'mail'], ['logs/system', 'System log', 'list']]],
+  ['Administration', [['staff', 'Staff & roles', 'badge'], ['settings', 'Settings', 'gear']]],
+];
+const TENANTS = [
+  ['Ministry of Health — Vanuatu', 'moh-vu', 'Enterprise', 'active', 412, 'Port Vila, VU', '#0f62fe', 'Jan 14, 2026'],
+  ['Pacific Community (SPC)', 'spc', 'Enterprise', 'active', 268, 'Nouméa, NC', '#007d79', 'Feb 02, 2026'],
+  ['Tonga Statistics Dept', 'tsd', 'Team', 'active', 54, 'Nukuʻalofa, TO', '#8a3ffc', 'Mar 21, 2026'],
+  ['Samoa Bureau of Statistics', 'sbs', 'Team', 'trial', 31, 'Apia, WS', '#da1e28', 'Sep 18, 2026'],
+  ['Fiji Red Cross', 'frc', 'Starter', 'active', 12, 'Suva, FJ', '#ba4e00', 'Apr 09, 2026'],
+  ['Kiribati Education Office', 'keo', 'Starter', 'past_due', 9, 'Tarawa, KI', '#198038', 'May 30, 2026'],
+  ['PNG National Research Inst.', 'pnri', 'Team', 'suspended', 0, 'Port Moresby, PG', '#525252', 'Jun 12, 2026'],
+  ['Solomon Islands Met Service', 'sims', 'Starter', 'trial', 6, 'Honiara, SB', '#0072c3', 'Oct 01, 2026'],
+];
+const stTone = { active: 'good', trial: 'brand', past_due: 'warn', suspended: 'bad', paid: 'good', open: 'warn', pending: 'warn', failed: 'bad', sent: 'good', bounced: 'bad', queued: '', resolved: 'good', closed: '' };
+const st = (s) => badge(s.replace('_', ' '), stTone[s] ?? '');
+const crumbMap = { '': ['Overview'], tenants: ['Organisations'], 'tenants/new': ['Organisations', 'New'], billing: ['Billing'], plans: ['Plans & pricing'], support: ['Support'], 'logs/emails': ['Email log'], 'logs/system': ['System log'], staff: ['Staff & roles'], settings: ['Settings'] };
+
+function nav(path) {
+  $('#nav').innerHTML = NAV.map(([g, items]) => `<div class="nav-group"><span class="eyebrow">${g}</span>${items.map(([to, l, i, c]) => `<a href="#/${to}" ${path === to || (to && path.startsWith(to + '/') && to !== 'logs') ? 'aria-current="page"' : ''}>${ic(i)}${l}${c ? (to === 'support' ? `<span class="pip">${c}</span>` : `<span class="count">${c}</span>`) : ''}</a>`).join('')}</div>`).join('');
+}
+
+const overview = () => `
+  ${head('Platform', 'Overview', 'Everything across all organisations, at a glance.', `<button class="btn" data-toast="Exported">${ic('dl')}Export</button><a class="btn primary" href="#/tenants/new">${ic('plus')}New organisation</a>`)}
+  <div class="grid g4">
+    ${kpi('Organisations', '42', '<span class="up">+3</span> this month · 5 on trial', 'building', '', 'tenants')}
+    ${kpi('Monthly recurring revenue', '$38.4k', '<span class="up">+6.2%</span> vs last month', 'trend', 'good', 'billing')}
+    ${kpi('Open tickets', '7', '3 need a reply · oldest 2 d', 'help', 'warn', 'support')}
+    ${kpi('Failed emails (24 h)', '2', 'of 1,184 sent', 'mail', 'bad', 'logs/emails')}
+  </div>
+  <div class="grid g21" style="margin-top:16px">
+    ${card('Signups & revenue', bars([12, 15, 14, 18, 22, 21, 26, 29, 31, 30, 35, 38]), { sub: 'MRR, last 12 months (USD thousands)' })}
+    ${card('Needs attention', `<div class="list" style="margin:-18px">
+      <a href="#/tenants/keo" style="color:inherit">${ic('alert')}<div class="grow"><b style="font-weight:500">Kiribati Education Office</b><div class="muted">Payment failed · 2 retries left</div></div>${badge('past due', 'warn')}</a>
+      <a href="#/tenants/sbs" style="color:inherit">${ic('clock')}<div class="grow"><b style="font-weight:500">Samoa Bureau of Statistics</b><div class="muted">Trial ends in 3 days</div></div>${badge('trial', 'brand')}</a>
+      <a href="#/support/T-1048" style="color:inherit">${ic('help')}<div class="grow"><b style="font-weight:500">T-1048 · SSO redirect loop</b><div class="muted">Waiting on staff · 2 d</div></div>${badge('urgent', 'bad')}</a></div>`, { pad: false })}
+  </div>
+  <div style="margin-top:16px">${card('Newest organisations', `<table class="tbl"><thead><tr><th>Organisation</th><th>Plan</th><th>Status</th><th class="r">People</th></tr></thead><tbody>${TENANTS.slice(3).map(orgRow).join('')}</tbody></table>`, { pad: false, actions: '<a class="btn sm" href="#/tenants">View all</a>' })}</div>`;
+const orgRow = (t) => `<tr class="click" data-go="tenants/${t[1]}"><td><div class="cell">${av(t[0])}<div><b>${t[0]}</b><small>${t[5]}</small></div></div></td><td>${t[2]}</td><td>${st(t[3])}</td><td class="r mono">${t[4]}</td></tr>`;
+
+const tenants = () => `
+  ${head('Platform', 'Organisations', '42 organisations across 9 countries.', `<a class="btn primary" href="#/tenants/new">${ic('plus')}New organisation</a>`)}
+  <div class="card"><div class="toolbar"><div class="search grow" style="max-width:340px">${ic('search')}<input class="input" placeholder="Search organisations" /></div>
+    <div class="seg" id="f">${['All', 'Active', 'Trial', 'Past due', 'Suspended'].map((x, i) => `<button aria-pressed="${!i}">${x}</button>`).join('')}</div>
+    <select class="select" style="width:auto"><option>All plans</option><option>Enterprise</option><option>Team</option><option>Starter</option></select></div>
+    <table class="tbl"><thead><tr><th>Organisation</th><th>Plan</th><th>Status</th><th class="r">People</th><th>Created</th><th></th></tr></thead>
+    <tbody id="tb">${TENANTS.map((t) => `<tr class="click" data-go="tenants/${t[1]}" data-s="${t[3]}"><td><div class="cell">${av(t[0])}<div><b>${t[0]}</b><small>${t[1]}.grids.app</small></div></div></td><td>${t[2]}</td><td>${st(t[3])}</td><td class="r mono">${t[4]}</td><td class="mono muted">${t[7]}</td><td class="r">${ic('right')}</td></tr>`).join('')}</tbody></table>
+    <div class="pager">Showing 8 of 42<span class="end row"><button class="btn sm">${ic('left')}</button><button class="btn sm">${ic('right')}</button></span></div></div>`;
+
+const newTenant = () => `
+  ${head('Organisations', 'New organisation', 'Create the workspace, pick a plan and invite the first administrator.')}
+  <div class="grid g21"><div class="stack">
+    ${card('Organisation', `<div class="grid g2">${field('Name', '<input class="input" placeholder="Ministry of Health" />')}${field('Workspace address', '<div class="row"><input class="input" placeholder="moh" /><span class="muted mono">.grids.app</span></div>', 'Letters, numbers and dashes.')}${field('Country', '<select class="select"><option>Vanuatu</option></select>')}${field('Default language', '<select class="select"><option>English</option><option>Français</option></select>')}</div>`)}
+    ${card('First administrator', `<div class="grid g2">${field('Full name', '<input class="input" />')}${field('Email', '<input class="input" type="email" />', 'They receive an invitation link.')}</div>`)}
+    ${card('Plan', `<div class="grid g3">${[['Starter', '$49', 'Up to 10 people'], ['Team', '$199', 'Up to 75 people'], ['Enterprise', 'Custom', 'Unlimited']].map(([n, p, d], i) => `<label class="card" style="padding:14px;cursor:pointer;${i === 1 ? 'border-color:var(--brand);background:var(--brand-soft)' : ''}"><div class="row"><input type="radio" name="p" ${i === 1 ? 'checked' : ''} /><b>${n}</b></div><div class="price" style="margin-top:8px">${p}<small>${p === 'Custom' ? '' : '/mo'}</small></div><div class="muted">${d}</div></label>`).join('')}</div><div class="row" style="margin-top:14px">${tgl(true)}<span>Start with a 14-day trial</span></div>`)}
+  </div>
+  <div class="stack">${card('Summary', `<dl class="kv" style="grid-template-columns:100px 1fr"><dt>Plan</dt><dd>Team</dd><dt>Trial</dt><dd>14 days</dd><dt>Billing</dt><dd>Starts Oct 21</dd></dl>`)}<div class="row"><a class="btn" href="#/tenants">Cancel</a><button class="btn primary end" data-toast="Organisation created — invitation sent">Create organisation</button></div></div></div>`;
+
+const tenant = ({ id }) => {
+  const t = TENANTS.find((x) => x[1] === id) || TENANTS[0];
+  const tabs = ['Overview', 'People', 'Domains', 'Security', 'Billing', 'Support', 'Activity'];
+  const people = [['Jean Tari', 'Administrator', 'Today'], ['Marie Obed', 'Data manager', 'Yesterday'], ['Peter Kalo', 'Analyst', 'Oct 3'], ['Ruth Saul', 'Viewer', 'Sep 28']];
+  return `
+  <div class="hero">${av(t[0], 'lg')}<div class="grow"><h1>${t[0]}</h1><div class="facts"><span>${ic('globe')}${t[1]}.grids.app</span><span>${ic('pin')}${t[5]}</span><span>${ic('layers')}${t[2]} plan</span><span>${ic('clock')}Since ${t[7]}</span></div></div>${st(t[3])}<button class="btn" data-modal="Impersonate admin|Start session">Support access</button><button class="btn danger" data-modal="Suspend organisation|Suspend">${t[3] === 'suspended' ? 'Reinstate' : 'Suspend'}</button></div>
+  <div class="tabs" data-tabs>${tabs.map((x, i) => `<button data-t="${x}" aria-selected="${!i}">${x}</button>`).join('')}</div>
+  <div data-pane="Overview"><div class="grid g4">${kpi('People', t[4], '9 invited, not joined', 'users', '')}${kpi('Projects', '14', '2 archived', 'folder', '')}${kpi('Submissions / mo', '12,480', '<span class="up">+18%</span>', 'form', 'good')}${kpi('Storage', '38 GB', 'of 100 GB', 'db', '')}</div>
+    <div class="grid g2" style="margin-top:16px">${card('Plan usage', [['Users', 62, 75], ['Projects', 14, 40], ['Submissions / month', 12480, 25000], ['Storage (GB)', 38, 100]].map(([l, v, m]) => `<div style="margin-bottom:14px"><div class="row"><span>${l}</span><span class="end mono muted">${v.toLocaleString()} / ${m.toLocaleString()}</span></div><div class="meter ${v / m > .9 ? 'bad' : v / m > .75 ? 'warn' : ''}" style="margin-top:6px"><i style="width:${(v / m) * 100}%"></i></div></div>`).join(''))}
+    ${card('Details', `<dl class="kv"><dt>Owner</dt><dd>Jean Tari · jean@moh.gov.vu</dd><dt>Plan</dt><dd>${t[2]} · billed annually</dd><dt>Region</dt><dd>ap-southeast-2</dd><dt>Data isolation</dt><dd>Dedicated schema</dd><dt>Identity</dt><dd>Grids Identity + SSO (Entra ID)</dd></dl>`)}</div></div>
+  <div data-pane="People" hidden>${card('People', `<table class="tbl"><thead><tr><th>Name</th><th>Role</th><th>Last active</th><th></th></tr></thead><tbody>${people.map((p) => `<tr><td><div class="cell">${av(p[0], 'sm')}<b>${p[0]}</b></div></td><td>${p[1]}</td><td class="muted">${p[2]}</td><td class="r"><button class="btn sm" data-modal="Reset access for ${p[0]}|Send reset">Reset access</button></td></tr>`).join('')}</tbody></table>`, { pad: false, actions: '<button class="btn sm" data-modal="Invite administrator|Send invite">Invite administrator</button>' })}</div>
+  <div data-pane="Domains" hidden>${card('Domains', `<table class="tbl"><thead><tr><th>Domain</th><th>Purpose</th><th>Verification</th></tr></thead><tbody><tr><td class="mono">${t[1]}.grids.app</td><td>Workspace</td><td>${badge('Default', 'good')}</td></tr><tr><td class="mono">data.health.gov.vu</td><td>Custom domain</td><td>${badge('Verified', 'good')}</td></tr><tr><td class="mono">survey.health.gov.vu</td><td>Public forms</td><td>${badge('DNS pending', 'warn')}</td></tr></tbody></table>`, { pad: false })}</div>
+  <div data-pane="Security" hidden><div class="grid g2">${card('Sign-in policy', `<div class="list" style="margin:-18px">${[['Require two-step sign-in', 1], ['Allow password sign-in', 1], ['Single sign-on required', 0], ['Session timeout 8 h', 1]].map(([l, o]) => `<div><span class="grow">${l}</span>${tgl(!!o)}</div>`).join('')}</div>`)}${card('Identity providers', `<div class="list" style="margin:-18px"><div>${ic('lock')}<div class="grow"><b style="font-weight:500">Microsoft Entra ID</b><div class="muted">OIDC · connected</div></div>${badge('Active', 'good')}</div></div>`)}</div></div>
+  <div data-pane="Billing" hidden><div class="grid g2">${card('Subscription', `<div class="price">$199<small>/month · Team</small></div><p class="muted" style="margin:8px 0 14px">Renews Nov 1, 2026 · Visa ···· 4242</p><div class="row"><button class="btn" data-modal="Change plan|Change plan">Change plan</button><button class="btn" data-modal="Apply credit|Apply">Apply credit</button></div>`)}${card('Invoices', `<table class="tbl"><tbody>${[['INV-0412', 'Oct 1', '$199.00', 'paid'], ['INV-0371', 'Sep 1', '$199.00', 'paid'], ['INV-0330', 'Aug 1', '$199.00', 'paid']].map((i) => `<tr><td class="mono">${i[0]}</td><td class="muted">${i[1]}</td><td class="mono">${i[2]}</td><td>${st(i[3])}</td></tr>`).join('')}</tbody></table>`, { pad: false })}</div></div>
+  <div data-pane="Support" hidden>${card('Tickets from this organisation', `<table class="tbl"><tbody><tr class="click" data-go="support/T-1048"><td class="mono">T-1048</td><td>SSO redirect loop after Entra update</td><td>${badge('urgent', 'bad')}</td><td>${st('open')}</td></tr><tr class="click" data-go="support/T-1021"><td class="mono">T-1021</td><td>Bulk import of 40k rows times out</td><td>${badge('normal')}</td><td>${st('resolved')}</td></tr></tbody></table>`, { pad: false })}</div>
+  <div data-pane="Activity" hidden>${card('Recent activity', `<div class="list" style="margin:-18px">${[['Jean Tari signed in', '2 min ago'], ['Marie Obed published form "Cold chain audit"', '1 h ago'], ['Custom domain verified', 'Yesterday'], ['Plan changed Starter → Team', 'Oct 1']].map(([a, w]) => `<div><span class="grow">${a}</span><span class="muted mono">${w}</span></div>`).join('')}</div>`)}</div>`;
+};
+
+const billing = () => `
+  ${head('Revenue', 'Billing', 'Subscriptions, invoices and failed payments across the platform.', `<button class="btn" data-toast="Exported">${ic('dl')}Export CSV</button>`)}
+  <div class="grid g4">${kpi('MRR', '$38.4k', '<span class="up">+6.2%</span>', 'dollar', 'good')}${kpi('Outstanding', '$1,240', '4 invoices', 'clock', 'warn')}${kpi('Failed payments', '2', 'Retrying', 'alert', 'bad')}${kpi('Trial → paid', '64%', 'last 90 days', 'trend')}</div>
+  <div style="margin-top:16px">${card('Invoices', `<div class="toolbar"><div class="seg">${['All', 'Paid', 'Open', 'Failed'].map((x, i) => `<button aria-pressed="${!i}">${x}</button>`).join('')}</div></div><table class="tbl"><thead><tr><th>Invoice</th><th>Organisation</th><th>Date</th><th class="r">Amount</th><th>Status</th></tr></thead><tbody>${[['INV-0418', 0, 'Oct 6', '$2,400.00', 'paid'], ['INV-0417', 1, 'Oct 5', '$1,850.00', 'paid'], ['INV-0416', 5, 'Oct 4', '$49.00', 'failed'], ['INV-0415', 2, 'Oct 3', '$199.00', 'paid'], ['INV-0414', 4, 'Oct 1', '$49.00', 'open']].map((i) => `<tr><td class="mono">${i[0]}</td><td><div class="cell">${av(TENANTS[i[1]][0], 'sm')}${TENANTS[i[1]][0]}</div></td><td class="muted">${i[2]}</td><td class="r mono">${i[3]}</td><td>${st(i[4])}</td></tr>`).join('')}</tbody></table>`, { pad: false })}</div>`;
+
+const plans = () => `
+  ${head('Revenue', 'Plans & pricing', 'What each plan includes. Changes apply to the public pricing page and to new subscriptions.', `<button class="btn primary" data-modal="New plan|Create plan" data-body='${'<div class="grid g2">' + field('Name', '<input class="input"/>') + field('Monthly price', '<input class="input" placeholder="$"/>') + '</div>'}'>${ic('plus')}New plan</button>`)}
+  <div class="grid g3">${[['Starter', '$49', 'For small teams starting out', ['10 users', '5 projects', '2,000 submissions / mo', '5 GB storage'], 'Active'], ['Team', '$199', 'For departments running surveys', ['75 users', '40 projects', '25,000 submissions / mo', '100 GB storage', 'Custom domain'], 'Active · most popular'], ['Enterprise', 'Custom', 'For ministries and agencies', ['Unlimited users', 'Unlimited projects', 'SSO & audit export', 'Dedicated schema', 'Priority support'], 'Active']].map(([n, p, d, f, s]) => `<section class="card"><div class="body plan-col"><div class="row"><h2 style="font-size:16px">${n}</h2><span class="end">${badge(s, 'brand')}</span></div><div class="price">${p}<small>${p === 'Custom' ? '' : ' /month'}</small></div><p class="sub">${d}</p><ul style="margin:0;padding:0;list-style:none;display:grid;gap:8px">${f.map((x) => `<li class="row">${ic('check')}${x}</li>`).join('')}</ul></div><div class="body row" style="border-top:1px solid var(--line)"><button class="btn sm" data-modal="Edit ${n}|Save plan">${ic('edit')}Edit</button><span class="end muted">${n === 'Starter' ? 14 : n === 'Team' ? 19 : 9} organisations</span></div></section>`).join('')}</div>
+  <div style="margin-top:16px">${card('Limits matrix', `<table class="tbl"><thead><tr><th>Limit</th><th>Starter</th><th>Team</th><th>Enterprise</th></tr></thead><tbody>${[['Users', '10', '75', 'Unlimited'], ['Projects', '5', '40', 'Unlimited'], ['Forms / surveys', '20', '200', 'Unlimited'], ['Submissions / month', '2,000', '25,000', '500,000'], ['Storage (GB)', '5', '100', '2,000'], ['API calls / month', '50k', '1M', '25M'], ['Job minutes / month', '60', '600', '10,000']].map((r) => `<tr><td>${r[0]}</td>${r.slice(1).map((c) => `<td class="mono">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`, { pad: false })}</div>`;
+
+const support = () => `
+  ${head('Operations', 'Support', 'Tickets from every organisation, newest activity first.')}
+  <div class="card"><div class="toolbar"><div class="seg">${['Open', 'Waiting on customer', 'Resolved', 'All'].map((x, i) => `<button aria-pressed="${!i}">${x}</button>`).join('')}</div><div class="search end" style="width:260px">${ic('search')}<input class="input" placeholder="Search tickets" /></div></div>
+  <table class="tbl"><thead><tr><th>Ticket</th><th>Organisation</th><th>Priority</th><th>Status</th><th>Assignee</th><th>Updated</th></tr></thead><tbody>${[['T-1048', 'SSO redirect loop after Entra update', 0, 'urgent', 'open', 'Amara Kone', '2 h'], ['T-1047', 'Cannot invite external reviewers', 1, 'high', 'open', 'Unassigned', '5 h'], ['T-1044', 'Request: export to GeoJSON', 2, 'normal', 'pending', 'Luka Vai', '1 d'], ['T-1039', 'Invoice shows wrong currency', 5, 'normal', 'open', 'Amara Kone', '2 d'], ['T-1021', 'Bulk import of 40k rows times out', 3, 'normal', 'resolved', 'Luka Vai', '5 d']].map((t) => `<tr class="click" data-go="support/${t[0]}"><td><div class="cell"><div><b>${t[1]}</b><small class="mono">${t[0]}</small></div></div></td><td>${TENANTS[t[2]][0]}</td><td>${badge(t[3], t[3] === 'urgent' ? 'bad' : t[3] === 'high' ? 'warn' : '')}</td><td>${st(t[4])}</td><td>${t[5] === 'Unassigned' ? '<span class="muted">Unassigned</span>' : t[5]}</td><td class="muted">${t[6]} ago</td></tr>`).join('')}</tbody></table></div>`;
+
+const ticket = ({ id }) => `
+  ${head('Support · ' + id, 'SSO redirect loop after Entra update', '', `<button class="btn" data-modal="Assign ticket|Assign">Assign</button><button class="btn primary" data-toast="Marked resolved">${ic('check')}Resolve</button>`)}
+  <div class="grid g21"><div class="stack"><section class="card">
+    <div class="ticket-msg">${av('Jean Tari', 'sm')}<div><b>Jean Tari</b> <span class="muted">· Ministry of Health — 2 days ago</span><p style="margin-top:6px">Since Microsoft rotated our app registration, everyone is stuck in a redirect loop on sign-in. We've tried clearing cookies. Screenshots attached.</p></div></div>
+    <div class="ticket-msg">${av('Amara Kone', 'sm')}<div><b>Amara Kone</b> <span class="muted">· staff — 1 day ago</span><p style="margin-top:6px">Thanks Jean — could you confirm the redirect URI in Entra now ends with <code>/auth/callback</code>?</p></div></div>
+    <div class="ticket-msg internal">${av('Luka Vai', 'sm')}<div><b>Internal note</b> <span class="muted">· Luka Vai — 3 h ago</span><p style="margin-top:6px">Reproduced on staging: issuer URL changed. Patch is in review.</p></div></div>
+    <div style="padding:16px 18px"><textarea class="textarea" placeholder="Reply to the customer…"></textarea><div class="row" style="margin-top:10px"><label class="row">${tgl(false)}Internal note</label><button class="btn primary end" data-toast="Reply sent">${ic('send')}Send reply</button></div></div></section></div>
+  <div class="stack">${card('Details', `<dl class="kv" style="grid-template-columns:90px 1fr"><dt>Status</dt><dd>${st('open')}</dd><dt>Priority</dt><dd>${badge('urgent', 'bad')}</dd><dt>Assignee</dt><dd>Amara Kone</dd><dt>Organisation</dt><dd><a href="#/tenants/moh-vu" style="color:var(--brand-ink)">Ministry of Health</a></dd><dt>Opened</dt><dd>Oct 5, 2026</dd></dl>`)}</div></div>`;
+
+const emails = () => `
+  ${head('Operations', 'Email log', 'Every message the platform sent, with delivery status.')}
+  <div class="card"><div class="toolbar"><div class="seg">${['All', 'Sent', 'Failed', 'Queued'].map((x, i) => `<button aria-pressed="${!i}">${x}</button>`).join('')}</div></div><table class="tbl"><thead><tr><th>Subject</th><th>To</th><th>Template</th><th>Status</th><th>Sent</th></tr></thead><tbody>${[['You\'re invited to Ministry of Health', 'jean@moh.gov.vu', 'invite', 'sent', '2 min'], ['Reset your password', 'peter@spc.int', 'password-reset', 'sent', '14 min'], ['Your trial ends in 3 days', 'admin@sbs.gov.ws', 'trial-ending', 'sent', '1 h'], ['Invoice INV-0416 payment failed', 'finance@keo.edu.ki', 'invoice-failed', 'bounced', '3 h'], ['Verify your email', 'new@frc.org.fj', 'verify', 'queued', '3 h']].map((e) => `<tr class="click" data-modal="${e[0]}|Close" data-body="<dl class='kv' style='grid-template-columns:80px 1fr'><dt>To</dt><dd>${e[1]}</dd><dt>Template</dt><dd class='mono'>${e[2]}</dd><dt>Status</dt><dd>${e[3]}</dd></dl>"><td>${e[0]}</td><td class="mono">${e[1]}</td><td><code>${e[2]}</code></td><td>${st(e[3])}</td><td class="muted">${e[4]} ago</td></tr>`).join('')}</tbody></table></div>`;
+
+const syslog = () => `
+  ${head('Operations', 'System log', 'Security and administrative events recorded across the platform.')}
+  ${card('1,284 events', [['10:42:07', 'info', 'amara.kone', 'tenant.suspend  pnri'], ['10:31:55', 'info', 'system', 'billing.retry  keo  attempt=1'], ['10:12:30', 'warn', 'system', 'auth.sso.failure  moh-vu  issuer mismatch'], ['09:58:02', 'info', 'luka.vai', 'plan.update  team  price=19900'], ['09:20:41', 'error', 'worker', 'job.failed  export-geojson  timeout'], ['08:02:13', 'info', 'amara.kone', 'staff.invite  luka.vai@grids.app']].map((l) => `<div class="log-line"><span class="muted">${l[0]}</span><span style="color:${l[1] === 'error' ? 'var(--bad)' : l[1] === 'warn' ? 'var(--warn)' : 'var(--ink-3)'}">${l[1]}</span><span>${l[2]}</span><span>${l[3]}</span></div>`).join(''), { pad: false, actions: '<div class="seg"><button aria-pressed="true">All</button><button aria-pressed="false">Warnings</button><button aria-pressed="false">Errors</button></div>' })}`;
+
+const staff = () => `
+  ${head('Administration', 'Staff & roles', 'Who can do what in the platform console.', `<button class="btn primary" data-modal="Invite staff|Send invite">${ic('plus')}Invite staff</button>`)}
+  <div class="tabs" data-tabs><button data-t="s" aria-selected="true">Staff (5)</button><button data-t="r" aria-selected="false">Roles (3)</button></div>
+  <div data-pane="s">${card('Staff', `<table class="tbl"><thead><tr><th>Name</th><th>Role</th><th>Two-step</th><th>Last active</th><th></th></tr></thead><tbody>${[['Amara Kone', 'Platform admin', 1, 'now'], ['Luka Vai', 'Support', 1, '3 h'], ['Mere Tui', 'Finance', 1, 'Yesterday'], ['Sione Fifita', 'Support', 0, 'Oct 2'], ['Ana Rabu', 'Finance', 1, 'Sep 20']].map((s) => `<tr><td><div class="cell">${av(s[0], 'sm')}<b>${s[0]}</b></div></td><td>${s[1]}</td><td>${s[2] ? badge('On', 'good') : badge('Off', 'warn')}</td><td class="muted">${s[3]}</td><td class="r"><button class="btn sm ghost">${ic('more')}</button></td></tr>`).join('')}</tbody></table>`, { pad: false })}</div>
+  <div data-pane="r" hidden><div class="grid g3">${[['Platform admin', 'Everything, including staff and settings', 1], ['Support', 'Tickets, organisation view, support access', 2], ['Finance', 'Billing, plans, invoices', 2]].map(([n, d, c]) => `<section class="card"><div class="body"><h2 style="font-size:15px">${n}</h2><p class="sub" style="margin:6px 0 12px">${d}</p><div class="muted">${c} staff</div></div></section>`).join('')}</div></div>`;
+
+const settings = () => `
+  ${head('Administration', 'Settings', 'Platform identity, branding and available languages.', `<button class="btn primary" data-toast="Settings saved">Save changes</button>`)}
+  <div class="grid g2">${card('Branding', `<div class="stack">${field('Product name', '<input class="input" value="Grids" />')}${field('Brand colour', `<div class="row">${['#0f62fe', '#007d79', '#8a3ffc', '#da1e28', '#ba4e00', '#198038'].map((c) => `<span class="swatch" data-c="${c}" style="background:${c}"></span>`).join('')}<input class="input mono" style="width:110px" value="#0f62fe" /></div>`)}${field('Logo', '<button class="btn">Upload logo</button>', 'SVG or PNG, square.')}</div>`)}
+  ${card('Preview', `<div class="card" style="padding:18px"><div class="row"><span class="mark">G</span><b>Grids</b></div><p class="sub" style="margin:12px 0">Sign in to continue.</p><button class="btn primary">Continue</button></div>`)}
+  ${card('Console languages', `<div class="list" style="margin:-18px">${[['English', 1], ['Français', 1], ['Español', 0], ['Bislama', 0]].map(([l, o]) => `<div><span class="grow">${l}</span>${tgl(!!o)}</div>`).join('')}</div>`)}
+  ${card('Organisation languages', `<div class="list" style="margin:-18px">${[['English', 1], ['Français', 1], ['Tok Pisin', 1], ['Samoan', 0], ['Tongan', 0]].map(([l, o]) => `<div><span class="grow">${l}</span>${tgl(!!o)}</div>`).join('')}</div>`)}</div>`;
+
+const invite = () => `<div style="max-width:440px;margin:40px auto">${card('Join the Grids platform team', `<div class="stack"><p class="sub">Amara Kone invited you as <b>Support</b>. Set a password to finish.</p>${field('Full name', '<input class="input" value="Luka Vai"/>')}${field('Password', '<input class="input" type="password"/>', 'At least 12 characters.')}<button class="btn primary" data-go="">Accept invitation</button></div>`)}</div>`;
+
+const routes = { '': overview, tenants, 'tenants/new': newTenant, 'tenants/:id': tenant, billing, plans, support, 'support/:id': ticket, 'logs/emails': emails, 'logs/system': syslog, staff, settings, 'invite/:t': invite };
+initTheme($('#theme')); $('[aria-label="Sign out"]').innerHTML = ic('out');
+$('.search-btn').innerHTML = ic('search') + 'Search or jump to…<span class="kbd">⌘K</span>';
+router(routes, (path, html) => {
+  nav(path);
+  const c = crumbMap[path] || (path.startsWith('tenants/') ? ['Organisations', (TENANTS.find((t) => path.endsWith(t[1])) || [''])[0]] : path.startsWith('support/') ? ['Support', path.split('/')[1]] : ['']);
+  $('#crumbs').innerHTML = c.map((x, i) => (i === c.length - 1 ? `<b>${x}</b>` : `<span>${x}</span><span>/</span>`)).join('');
+  const v = $('#view'); v.innerHTML = html; wire(v);
+  $$('#f button', v).forEach((b) => (b.onclick = () => { $$('#f button', v).forEach((x) => x.setAttribute('aria-pressed', x === b)); const k = b.textContent.toLowerCase().replace(' ', '_'); $$('#tb tr', v).forEach((r) => (r.hidden = k !== 'all' && r.dataset.s !== k)); }));
+  $$('tr[data-go]', v).forEach((r) => (r.onclick = () => (location.hash = '#/' + r.dataset.go)));
+  $$('tr[data-modal]', v).forEach((r) => (r.onclick = () => { const [t, ok] = r.dataset.modal.split('|'); modal(t, r.dataset.body, ok); }));
+});
+</script>
+</body>
+</html>

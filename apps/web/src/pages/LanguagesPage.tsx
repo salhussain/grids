@@ -6,21 +6,33 @@ import {
   ErrorNotice,
   Input,
   PageHeader,
-  Panel,
-  Select,
+  Listbox,
   Tag,
   cx,
+  Flag,
   useToast,
 } from '@grids/ui';
-import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Check, Languages as LanguagesIcon, Save, Search, Type } from 'lucide-react';
+import { useMemo, useState, type ComponentType } from 'react';
 import { api } from '../api';
 import { catalogEntries, useT } from '../i18n';
 import { NoAccess, useCan, useWorkspace } from '../session';
+import { SettingsBlock, SettingsLayout, type SettingsSection } from './SettingsNav';
 import { catalogs } from '@grids/i18n';
 
 /** Text people see in the workspace and on the sign-in page, which organisations may reword. */
 const EDITABLE = [...catalogEntries('web'), ...catalogEntries('auth'), ...catalogEntries('common')];
+
+const flagIcons = new Map<string, ComponentType<{ className?: string }>>();
+/** A language's flag as a menu icon. */
+function flagIcon(code: string): ComponentType<{ className?: string }> {
+  let c = flagIcons.get(code);
+  if (!c) {
+    c = () => <Flag code={code} />;
+    flagIcons.set(code, c);
+  }
+  return c;
+}
 
 function lookup(locale: string, key: string): string {
   const v = key
@@ -37,16 +49,7 @@ export function LanguagesPage() {
   const can = useCan();
   const ws = useWorkspace();
   if (!can('languages.manage')) return <NoAccess what={t('web.nav.languages')} />;
-  return (
-    <>
-      <PageHeader
-        eyebrow={t('web.nav.settings')}
-        title={t('web.languages.title')}
-        meta={<span>{t('web.languages.intro')}</span>}
-      />
-      <LanguagesForm key={ws.tenant.id} initial={ws.localization} />
-    </>
-  );
+  return <LanguagesForm key={ws.tenant.id} initial={ws.localization} />;
 }
 
 function LanguagesForm({ initial }: { initial: LocalizationDto }) {
@@ -101,134 +104,224 @@ function LanguagesForm({ initial }: { initial: LocalizationDto }) {
   const changed = Object.keys(overrides).length;
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
+  const [tab, setTab] = useState<'languages' | 'wording'>('languages');
+  const enabled = LOCALES.filter((l) => draft.languages.includes(l.code));
+  const sections: SettingsSection<'languages' | 'wording'>[] = [
+    { id: 'languages', label: 'Languages', icon: LanguagesIcon, count: draft.languages.length },
+    { id: 'wording', label: 'Wording', icon: Type, count: changed || undefined },
+  ];
   return (
-    <div className="space-y-6">
-      <ErrorNotice error={save.error} />
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title={t('web.languages.enabled')}>
-          <p className="mb-4 text-sm text-zinc-500">{t('web.languages.enabledHint')}</p>
-          <ul className="grid gap-px border border-zinc-200 bg-zinc-200 sm:grid-cols-2">
-            {LOCALES.map((l) => {
-              const on = draft.languages.includes(l.code);
-              return (
-                <li key={l.code} className="bg-snow">
-                  <label className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-zinc-50">
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => toggle(l.code)}
-                      className="size-4 accent-[var(--brand-600)]"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium" lang={l.code}>
-                        {l.nativeName}
-                      </span>
-                      <span className="block text-xs text-zinc-500">{l.name}</span>
-                    </span>
-                    {l.dir === 'rtl' && <Tag>{t('web.languages.rtl')}</Tag>}
-                    {l.status === 'draft' && (
-                      <span title={t('web.languages.draftHint')}>
-                        <Tag>{t('web.languages.draft')}</Tag>
-                      </span>
-                    )}
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-        <Panel title={t('web.languages.default')}>
-          <p className="mb-4 text-sm text-zinc-500">{t('web.languages.defaultHint')}</p>
-          <Select
-            aria-label={t('web.languages.default')}
-            value={draft.defaultLanguage}
-            onChange={(e) => setDraft({ ...draft, defaultLanguage: e.target.value })}
-          >
-            {LOCALES.filter((l) => draft.languages.includes(l.code)).map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.nativeName}
-              </option>
-            ))}
-          </Select>
-        </Panel>
-      </div>
-
-      <Panel
-        flush
-        title={t('web.languages.overrides')}
+    <>
+      <PageHeader
+        eyebrow={t('web.nav.settings')}
+        title={t('web.languages.title')}
+        meta={<span>{t('web.languages.intro')}</span>}
         actions={
-          changed > 0 ? <Tag>{t('web.languages.changed', { count: changed })}</Tag> : undefined
+          <>
+            {dirty && (
+              <Button
+                variant="ghost"
+                onClick={() => (setDraft(initial), setLang(initial.languages[0] ?? 'en'))}
+              >
+                Discard changes
+              </Button>
+            )}
+            <Button
+              icon={Save}
+              onClick={() => save.mutate()}
+              loading={save.isPending}
+              disabled={!dirty}
+            >
+              {t('web.languages.save')}
+            </Button>
+          </>
         }
+      />
+      <ErrorNotice error={save.error} />
+      <SettingsLayout<'languages' | 'wording'>
+        label="Languages"
+        value={tab}
+        onChange={setTab}
+        sections={sections}
       >
-        <div className="flex flex-col gap-3 border-b border-zinc-200 p-4 sm:flex-row sm:items-center">
-          <p className="flex-1 text-sm text-zinc-500">{t('web.languages.overridesHint')}</p>
-          <Select
-            aria-label={t('web.languages.overrideLanguage')}
-            value={lang}
-            onChange={(e) => setLang(e.target.value)}
-            className="sm:w-48"
-          >
-            {LOCALES.filter((l) => draft.languages.includes(l.code)).map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.nativeName}
-              </option>
-            ))}
-          </Select>
-          <div className="relative sm:w-64">
-            <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
-            <Input
-              aria-label={t('web.languages.search')}
-              placeholder={t('web.languages.search')}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="ps-8"
-            />
-          </div>
+        <div className="max-w-5xl">
+          {tab === 'languages' && (
+            <SettingsBlock
+              bare
+              icon={LanguagesIcon}
+              title={t('web.languages.enabled')}
+              description={`${t('web.languages.enabledHint')} ${t('web.languages.defaultHint')}`}
+            >
+              <div className="overflow-x-auto border border-zinc-200 bg-snow">
+                <table className="w-full min-w-[34rem] table-fixed text-sm">
+                  <thead className="bg-zinc-50 text-xs text-zinc-500">
+                    <tr>
+                      <th scope="col" className="w-16 py-2 ps-4 text-start font-medium">
+                        On
+                      </th>
+                      <th scope="col" className="py-2 text-start font-medium">
+                        Language
+                      </th>
+                      <th scope="col" className="w-36 py-2 text-start font-medium">
+                        Reworded
+                      </th>
+                      <th scope="col" className="w-40 py-2 pe-4">
+                        <span className="sr-only">Default language</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {LOCALES.map((l) => {
+                      const on = draft.languages.includes(l.code);
+                      const custom = Object.keys(draft.overrides[l.code] ?? {}).length;
+                      return (
+                        <tr
+                          key={l.code}
+                          className={cx(
+                            'border-t border-zinc-100',
+                            on ? 'hover:bg-zinc-50' : 'text-zinc-500',
+                          )}
+                        >
+                          <td className="py-2.5 ps-4">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggle(l.code)}
+                              aria-label={`Offer ${l.name}`}
+                              className="size-4 accent-[var(--brand-600)]"
+                            />
+                          </td>
+                          <td className="py-2.5">
+                            <span className="flex items-center gap-3">
+                              <Flag code={l.code} />
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium" lang={l.code}>
+                                  {l.nativeName}
+                                </span>
+                                <span className="block truncate text-xs text-zinc-500">
+                                  {l.name}
+                                </span>
+                              </span>
+                              {on && draft.defaultLanguage === l.code && (
+                                <span className="inline-flex items-center gap-1 bg-accent-50 px-1.5 py-0.5 text-xs font-medium text-accent-700 ring-1 ring-accent-600/30">
+                                  <Check className="size-3" /> {t('web.languages.default')}
+                                </span>
+                              )}
+                              {l.dir === 'rtl' && <Tag>{t('web.languages.rtl')}</Tag>}
+                              {l.status === 'draft' && (
+                                <span title={t('web.languages.draftHint')}>
+                                  <Tag>{t('web.languages.draft')}</Tag>
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-zinc-600">
+                            {on && custom > 0 ? (
+                              `${custom} phrases`
+                            ) : (
+                              <span className="text-zinc-300">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pe-4 text-end">
+                            {on && draft.defaultLanguage !== l.code && (
+                              <button
+                                type="button"
+                                onClick={() => setDraft({ ...draft, defaultLanguage: l.code })}
+                                aria-label={`Make ${l.name} the default`}
+                                className="text-xs text-zinc-500 underline-offset-2 hover:text-ink hover:underline"
+                              >
+                                Make default
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </SettingsBlock>
+          )}
+          {tab === 'wording' && (
+            <SettingsBlock
+              bare
+              icon={Type}
+              title={t('web.languages.overrides')}
+              description={t('web.languages.overridesHint')}
+            >
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Listbox
+                  label={t('web.languages.overrideLanguage')}
+                  value={lang}
+                  onChange={setLang}
+                  className="sm:w-56"
+                  options={enabled.map((l) => ({
+                    value: l.code,
+                    label: l.nativeName,
+                    icon: flagIcon(l.code),
+                  }))}
+                />
+                <div className="sm:w-72">
+                  <Input
+                    icon={Search}
+                    aria-label={t('web.languages.search')}
+                    placeholder={t('web.languages.search')}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </div>
+                {changed > 0 && <Tag>{t('web.languages.changed', { count: changed })}</Tag>}
+              </div>
+              <div className="max-h-[620px] overflow-auto border border-zinc-200 bg-snow">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 z-10 bg-zinc-50 text-start text-xs text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-2 text-start font-medium">
+                        {t('web.languages.standard')}
+                      </th>
+                      <th className="w-1/2 px-4 py-2 text-start font-medium">
+                        {t('web.languages.yours')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(([key]) => {
+                      const standard = lookup(lang, key) || lookup('en', key);
+                      return (
+                        <tr key={key} className="border-t border-zinc-100 align-top">
+                          <td className="px-4 py-2.5">
+                            <div lang={lang}>{standard}</div>
+                            <div className="mt-0.5 font-mono text-[11px] text-zinc-400" dir="ltr">
+                              {key}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              aria-label={`${t('web.languages.yours')}: ${key}`}
+                              value={overrides[key] ?? ''}
+                              placeholder={standard}
+                              lang={lang}
+                              onChange={(e) => setOverride(key, e.target.value)}
+                              className={cx(overrides[key] && 'border-accent-600')}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!rows.length && (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-8 text-center text-zinc-500">
+                          Nothing matches.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SettingsBlock>
+          )}
         </div>
-        <div className="max-h-[560px] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-zinc-50 text-start text-xs text-zinc-500">
-              <tr>
-                <th className="px-4 py-2 text-start font-medium">{t('web.languages.standard')}</th>
-                <th className="w-1/2 px-4 py-2 text-start font-medium">
-                  {t('web.languages.yours')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([key]) => {
-                const standard = lookup(lang, key) || lookup('en', key);
-                return (
-                  <tr key={key} className="border-t border-zinc-100 align-top">
-                    <td className="px-4 py-2.5">
-                      <div lang={lang}>{standard}</div>
-                      <div className="mt-0.5 font-mono text-[11px] text-zinc-400" dir="ltr">
-                        {key}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Input
-                        aria-label={`${t('web.languages.yours')}: ${key}`}
-                        value={overrides[key] ?? ''}
-                        placeholder={standard}
-                        lang={lang}
-                        onChange={(e) => setOverride(key, e.target.value)}
-                        className={cx(overrides[key] && 'border-accent-600')}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-
-      <div className="sticky bottom-0 -mx-4 flex justify-end border-t border-zinc-200 bg-canvas/95 px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8">
-        <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!dirty}>
-          {t('web.languages.save')}
-        </Button>
-      </div>
-    </div>
+      </SettingsLayout>
+    </>
   );
 }

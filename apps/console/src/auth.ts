@@ -1,4 +1,5 @@
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
+import { storedColorMode } from '@grids/ui';
 import { env } from './env';
 
 // Authorization code + PKCE against the Grids identity service. Access tokens are
@@ -68,4 +69,4 @@ export async function currentUser(): Promise<User | null> {
 
 /** Password and two-step settings, hosted by the identity service. */
 export const accountUrl = () =>
-  `${new URL(env.oidcAuthority).origin}/ui/account?return_to=${encodeURIComponent(window.location.href)}`;
+  `${new URL(env.oidcAuthority).origin}/ui/account?return_to=${encodeURIComponent(window.location.href)}&mode=${storedColorMode()}`;

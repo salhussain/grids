@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dataset editor: tabs on the left</title>
+<meta name="description" content="Three ways to move Metrics and Parameters into the left panel of the dataset editor." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  :root { --brand: #007d79; --on: #fff; --bd: #d8d8dc; --bd2: #e8e8ec; --mut: #6b6b73; --ink: #161616; --soft: #f4f4f6; --tint: #e6f2f2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; font: 14px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: var(--ink); background: #ececef; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  .note { color: var(--mut); margin: 0 0 16px; max-width: 80ch; }
+  .opts { display: inline-flex; border: 1px solid var(--bd); background: #fff; margin-bottom: 16px; }
+  .opts button { border: 0; background: none; padding: 9px 16px; cursor: pointer; font: 500 14px inherit; color: #444; border-inline-end: 1px solid var(--bd2); }
+  .opts button:last-child { border-inline-end: 0; }
+  .opts button[aria-pressed=true] { background: var(--brand); color: var(--on); }
+  .why { background: #fff; border: 1px solid var(--bd); border-inline-start: 4px solid var(--brand); padding: 12px 16px; margin-bottom: 16px; max-width: 80ch; }
+  .why b { display: block; margin-bottom: 2px; }
+  .opt { display: none; } .opt.on { display: block; }
+  /* the editor */
+  .ed { background: #fff; border: 1px solid var(--bd); height: 560px; display: flex; flex-direction: column; box-shadow: 0 8px 24px rgb(0 0 0 / .08); }
+  .top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--bd); }
+  .top .t { font-weight: 600; font-size: 16px; } .top .s { color: var(--mut); font-size: 12px; }
+  .top .sp { flex: 1; }
+  .btn { border: 1px solid var(--bd); background: #fff; padding: 6px 12px; font-weight: 500; }
+  .btn.p { background: var(--brand); border-color: var(--brand); color: var(--on); }
+  .body { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+  .left { border-inline-end: 1px solid var(--bd); display: flex; flex-direction: column; min-height: 0; background: #fff; }
+  .tabs { display: flex; border-bottom: 1px solid var(--bd); }
+  .tabs span { flex: 1; text-align: center; padding: 9px 4px; color: var(--mut); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; font-size: 13px; white-space: nowrap; }
+  .tabs span.on { color: var(--ink); border-color: var(--brand); }
+  .tabs i { font-style: normal; font-size: 11px; background: var(--soft); border-radius: 9px; padding: 0 6px; margin-inline-start: 4px; color: var(--mut); }
+  .pane { padding: 12px; overflow: hidden; display: grid; gap: 8px; align-content: start; font-size: 13px; }
+  .field { border: 1px solid var(--bd); padding: 7px 10px; background: #fff; color: #444; }
+  .lbl { font-size: 11px; font-weight: 600; color: var(--mut); margin-bottom: 3px; }
+  .tree div { padding: 3px 4px; display: flex; gap: 6px; color: #333; } .tree .sch { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #555; background: var(--soft); }
+  .tree .ind { padding-inline-start: 20px; }
+  .card { border: 1px solid var(--bd); }
+  .card .h { background: var(--soft); border-bottom: 1px solid var(--bd2); padding: 5px 9px; font-size: 12px; color: var(--mut); display: flex; justify-content: space-between; }
+  .card .h b { color: var(--ink); font-weight: 600; }
+  .card .b { padding: 9px; display: grid; gap: 7px; }
+  .add { border: 1px dashed #aaa; padding: 7px; text-align: center; color: #444; font-weight: 500; }
+  .right { display: grid; grid-template-rows: 1fr auto 1fr; min-width: 0; }
+  .sql { padding: 12px 16px; font: 13px 'IBM Plex Mono', monospace; color: #333; background: #fcfcfd; }
+  .sql em { color: #8a3ffc; font-style: normal; }
+  .run { border-top: 1px solid var(--bd); border-bottom: 1px solid var(--bd); padding: 8px 12px; display: flex; gap: 10px; align-items: center; background: var(--soft); color: var(--mut); font-size: 12px; }
+  .res { padding: 0; }
+  .res .tabs span { flex: 0 0 auto; padding-inline: 16px; }
+  .res table { width: 100%; border-collapse: collapse; font-size: 13px; } .res td, .res th { padding: 6px 14px; border-bottom: 1px solid var(--bd2); text-align: start; }
+  .res th { color: var(--mut); font-weight: 500; }
+  /* option B: icon rail */
+  .rail { display: grid; grid-template-columns: 44px 1fr; min-height: 0; height: 100%; }
+  .rail .ic { border-inline-end: 1px solid var(--bd2); display: grid; align-content: start; padding: 6px 0; background: var(--soft); }
+  .rail .ic span { padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--mut); border-inline-start: 3px solid transparent; font-size: 16px; line-height: 1.2; position: relative; }
+  .rail .ic span small { font-size: 12.5px; font-weight: 500; writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .02em; }
+  .rail .ic span.on { color: var(--ink); background: #fff; border-color: var(--brand); }
+  .rail .ic span u { font-size: 10px; text-decoration: none; background: var(--brand); color: #fff; border-radius: 8px; padding: 0 5px; }
+  /* option C: accordion */
+  .acc { display: grid; align-content: start; overflow: hidden; }
+  .acc .sec { border-bottom: 1px solid var(--bd2); }
+  .acc .sec > .h { display: flex; align-items: center; gap: 6px; padding: 9px 12px; font-weight: 600; font-size: 13px; }
+  .acc .sec > .h small { margin-inline-start: auto; color: var(--mut); font-weight: 400; }
+  .acc .sec > .c { padding: 0 12px 12px; display: grid; gap: 7px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Dataset editor: tabs on the left</h1>
+  <p class="note">Today the left panel only lists tables, and Metrics and Parameters sit in the tabs under the results (Results · Columns · Metrics · Parameters). Moving them left keeps the bottom for what the query returns, and puts the things you define about the dataset next to the source it is made from. Three ways to do it.</p>
+  <div class="opts" role="group" aria-label="Option">
+    <button type="button" aria-pressed="true" data-o="a">A · Tabs on top of the panel</button>
+    <button type="button" aria-pressed="false" data-o="b">B · Vertical tabs</button>
+    <button type="button" aria-pressed="false" data-o="c">C · Sections you open</button>
+  </div>
+
+  <!-- A -->
+  <div class="opt on" id="a">
+    <div class="why"><b>A · Tabs on top of the panel (recommended)</b>Sources, Metrics and Parameters as three tabs above the left panel, with counts. One thing at a time, familiar, and the same tab style as the rest of the app. The bottom keeps only Results and Columns.</div>
+    <div class="ed">
+      <div class="top"><span class="t">Clinic reports</span><span class="s">PostgreSQL SQL</span><span class="sp"></span><span class="btn">Save</span><span class="btn p">Save and load rows</span></div>
+      <div class="body">
+        <div class="left">
+          <div class="tabs"><span>Source</span><span class="on">Metrics<i>2</i></span><span>Parameters<i>1</i></span></div>
+          <div class="pane">
+            <div class="card"><div class="h"><b>Total visits</b><span>sum of visits</span></div><div class="b"><div><div class="lbl">Column</div><div class="field">visits</div></div><div><div class="lbl">Aggregation</div><div class="field">Σ Sum</div></div></div></div>
+            <div class="card"><div class="h"><b>Clinics</b><span>distinct of facility_code</span></div><div class="b"><div><div class="lbl">Column</div><div class="field">facility_code</div></div><div><div class="lbl">Aggregation</div><div class="field">Distinct count</div></div></div></div>
+            <div class="add">+ Add a metric</div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="sql"><em>select</em> * <em>from</em> samples.clinics</div>
+          <div class="run"><span class="btn p">▷ Run</span> Ctrl or ⌘ + Enter</div>
+          <div class="res"><div class="tabs"><span class="on">Results</span><span>Columns</span></div><table><tr><th>id</th><th>name</th></tr><tr><td>1</td><td>North Central Clinic</td></tr><tr><td>2</td><td>North Harbour Clinic</td></tr></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="opt" id="b">
+    <div class="why"><b>B · Vertical tabs</b>A slim strip (44px) where each entry is an icon with its name running vertically beneath it, read bottom to top: Tables, Metrics, Parameters, with a count badge. It takes the least width of any option and still shows names, like the side tabs in many code editors. The panel sits beside it, like a code editor. It scales to more panels later (history, notes) and, with titles, nothing needs a tooltip.</div>
+    <div class="ed">
+      <div class="top"><span class="t">Clinic reports</span><span class="s">PostgreSQL SQL</span><span class="sp"></span><span class="btn">Save</span><span class="btn p">Save and load rows</span></div>
+      <div class="body">
+        <div class="left">
+          <div class="rail">
+            <div class="ic"><span>▦<small>Tables</small></span><span>Σ<small>Metrics</small><u>2</u></span><span class="on">⚙<small>Parameters</small><u>1</u></span></div>
+            <div class="pane">
+              <div class="lbl">PARAMETERS</div>
+              <div class="card"><div class="h"><b>region</b><span>text</span></div><div class="b"><div><div class="lbl">Default</div><div class="field">north</div></div><div><div class="lbl">Dashboard filter on</div><div class="field">region</div></div></div></div>
+              <div class="add">+ Add a parameter</div>
+            </div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="sql"><em>select</em> * <em>from</em> samples.clinics <em>where</em> region = {{ region }}</div>
+          <div class="run"><span class="btn p">▷ Run</span> Ctrl or ⌘ + Enter</div>
+          <div class="res"><div class="tabs"><span class="on">Results</span><span>Columns</span></div><table><tr><th>id</th><th>name</th></tr><tr><td>1</td><td>North Central Clinic</td></tr></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="opt" id="c">
+    <div class="why"><b>C · Sections you open</b>The left panel becomes a stack: Tables, Parameters, Metrics, each opening in place. You can see a parameter and the table it filters at once, and nothing is hidden behind a tab. The cost: the panel is busy once two or three are open.</div>
+    <div class="ed">
+      <div class="top"><span class="t">Clinic reports</span><span class="s">PostgreSQL SQL</span><span class="sp"></span><span class="btn">Save</span><span class="btn p">Save and load rows</span></div>
+      <div class="body">
+        <div class="left">
+          <div class="acc">
+            <div class="sec"><div class="h">▾ Tables<small>14</small></div><div class="c"><div class="field">Find a table</div><div class="tree"><div class="sch">▾ public</div><div class="ind">▦ project</div><div class="ind">▦ run</div><div class="sch">▾ samples</div><div class="ind">▦ clinics</div><div class="ind">▦ visits</div></div></div></div>
+            <div class="sec"><div class="h">▸ Parameters<small>1</small></div></div>
+            <div class="sec"><div class="h">▸ Metrics<small>2</small></div></div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="sql"><em>select</em> * <em>from</em> samples.clinics</div>
+          <div class="run"><span class="btn p">▷ Run</span> Ctrl or ⌘ + Enter</div>
+          <div class="res"><div class="tabs"><span class="on">Results</span><span>Columns</span></div><table><tr><th>id</th><th>name</th></tr><tr><td>1</td><td>North Central Clinic</td></tr><tr><td>2</td><td>North Harbour Clinic</td></tr></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const btns = document.querySelectorAll('.opts button');
+  btns.forEach((b) => b.addEventListener('click', () => {
+    btns.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('.opt').forEach((o) => o.classList.toggle('on', o.id === b.dataset.o));
+  }));
+</script>
+</body>
+</html>

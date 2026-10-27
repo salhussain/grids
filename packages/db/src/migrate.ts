@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import type { Kysely } from 'kysely';
 import { Migrator, type MigrationProvider } from 'kysely/migration';
 import { createDb } from './connect.js';
-import { identityMigrations, platformMigrations, tenantMigrations } from './migrations/index.js';
+import { identityMigrations, payMigrations, platformMigrations, tenantMigrations } from './migrations/index.js';
 import type { PlatformDB } from './types.js';
 
 export async function migrateToLatest(
@@ -17,7 +17,7 @@ export async function migrateToLatest(
   if (error) throw error;
 }
 
-export { identityMigrations, platformMigrations, tenantMigrations };
+export { identityMigrations, payMigrations, platformMigrations, tenantMigrations };
 
 /**
  * Migrates the control plane, then every tenant data database. In M1 the cell list
@@ -49,6 +49,17 @@ async function main() {
       await migrateToLatest(identity, identityMigrations);
     } finally {
       await identity.destroy();
+    }
+  }
+
+  const payUrl = process.env.DATABASE_URL_PAY;
+  if (payUrl) {
+    const pay = createDb(payUrl);
+    try {
+      console.log('pay:');
+      await migrateToLatest(pay, payMigrations);
+    } finally {
+      await pay.destroy();
     }
   }
 

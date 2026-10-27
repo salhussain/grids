@@ -1,7 +1,7 @@
 import { cx, Spinner } from '@grids/ui';
 import { KeyRound, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { call, LoginError, type TotpSetup } from '../api';
+import { call, LoginError, type Branding, type TotpSetup } from '../api';
 import { I18nProvider, useT } from '../i18n';
 import { Shell } from '../Shell';
 import { ErrorBanner, Notice, PasswordField, StepHeader, StrengthMeter, SubmitButton } from '../widgets';
@@ -14,7 +14,12 @@ interface Account {
   locale: string | null;
   mfa: { enabled: boolean; recoveryCodesLeft: number };
   mfaRequired: boolean;
+  /** The organisation the person came from, for its branding. */
+  organization: Branding | null;
 }
+
+/** The organisation whose workspace linked here (its branding applies). */
+const org = new URLSearchParams(location.search).get('org');
 
 /** Only links back to http(s) pages; anything else is ignored. */
 const returnTo = (() => {
@@ -30,11 +35,19 @@ const returnTo = (() => {
 export function AccountPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const load = () => call<Account>('/ui/api/account').then(setAccount, setError);
+  const load = () => call<Account>(`/ui/api/account${org ? `?org=${encodeURIComponent(org)}` : ''}`).then(setAccount, setError);
+  const brand = account?.organization ?? null;
   useEffect(() => void load(), []);
+  // Opened from an organisation: wait for its branding rather than flashing the platform's.
+  if (org && !account && !error)
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner className="size-6 text-zinc-400" />
+      </div>
+    );
   return (
-    <I18nProvider hint={account?.locale}>
-      <Shell org={null}>
+    <I18nProvider hint={account?.locale} enabled={brand?.languages} fallback={brand?.defaultLanguage} overrides={brand?.overrides}>
+      <Shell org={brand}>
         {error ? <SignedOut error={error} /> : !account ? <div className="flex justify-center py-16"><Spinner className="size-6 text-accent-600" /></div> : <Settings account={account} reload={load} />}
       </Shell>
     </I18nProvider>
@@ -200,7 +213,7 @@ function TwoStep({ account, reload }: { account: Account; reload(): void }) {
             type="button"
             disabled={busy}
             onClick={() => void act(async () => (await call('/ui/api/account/mfa', undefined, 'DELETE'), reload()))}
-            className="inline-flex h-9 items-center gap-2 border border-red-300 bg-snow px-3.5 text-sm text-red-700 hover:border-red-600 hover:bg-red-600 hover:text-white"
+            className="inline-flex h-9 items-center gap-2 border border-[#7a1f24]/40 bg-snow px-3.5 text-sm text-[#7a1f24] hover:border-[#7a1f24] hover:bg-[#7a1f24] hover:text-white"
           >
             {t('auth.account.disable')}
           </button>

@@ -56,11 +56,21 @@
   font: 13px/1.4 var(--font-sans);
   box-shadow: var(--shadow-raised);
 }
+.explorer-popup-k {
+  color: var(--color-zinc-500);
+  margin-inline-end: 6px;
+}
 .explorer-popup .maplibregl-popup-tip {
   display: none;
 }
-.explorer-map .maplibregl-ctrl-bottom-left {
-  margin: 0 0 16px 16px;
+.explorer-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  /* No default side margin, so the zoom stack and the map-style button share one right edge. */
+  margin: 0 0 8px 0;
+}
+.explorer-map .maplibregl-ctrl-bottom-right {
+  /* Sits left of the dashboards sheet when it is open (--ex-right is set by the explorer). */
+  margin: 0 var(--ex-right, 16px) var(--ex-bottom, 20px) 0;
+  transition: margin-right 200ms ease;
 }
 .explorer-map .maplibregl-ctrl-group {
   border-radius: 12px;

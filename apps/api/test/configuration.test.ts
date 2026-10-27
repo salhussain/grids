@@ -41,7 +41,7 @@ describe('project profile', () => {
       status: 'draft',
       logo: LOGO,
       coverImage: LOGO,
-      managerId: memberId,
+      managerIds: [memberId],
     });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ key: 'reef-health', status: 'draft', logo: LOGO, coverImage: LOGO, myRole: 'manager' });
@@ -58,7 +58,7 @@ describe('project profile', () => {
   });
 
   it('rejects a manager who is not a member and non-image logos', async () => {
-    expect((await p(admin).post('', { name: 'X', managerId: '00000000-0000-7000-8000-000000000000' })).status).toBe(400);
+    expect((await p(admin).post('', { name: 'X', managerIds: ['00000000-0000-7000-8000-000000000000'] })).status).toBe(400);
     expect((await p(admin).post('', { name: 'Y', logo: 'javascript:alert(1)' })).status).toBe(400);
   });
 });
@@ -80,15 +80,28 @@ describe('groups', () => {
   it('keeps form groups per project and puts forms in them', async () => {
     const g = (await p(admin).post('/reef-health/form-groups', { name: 'Field surveys' })).body[0];
     expect(g).toMatchObject({ name: 'Field surveys', formCount: 0 });
+    await p(admin).post('/reef-health/types', { key: 'site', name: 'Site', plural: 'Sites' });
+    const dive = { key: 'dive', name: 'Dive log', groupId: g.id, definition: { title: 'Dive log', sections: [{ key: 's', title: '', questions: [{ key: 'depth', type: 'decimal', label: 'Depth' }] }] } };
+    expect((await p(admin).post('/reef-health/forms', dive)).status).toBe(400); // every form is captured against an entity type
     const form = await p(admin).post('/reef-health/forms', {
       key: 'dive',
       name: 'Dive log',
+      subjectType: 'site',
       groupId: g.id,
       definition: { title: 'Dive log', sections: [{ key: 's', title: '', questions: [{ key: 'depth', type: 'decimal', label: 'Depth' }] }] },
     });
     expect(form.status).toBe(200);
     expect((await p(admin).get('/reef-health/form-groups')).body[0].formCount).toBe(1);
-    await p(admin).post('/reef-health/forms/dive/publish');
+    // A form about a site must say which one in a question of its own before it can be published.
+    expect((await p(admin).post('/reef-health/forms/dive/publish')).status).toBe(400);
+    await p(admin).put('/reef-health/forms/dive', {
+      key: 'dive',
+      name: 'Dive log',
+      subjectType: 'site',
+      groupId: g.id,
+      definition: { title: 'Dive log', sections: [{ key: 's', title: '', questions: [{ key: 'main_entity', type: 'entity', label: 'Which site?', entityType: 'site', primary: true, required: true }, { key: 'depth', type: 'decimal', label: 'Depth' }] }] },
+    });
+    expect((await p(admin).post('/reef-health/forms/dive/publish')).status).toBe(200);
     const menu = (await h.call(admin, 'GET', `/tenants/${tenantId}/forms/menu`)).body;
     expect(menu.forms[0]).toMatchObject({ key: 'dive', groupId: g.id, project: { key: 'reef-health' } });
     expect(menu.groups.find((x: { id: string }) => x.id === g.id).projectId).toBeTruthy();

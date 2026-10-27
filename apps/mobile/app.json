@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Grids",
+    "slug": "grids-mobile",
+    "version": "1.0.0",
+    "scheme": "grids",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.grids.mobile",
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "app.grids.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#1F6FEB",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-status-bar",
+      "expo-background-task",
+      "expo-localization",
+      ["expo-camera", { "cameraPermission": "Grids uses the camera to scan codes and take pictures for forms." }],
+      ["expo-image-picker", { "photosPermission": "Grids attaches pictures you choose to forms.", "cameraPermission": "Grids takes pictures for forms." }],
+      ["expo-location", { "locationWhenInUsePermission": "Grids records where a form was filled in." }]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}

@@ -1,4 +1,4 @@
-import type { DashboardDto, DashboardParams, ExploreDto, MapOverlayDto, OverlayResult, PlaceNode, QueryResult, SearchHit, Widget } from '@grids/schema';
+import type { DashboardDto, DashboardParams, ExploreDto, MapOverlayDto, OverlayPeriod, OverlayResult, PlaceNode, QueryResult, SearchHit, Widget } from '@grids/schema';
 
 /** Where the explorer reads from: a member's project, or a public project anonymously. */
 export interface ExplorerSource {
@@ -6,7 +6,8 @@ export interface ExplorerSource {
   keys: { explore: unknown[]; overlays: unknown[]; dashboards: unknown[]; widget: unknown[]; search: unknown[]; names: unknown[] };
   explore(entity: string | null): Promise<ExploreDto>;
   overlays(): Promise<MapOverlayDto[]>;
-  overlay(key: string, entity: string | null): Promise<OverlayResult>;
+  /** Values of a map overlay; `period` (when one is picked) replaces the overlay's own window. */
+  overlay(key: string, entity: string | null, period?: OverlayPeriod): Promise<OverlayResult>;
   search(q: string): Promise<SearchHit[]>;
   /** Places directly inside a place (null = the top). */
   places(parent: string | null): Promise<PlaceNode[]>;

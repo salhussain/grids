@@ -135,7 +135,7 @@ async function exchange(code: string, verifier: string) {
 }
 
 const internal = (path: string, body?: unknown, method = 'POST') =>
-  fetch(`${base}${path}`, { method, headers: { authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  fetch(`${base}${path}`, { method, headers: { authorization: `Bearer ${SERVICE}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
 
 async function createAccount(email: string, password = 'correct horse battery') {
   const res = await internal('/internal/accounts', { email, givenName: 'Test', familyName: 'User', sendSetupEmail: false });
@@ -178,6 +178,28 @@ describe('sign in (authorization code + PKCE)', () => {
     const d2 = (await (await b.fetch(`${base}/ui/interaction/${second.uid}/details`)).json()) as { redirectTo?: string };
     expect(d2.redirectTo).toBeTruthy();
     await exchange(await codeFrom(b, d2.redirectTo!), second.verifier);
+  });
+
+  it('the mobile app signs in through its own link scheme and gets a refresh token', async () => {
+    await createAccount('phone@example.org');
+    const b = new Browser();
+    const { uid, verifier } = await startAuth(b, { client_id: 'grids-mobile', redirect_uri: 'grids://auth/callback' });
+    const login = (await (await b.json(`${base}/ui/interaction/${uid}/login`, { email: 'phone@example.org', password: 'correct horse battery' })).json()) as { redirectTo: string };
+    const res = await b.fetch(login.redirectTo, { redirect: 'manual' });
+    let location = res.headers.get('location');
+    // The consent step is skipped for our own apps; follow until the app's link comes back.
+    for (let i = 0; i < 5 && location && !location.startsWith('grids://'); i++) location = (await b.fetch(new URL(location, base).toString(), { redirect: 'manual' })).headers.get('location');
+    expect(location).toMatch(/^grids:\/\/auth\/callback\?/);
+    const code = new URL(location!).searchParams.get('code')!;
+    const token = await fetch(`${base}/oidc/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'grids://auth/callback', client_id: 'grids-mobile', code_verifier: verifier }),
+    });
+    const tokens = (await token.json()) as { access_token?: string; refresh_token?: string };
+    expect(token.status).toBe(200);
+    expect(tokens.access_token?.split('.').length).toBe(3);
+    expect(tokens.refresh_token).toBeTruthy();
   });
 
   it('signing out ends the identity session (no silent sign-in afterwards)', async () => {
@@ -309,5 +331,89 @@ describe('password reset and account setup', () => {
     expect(res.status).toBe(200);
     expect(lastMail('staff@grids.test', 'setup').vars.link).toMatch(/\/ui\/setup\//);
     expect((await fetch(`${base}/internal/accounts`, { method: 'POST', body: '{}' })).status).toBe(401);
+  });
+});
+
+describe('applications registered by an organisation', () => {
+  const CB = 'https://app.example.org/cb';
+  const org = 'org-apps';
+
+  async function makeClient(body: Record<string, unknown>) {
+    const res = await internal(`/internal/orgs/${org}/clients`, body);
+    return { status: res.status, json: (await res.json()) as { clientId: string; clientSecret: string | null } };
+  }
+  async function signIn(clientId: string, email: string, secret?: string) {
+    const b = new Browser();
+    const p = pkce();
+    const auth = await b.fetch(`${base}/oidc/auth?${new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: CB, scope: 'openid email profile', code_challenge: p.challenge, code_challenge_method: 'S256', state: 's' })}`);
+    const uid = auth.headers.get('location')!.match(/\/ui\/interaction\/([\w-]+)/)![1]!;
+    const login = await b.json(`${base}/ui/interaction/${uid}/login`, { email, password: 'correct horse battery' });
+    if (login.status !== 200) return { status: login.status, body: (await login.json()) as { error: string } };
+    let url = ((await login.json()) as { redirectTo: string }).redirectTo;
+    let code = '';
+    for (let i = 0; i < 6 && !code; i++) {
+      const loc = (await b.fetch(url)).headers.get('location')!;
+      if (loc.startsWith(CB)) code = new URL(loc).searchParams.get('code')!;
+      else url = new URL(loc, base).toString();
+    }
+    const headers: Record<string, string> = { 'content-type': 'application/x-www-form-urlencoded' };
+    if (secret) headers.authorization = `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`;
+    const token = await fetch(`${base}/oidc/token`, {
+      method: 'POST',
+      headers,
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: CB, code_verifier: p.verifier, ...(secret ? {} : { client_id: clientId }) }),
+    });
+    return { status: token.status, tokens: (await token.json()) as { access_token: string; id_token: string } };
+  }
+
+  it('signs in the organisation’s people only, with no Grids API access', async () => {
+    await internal(`/internal/orgs/${org}`, { name: 'Apps Org' }, 'PUT');
+    const member = await createAccount('member@apps.org');
+    await createAccount('outsider@apps.org');
+    await internal(`/internal/orgs/${org}/members`, { accountId: member });
+
+    // Redirect URLs must be https (or localhost)
+    expect((await makeClient({ name: 'Bad', redirectUris: ['http://app.example.org/cb'] })).status).toBeGreaterThanOrEqual(400);
+
+    const spa = await makeClient({ name: 'Intranet', redirectUris: [CB] });
+    expect(spa.status).toBe(200);
+    expect(spa.json.clientSecret).toBeNull();
+
+    const ok = await signIn(spa.json.clientId, 'member@apps.org');
+    expect(ok.status).toBe(200);
+    const tokens = ok.tokens!;
+    expect(tokens.access_token.split('.').length).toBe(1); // opaque: not a token for the Grids API
+    const idToken = JSON.parse(Buffer.from(tokens.id_token.split('.')[1]!, 'base64url').toString());
+    expect(idToken).toMatchObject({ sub: member, aud: spa.json.clientId, org_id: org });
+    const info = await (await fetch(`${base}/oidc/me`, { headers: { authorization: `Bearer ${tokens.access_token}` } })).json();
+    expect(info).toMatchObject({ sub: member, email: 'member@apps.org' });
+
+    const blocked = await signIn(spa.json.clientId, 'outsider@apps.org');
+    expect(blocked.status).toBe(403);
+    expect(blocked.body).toMatchObject({ error: 'not_a_member' });
+  });
+
+  it('server apps authenticate with their secret, which can be replaced', async () => {
+    const member = await createAccount('server@apps.org');
+    await internal(`/internal/orgs/${org}/members`, { accountId: member });
+    const app = await makeClient({ name: 'Backend', redirectUris: [CB], confidential: true });
+    expect(app.json.clientSecret).toBeTruthy();
+    expect((await signIn(app.json.clientId, 'server@apps.org', 'wrong-secret')).status).toBe(401);
+    expect((await signIn(app.json.clientId, 'server@apps.org', app.json.clientSecret!)).status).toBe(200);
+
+    const rotated = (await (await internal(`/internal/orgs/${org}/clients/${app.json.clientId}/secret`)).json()) as { clientSecret: string };
+    expect((await signIn(app.json.clientId, 'server@apps.org', app.json.clientSecret!)).status).toBe(401);
+    expect((await signIn(app.json.clientId, 'server@apps.org', rotated.clientSecret)).status).toBe(200);
+  });
+
+  it('a disabled or removed application stops working', async () => {
+    const app = await makeClient({ name: 'Temp', redirectUris: [CB] });
+    const start = () => fetch(`${base}/oidc/auth?${new URLSearchParams({ client_id: app.json.clientId, response_type: 'code', redirect_uri: CB, scope: 'openid', code_challenge: pkce().challenge, code_challenge_method: 'S256' })}`, { redirect: 'manual' });
+    expect((await start()).headers.get('location') ?? '').toContain('/ui/interaction/');
+    await internal(`/internal/orgs/${org}/clients/${app.json.clientId}`, { disabled: true }, 'PATCH');
+    expect((await start()).headers.get('location') ?? '').not.toContain('/ui/interaction/');
+    await internal(`/internal/orgs/${org}/clients/${app.json.clientId}`, undefined, 'DELETE');
+    const list = (await (await internal(`/internal/orgs/${org}/clients`, undefined, 'GET')).json()) as { clients: { clientId: string }[] };
+    expect(list.clients.find((c) => c.clientId === app.json.clientId)).toBeUndefined();
   });
 });

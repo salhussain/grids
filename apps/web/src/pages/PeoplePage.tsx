@@ -17,7 +17,7 @@ import {
   type MemberDto,
   type OrgUnitDto,
 } from '@grids/schema';
-import {
+import { confirmDialog,
   Button,
   CopyField,
   Dialog,
@@ -43,6 +43,7 @@ import { api } from '../api';
 import { NoAccess, useCan, useMe, useWorkspace } from '../session';
 import { useT } from '../i18n';
 import { indent, subtreeIds } from './tree';
+import { Avatar, Chips, StatCard } from '../ui';
 
 /** Org units where the current user holds `permission` (all when tenant-wide). */
 function useUnitsWhere(permission: 'people.manage' | 'people.invite', units: OrgUnitDto[]) {
@@ -70,6 +71,7 @@ export function PeoplePage() {
   const id = ws.tenant.id;
   const [q, setQ] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
   const [page, setPage] = usePagination([q, unitFilter], 25);
   const [inviting, setInviting] = useState(false);
   const [access, setAccess] = useState<MemberDto | null>(null);
@@ -121,8 +123,10 @@ export function PeoplePage() {
         `${m.givenName} ${m.familyName} ${m.displayName} ${m.email} ${m.jobTitle}`
           .toLowerCase()
           .includes(q.toLowerCase())) &&
-      (!filterIds || (m.orgUnit && filterIds.has(m.orgUnit.id))),
+      (!filterIds || (m.orgUnit && filterIds.has(m.orgUnit.id))) &&
+      (statusFilter === 'all' || (statusFilter === 'suspended') === (m.status === 'suspended')),
   );
+  const enrolled = d?.members.filter((m) => m.mfa?.enrolled).length ?? 0;
   const pageRows = rows.slice((page.page - 1) * page.pageSize, page.page * page.pageSize);
   const tenantWideManage = can('people.manage');
 
@@ -160,6 +164,12 @@ export function PeoplePage() {
           <CopyField value={link.inviteUrl} />
         </div>
       )}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={Users} label="People" value={d ? d.members.length.toLocaleString() : '–'} sub={d ? `${d.members.filter((m) => m.status !== 'suspended').length} active` : undefined} />
+        <StatCard icon={MailCheck} label="Invitations" value={d ? d.invitations.length.toLocaleString() : '–'} sub="Pending or expired" tone={d?.invitations.length ? 'warn' : 'default'} />
+        <StatCard icon={ShieldCheck} label="Two-factor on" value={d ? `${enrolled} / ${d.members.length}` : '–'} sub={d?.mfaRequired ? 'Required for everyone' : 'Optional'} tone={d?.mfaRequired && d && enrolled < d.members.length ? 'warn' : 'good'} />
+        <StatCard icon={ShieldAlert} label="Suspended" value={d ? d.members.filter((m) => m.status === 'suspended').length.toLocaleString() : '–'} sub="Cannot sign in" />
+      </div>
       <Panel
         flush
         title={`${rows.length} people`}
@@ -169,6 +179,16 @@ export function PeoplePage() {
         }
         actions={
           <>
+            <Chips
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'active', label: 'Active' },
+                { value: 'suspended', label: 'Suspended' },
+              ]}
+            />
             <div className="relative">
               <Search className="pointer-events-none absolute top-2.5 start-2.5 size-4 text-zinc-400" />
               <Input
@@ -218,10 +238,15 @@ export function PeoplePage() {
                     className={m.status === 'suspended' ? 'bg-zinc-50 text-zinc-500' : ''}
                   >
                     <Td>
-                      <div className="font-medium text-ink">{name}</div>
-                      <div className="text-xs text-zinc-500">
-                        {m.email}
-                        {m.jobTitle && ` · ${m.jobTitle}`}
+                      <div className="flex items-center gap-3">
+                        <Avatar name={name ?? '?'} className="size-9 text-xs" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-ink">{name}</div>
+                          <div className="text-xs text-zinc-500">
+                            {m.email}
+                            {m.jobTitle && ` · ${m.jobTitle}`}
+                          </div>
+                        </div>
                       </div>
                     </Td>
                     <Td>
@@ -321,8 +346,7 @@ export function PeoplePage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              confirm(`Suspend ${name}?`) &&
+                            onClick={async () => (await confirmDialog(`Suspend ${name}?`)) &&
                               update.mutate({ userId: m.userId, status: 'suspended' })
                             }
                           >
@@ -389,8 +413,7 @@ export function PeoplePage() {
                   variant="ghost"
                   size="sm"
                   icon={Trash2}
-                  onClick={() =>
-                    confirm(`Revoke the invitation for ${i.email}?`) && revoke.mutate(i.id)
+                  onClick={async () => (await confirmDialog(`Revoke the invitation for ${i.email}?`)) && revoke.mutate(i.id)
                   }
                 >
                   Revoke

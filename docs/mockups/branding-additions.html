@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Branding: what else could go here</title>
+<meta name="description" content="Mockup of the Branding page with the suggested additions: sign-in page, browser tab, dark-mode logo, email look, maps, footer, chart colours, documents and the help window." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  :root { --brand: #007d79; }
+  body { padding: 24px; }
+  .wrap { max-width: 1320px; margin: 0 auto; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .page { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 28px; }
+  .top { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 22px; }
+  .top h1 { margin: 2px 0 4px; font-size: 28px; letter-spacing: -.01em; } .top p { margin: 0; color: var(--ink-2); }
+  .cols { display: grid; gap: 36px; grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
+  @media (max-width: 1050px) { .cols { grid-template-columns: 1fr; } }
+  .grp { margin-top: 34px; } .grp:first-child { margin-top: 0; }
+  .grp > h2 { margin: 0 0 2px; font-size: 15px; display: flex; gap: 8px; align-items: center; } .grp > p { margin: 0 0 14px; color: var(--ink-3); font-size: 12.5px; }
+  .tag { font: 500 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; background: var(--brand-soft); color: var(--brand-ink); padding: 2px 6px; }
+  .stack { display: grid; gap: 18px; }
+  .row2 { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; } @media (max-width: 700px) { .row2 { grid-template-columns: 1fr; } }
+  .drop { border: 1px dashed var(--line-2); background: var(--raise); display: grid; place-items: center; text-align: center; color: var(--ink-3); font-size: 12px; padding: 14px; min-height: 96px; cursor: pointer; }
+  .drop:hover { border-color: var(--brand); color: var(--ink-2); } .drop b { display: block; color: var(--ink-2); font-weight: 500; }
+  .drop.dark { background: #161616; color: #9a9ca5; border-color: #3a3b41; } .drop.dark b { color: #d4d5db; }
+  .sw { display: flex; flex-wrap: wrap; gap: 6px; } .sw i { width: 32px; height: 32px; display: block; cursor: pointer; }
+  .sw i.on { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px var(--ink); }
+  .optrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); } .optrow:first-of-type { border-top: 0; }
+  .optrow > span { flex: 1; min-width: 0; } .optrow b { display: block; font-weight: 500; } .optrow small { color: var(--ink-3); }
+  .sw-t { width: 38px; height: 22px; background: var(--line-2); position: relative; cursor: pointer; border: 0; padding: 0; flex: none; } .sw-t::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
+  .sw-t[aria-pressed=true] { background: var(--brand); } .sw-t[aria-pressed=true]::after { left: 18px; }
+  .bgpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; } .bgpick button { height: 56px; border: 1px solid var(--line-2); cursor: pointer; padding: 0; } .bgpick button[aria-pressed=true] { outline: 2px solid var(--brand); outline-offset: 1px; }
+  /* previews */
+  .pv { position: sticky; top: 16px; }
+  .pvtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 12px; flex-wrap: wrap; } .pvtabs button { border: 0; background: none; padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--ink-2); font-size: 13px; } .pvtabs button[aria-pressed=true] { border-color: var(--brand); color: var(--ink); font-weight: 500; }
+  .frame { border: 1px solid var(--line-2); background: var(--canvas); overflow: hidden; min-height: 330px; }
+  .chrome { display: flex; align-items: center; gap: 8px; background: #e7e8ec; padding: 6px 10px; font-size: 12px; }
+  .chrome .tab { background: #fff; padding: 6px 12px; display: flex; gap: 8px; align-items: center; min-width: 180px; max-width: 240px; } .chrome .tab i { width: 14px; height: 14px; background: var(--brand); display: block; flex: none; }
+  .chrome .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .login { min-height: 330px; display: grid; place-items: center; padding: 24px; background-size: cover; background-position: center; }
+  .login .c { background: #fff; width: 250px; padding: 20px; display: grid; gap: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 12.5px; }
+  .login .c .mk { width: 30px; height: 30px; background: var(--brand); color: var(--on-brand); display: grid; place-items: center; font-weight: 600; }
+  .login .c .i { height: 28px; border: 1px solid var(--line-2); } .login .c .b { height: 30px; background: var(--brand); }
+  .mail { background: #fff; margin: 14px; border: 1px solid var(--line); font-size: 12.5px; } .mail .hd { padding: 14px 18px; background: var(--brand); color: var(--on-brand); font-weight: 600; display: flex; align-items: center; gap: 10px; } .mail .hd i { width: 22px; height: 22px; background: rgb(255 255 255 / .25); display: block; }
+  .mail .bd { padding: 16px 18px; display: grid; gap: 10px; } .mail .btn2 { background: var(--brand); color: var(--on-brand); padding: 8px 14px; width: max-content; } .mail .ft { padding: 12px 18px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: 11.5px; }
+  .charts { padding: 18px; display: grid; gap: 12px; background: #fff; margin: 14px; border: 1px solid var(--line); } .bars { display: flex; align-items: end; gap: 6px; height: 110px; } .bars i { flex: 1; display: block; }
+  .help { position: relative; min-height: 330px; background: var(--canvas); } .help .win { position: absolute; right: 14px; bottom: 64px; width: 220px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 12px; } .help .win .h { background: var(--brand); color: var(--on-brand); padding: 10px 12px; font-weight: 600; } .help .win .b { padding: 12px; display: grid; gap: 8px; color: var(--ink-2); } .help .fab { position: absolute; right: 14px; bottom: 14px; width: 42px; height: 42px; background: var(--brand); color: var(--on-brand); display: grid; place-items: center; border-radius: 999px; }
+  .foot { padding: 10px 14px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; background: #fff; }
+  .legend { margin: 28px 0 0; padding: 16px 18px; border: 1px solid var(--line); background: var(--raise); color: var(--ink-2); font-size: 13px; } .legend b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow" style="margin-bottom:8px">Mockup</div>
+  <div class="page">
+    <div class="top"><div><div class="eyebrow">Settings</div><h1>Branding</h1><p>Make the workspace look like Ministry of Health. <span class="tag">New</span> marks what is added.</p></div><div style="display:flex;gap:8px"><button class="btn ghost">Discard changes</button><button class="btn primary">Save</button></div></div>
+    <div class="cols">
+      <div>
+        <div class="grp"><h2>Workspace</h2><p>The basics people see every day.</p>
+          <div class="stack">
+            <div class="field"><label>Workspace name</label><input class="input" id="name" value="Ministry of Health" maxlength="40"><small>Shown at the top of the sidebar and on the sign-in page.</small></div>
+            <div class="field"><label>Welcome message</label><textarea class="textarea" rows="2">Welcome to the Ministry of Health.</textarea></div>
+            <div class="row2">
+              <div class="field"><label>Logo</label><div class="drop"><span><b>Drag an image here</b>or click to browse</span></div></div>
+              <div class="field"><label>Logo for dark mode <span class="tag">New</span></label><div class="drop dark"><span><b>Light version of the logo</b>Used on dark backgrounds</span></div><small>Without it, the normal logo is used.</small></div>
+            </div>
+            <div class="field"><label>Brand colour</label><div class="sw" id="sw"></div></div>
+            <div class="field"><label>Sidebar</label><div class="sw" style="gap:10px"><button class="btn" style="height:auto;padding:8px 12px">Dark</button><button class="btn" style="height:auto;padding:8px 12px;border-color:var(--brand);background:var(--brand-soft)">Light</button><button class="btn" style="height:auto;padding:8px 12px">Brand colour</button></div></div>
+          </div>
+        </div>
+
+        <div class="grp"><h2>Sign-in page <span class="tag">New</span></h2><p>The page people see before they are signed in.</p>
+          <div class="stack">
+            <div class="field"><label>Background</label><div class="bgpick" id="bg"></div></div>
+            <div class="field"><label>Line under the name</label><input class="input" id="tag" value="Sign in to continue" maxlength="80"><small>One short line, such as what the workspace is for.</small></div>
+            <div class="row2"><div class="field"><label>Terms link</label><input class="input" placeholder="https://example.org/terms"></div><div class="field"><label>Privacy link</label><input class="input" placeholder="https://example.org/privacy"></div></div>
+          </div>
+        </div>
+
+        <div class="grp"><h2>Browser tab <span class="tag">New</span></h2><p>What shows on the tab and in bookmarks.</p>
+          <div class="row2">
+            <div class="field"><label>Icon</label><div class="drop" style="min-height:64px"><span><b>Use the logo</b>or drop a square icon</span></div></div>
+            <div class="field"><label>Tab title</label><input class="input" id="title" value="Ministry of Health"><small>Followed by the page, for example “People”.</small></div>
+          </div>
+        </div>
+
+        <div class="grp"><h2>Emails <span class="tag">New</span></h2><p>Invitations, help desk replies and notifications.</p>
+          <div class="stack">
+            <div class="optrow"><span><b>Show the logo and colour at the top</b><small>Uses the logo and brand colour above.</small></span><button class="sw-t" id="mailhd" aria-pressed="true" aria-label="Brand the emails"></button></div>
+            <div class="field"><label>Footer line</label><input class="input" id="footer" value="Ministry of Health · Port Vila, Vanuatu" maxlength="120"></div>
+          </div>
+        </div>
+
+        <div class="grp"><h2>Public pages <span class="tag">New</span></h2><p>Project pages that anyone can open.</p>
+          <div class="optrow"><span><b>Show “Powered by Grids”</b><small>Switch off on plans that allow it.</small></span><button class="sw-t" aria-pressed="true" aria-label="Powered by"></button></div>
+          <div class="field" style="margin-top:8px"><label>Footer text</label><input class="input" placeholder="For questions, write to health@example.org"></div>
+        </div>
+
+        <div class="grp"><h2>Charts and maps <span class="tag">New</span></h2><p>So dashboards match the brand.</p>
+          <div class="stack">
+            <div class="field"><label>Chart colours</label><div class="sw" id="pal"></div><small>Used for series, in order. Starts from the brand colour.</small></div>
+            <div class="row2"><div class="field"><label>Day map style URL</label><input class="input" placeholder="https://basemaps.cartocdn.com/…"></div><div class="field"><label>Night map style URL</label><input class="input" placeholder="https://basemaps.cartocdn.com/…"></div></div>
+          </div>
+        </div>
+
+        <div class="grp"><h2>Documents and help <span class="tag">New</span></h2><p>Defaults that forms and the help window start from.</p>
+          <div class="stack">
+            <div class="optrow"><span><b>Put the logo and name on generated documents</b><small>PDFs and Word files start with them. Each form can change this.</small></span><button class="sw-t" aria-pressed="true" aria-label="Documents"></button></div>
+            <div class="row2"><div class="field"><label>Help button position</label><select class="select" id="pos"><option>Bottom left</option><option>Bottom right</option></select></div><div class="field"><label>Help window greeting</label><input class="input" value="How can we help?"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="pv">
+        <div class="eyebrow" style="margin-bottom:6px">Live preview</div>
+        <div class="pvtabs" id="tabs"></div>
+        <div id="view"></div>
+      </aside>
+    </div>
+    <p class="legend"><b>Reading this:</b> the left is one plain page in groups (no boxes), as the Branding page is now. Everything under a <span class="tag">New</span> tag is an addition. The preview switches between the places the settings show: the workspace, the sign-in page, the browser tab, an email, a chart and the help window. Try the colour, the name and the tick marks.</p>
+  </div>
+</div>
+<script>
+const S = { name: 'Ministry of Health', color: '#007d79', tag: 'Sign in to continue', title: 'Ministry of Health', footer: 'Ministry of Health · Port Vila, Vanuatu', mail: true, bg: 0, pos: 'Bottom left' };
+const COLORS = ['#0f62fe', '#198038', '#8a3ffc', '#da1e28', '#007d79', '#ff832b', '#161616', '#b28600', '#0072c3', '#d12771', '#525252'];
+const BGS = ['linear-gradient(135deg,#eef3f2,#dfe9e8)', 'linear-gradient(135deg,#1b2a2a,#0e1616)', 'radial-gradient(circle at 20% 20%,#cfe6e5,#eef3f2)', 'repeating-linear-gradient(45deg,#eef3f2,#eef3f2 12px,#e6eceb 12px,#e6eceb 24px)'];
+let tab = 'work';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * .299 + ((n >> 8) & 255) * .587 + (n & 255) * .114); };
+function palette(base) { const n = parseInt(base.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return [1, .8, .62, .46, .32].map((t) => `rgb(${Math.round(r + (255 - r) * (1 - t) * .8)},${Math.round(g + (255 - g) * (1 - t) * .8)},${Math.round(b + (255 - b) * (1 - t) * .8)})`); }
+function apply() {
+  document.documentElement.style.setProperty('--brand', S.color);
+  document.documentElement.style.setProperty('--on-brand', lum(S.color) > 160 ? '#161616' : '#fff');
+  $('#sw').innerHTML = COLORS.map((c) => `<i data-c="${c}" class="${c === S.color ? 'on' : ''}" style="background:${c}"></i>`).join('') + '<i style="border:1px dashed var(--line-2);display:grid;place-items:center;color:var(--ink-3)">+</i>';
+  $('#pal').innerHTML = palette(S.color).map((c) => `<i style="background:${c};cursor:default"></i>`).join('');
+  $('#bg').innerHTML = BGS.map((b, i) => `<button data-bg="${i}" aria-pressed="${S.bg === i}" style="background:${b}" aria-label="Background ${i + 1}"></button>`).join('');
+  $('#tabs').innerHTML = [['work', 'Workspace'], ['sign', 'Sign-in'], ['tab', 'Browser tab'], ['mail', 'Email'], ['chart', 'Charts'], ['help', 'Help']].map(([k, l]) => `<button data-t="${k}" aria-pressed="${tab === k}">${l}</button>`).join('');
+  const mark = `<span class="mk" style="width:24px;height:24px;background:var(--brand);color:var(--on-brand);display:grid;place-items:center;font-weight:600;font-size:12px">${esc(S.name.slice(0, 1))}</span>`;
+  const views = {
+    work: `<div class="frame" style="display:grid;grid-template-columns:150px 1fr;min-height:330px"><div style="background:#161616;color:#c6c6c6;font-size:12.5px"><div style="display:flex;gap:8px;align-items:center;padding:12px;border-bottom:1px solid #2a2a2a;font-weight:600">${mark}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(S.name)}</span></div><div style="padding:7px 12px">⌂ Home</div><div style="padding:7px 12px;border-left:3px solid var(--brand);background:color-mix(in oklab,var(--brand) 18%,transparent)">☺ People</div><div style="padding:7px 12px">⌗ Structure</div></div><div style="padding:16px;display:grid;gap:10px;align-content:start;font-size:12.5px"><b style="font-size:15px">People</b><div style="display:flex;gap:8px"><span style="background:var(--brand);color:var(--on-brand);padding:5px 10px;font-weight:500">Invite people</span><span style="background:#fff;border:1px solid var(--line-2);padding:5px 10px">Export</span></div><div style="background:#fff;border:1px solid var(--line);padding:10px">Ana Smith<div style="height:5px;background:var(--line);margin-top:8px"><i style="display:block;height:100%;width:66%;background:var(--brand)"></i></div></div></div></div><div class="foot" style="border:1px solid var(--line-2);border-top:0"><span>${esc(S.footer)}</span><span>Powered by Grids</span></div>`,
+    sign: `<div class="frame"><div class="login" style="background-image:${BGS[S.bg]}"><div class="c"><span class="mk">${esc(S.name.slice(0, 1))}</span><b style="font-size:15px">${esc(S.name)}</b><span style="color:var(--ink-3)">${esc(S.tag)}</span><div class="i"></div><div class="i"></div><div class="b"></div><small style="color:var(--ink-3);text-align:center">Terms · Privacy</small></div></div></div>`,
+    tab: `<div class="frame"><div class="chrome"><span class="tab"><i></i><span>People · ${esc(S.title)}</span></span><span style="color:var(--ink-3)">+</span></div><div style="padding:22px;color:var(--ink-3);font-size:12.5px">The tab shows the icon and “People · ${esc(S.title)}”. Bookmarks use the same icon.</div></div>`,
+    mail: `<div class="frame"><div class="mail"><div class="hd" style="${S.mail ? '' : 'background:#fff;color:var(--ink);border-bottom:1px solid var(--line)'}">${S.mail ? '<i></i>' : ''}${esc(S.name)}</div><div class="bd"><b>You have been invited</b><span>Ana has invited you to ${esc(S.name)}. Accept to get started.</span><span class="btn2" style="${S.mail ? '' : 'background:#161616;color:#fff'}">Accept invitation</span></div><div class="ft">${esc(S.footer)}</div></div></div>`,
+    chart: `<div class="frame"><div class="charts"><b style="font-size:13px">Cases by week</b><div class="bars">${palette(S.color).map((c, i) => `<i style="background:${c};height:${40 + i * 14}%"></i>`).join('')}${palette(S.color).map((c, i) => `<i style="background:${c};height:${90 - i * 12}%"></i>`).join('')}</div><small style="color:var(--ink-3)">Series use the chart colours, starting from the brand colour.</small></div></div>`,
+    help: `<div class="frame help"><div class="win" style="${S.pos === 'Bottom left' ? 'left:14px;right:auto' : ''}"><div class="h">${esc(S.name)}</div><div class="b"><span>How can we help?</span><span style="background:var(--brand);color:var(--on-brand);padding:7px;text-align:center;font-weight:500">Start a chat</span></div></div><div class="fab" style="${S.pos === 'Bottom left' ? 'left:14px;right:auto' : ''}">?</div></div>`,
+  };
+  $('#view').innerHTML = views[tab];
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-c],[data-bg],[data-t],.sw-t'); if (!t) return;
+  if (t.dataset.c) S.color = t.dataset.c; else if (t.dataset.bg) { S.bg = +t.dataset.bg; tab = 'sign'; } else if (t.dataset.t) tab = t.dataset.t;
+  else if (t.classList.contains('sw-t')) { t.setAttribute('aria-pressed', t.getAttribute('aria-pressed') !== 'true'); if (t.id === 'mailhd') { S.mail = t.getAttribute('aria-pressed') === 'true'; tab = 'mail'; } }
+  apply();
+});
+document.addEventListener('input', (e) => {
+  const id = e.target.id; if (id === 'name') { S.name = e.target.value || 'Workspace'; } else if (id === 'tag') { S.tag = e.target.value; tab = 'sign'; } else if (id === 'title') { S.title = e.target.value; tab = 'tab'; } else if (id === 'footer') { S.footer = e.target.value; tab = 'mail'; } else return;
+  const keep = e.target; apply(); keep.focus();
+});
+$('#pos').addEventListener('change', (e) => { S.pos = e.target.value; tab = 'help'; apply(); });
+apply();
+</script>
+</body>
+</html>

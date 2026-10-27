@@ -18,6 +18,7 @@ export async function flightTracker(tx: Tx, c: TemplateCtx) {
       icon: 'plane',
       color: '#0f62fe',
       geometry: 'point',
+      marker: { style: 'icon', rotateBy: 'heading' },
       parentTypes: ['country'],
       attributes: [
         { key: 'callsign', label: 'Callsign', type: 'text', summary: true },

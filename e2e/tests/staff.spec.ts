@@ -63,8 +63,9 @@ test('staff: invite a support agent who only sees support', async ({ browser }) 
     .getByRole('row', { name: new RegExp(email) })
     .getByRole('button', { name: 'Edit access' })
     .click();
-  admin.once('dialog', (d) => d.accept());
   await admin.getByRole('dialog').getByRole('button', { name: 'Suspend' }).click();
+  // The app asks in its own window: confirm there (it opens on top, so its button is the last "Suspend").
+  await admin.getByRole('dialog').getByRole('button', { name: 'Suspend' }).last().click();
   await expect(admin.getByRole('row', { name: new RegExp(email) })).toContainText('suspended');
 });
 

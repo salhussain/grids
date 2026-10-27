@@ -5,14 +5,17 @@ import { z } from 'zod';
 import { AuthError, type Accounts } from '../accounts.js';
 import type { IdentityConfig } from '../config.js';
 import { originOf } from '../config.js';
-import { platformLoader } from '../branding.js';
+import { platformLoader, type Branding } from '../branding.js';
 import type { GridsProvider } from '../provider.js';
 
 const Forgot = z.object({ email: z.email() });
 const Reset = z.object({ token: z.string().min(20).max(100), password: z.string().min(1).max(200) });
 
 /** Password reset/setup and account settings (the latter use the IdP session cookie). */
-export function selfServiceRoutes(app: FastifyInstance, deps: { provider: GridsProvider; accounts: Accounts; config: IdentityConfig }) {
+export function selfServiceRoutes(
+  app: FastifyInstance,
+  deps: { provider: GridsProvider; accounts: Accounts; config: IdentityConfig; branding: (tenantId: string | null | undefined) => Promise<Branding | null> },
+) {
   const { provider, accounts, config } = deps;
   const origin = originOf(config.IDENTITY_ISSUER);
   const appUrl = async (accountId: string) => ((await accounts.homeApp(accountId)) === 'web' ? config.WEB_URL : config.CONSOLE_URL);
@@ -51,7 +54,10 @@ export function selfServiceRoutes(app: FastifyInstance, deps: { provider: GridsP
 
   app.get('/ui/api/account', async (req, reply) => {
     const a = await sessionAccount(req, reply);
+    // Opened from an organisation's workspace: shown in its branding (public, like its sign-in page).
+    const org = z.object({ org: z.uuid().optional() }).safeParse(req.query).data?.org;
     return {
+      organization: org ? await deps.branding(org) : null,
       email: a.email,
       givenName: a.given_name,
       familyName: a.family_name,

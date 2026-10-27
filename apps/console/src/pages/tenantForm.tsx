@@ -1,5 +1,5 @@
 import { COMPANY_SIZES, CURRENCIES, INDUSTRIES, type Currency } from '@grids/schema';
-import { Field, Input, Select } from '@grids/ui';
+import { Checkbox, Field, Input, Select } from '@grids/ui';
 import { COUNTRIES, TIMEZONES } from '@grids/ui';
 
 /** Editable organisation profile (shared by create and edit). */
@@ -22,6 +22,8 @@ export interface ProfileForm {
     postalCode: string;
     country: string;
   };
+  /** Where invoices go; null when it is the registered address. */
+  billingAddress: ProfileForm['address'] | null;
   timezone: string;
   locale: string;
   currency: Currency;
@@ -47,6 +49,7 @@ export const emptyProfile = (): ProfileForm => ({
   email: '',
   phone: '',
   address: { line1: '', line2: '', city: '', region: '', postalCode: '', country: '' },
+  billingAddress: null,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   locale: 'en',
   currency: 'USD',
@@ -165,6 +168,30 @@ export function BusinessFields({
           placeholder="+64 9 000 0000"
         />
       </Field>
+    </div>
+  );
+}
+
+/** Where invoices and receipts are addressed: the registered address, or one of their own. */
+export function BillingAddressFields({
+  v,
+  set,
+  registered,
+  errors,
+}: {
+  v: ProfileForm['billingAddress'];
+  set: (a: ProfileForm['billingAddress']) => void;
+  registered: ProfileForm['address'];
+  errors: Errors;
+}) {
+  return (
+    <div className="space-y-4">
+      <Checkbox
+        label="Same as registered address"
+        checked={v === null}
+        onChange={(e) => set(e.target.checked ? null : { ...registered })}
+      />
+      {v !== null && <AddressFields v={v} set={set} errors={errors} />}
     </div>
   );
 }

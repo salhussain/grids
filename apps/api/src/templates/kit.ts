@@ -61,6 +61,7 @@ export async function types(tx: Tx, c: TemplateCtx, list: TypeIn[]) {
         icon: t.icon,
         color: t.color,
         geometry: t.geometry,
+        marker: JSON.stringify(t.marker),
         attributes: JSON.stringify(t.attributes),
         parent_types: t.parentTypes,
         sort: sort++,

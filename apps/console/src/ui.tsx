@@ -18,7 +18,7 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join('') || '?';
 
-/** Rounded gradient monogram for an organisation or person. */
+/** Flat square monogram for an organisation or person, in a colour of its own. */
 export function Avatar({
   name,
   className = 'size-9 text-[13px]',
@@ -30,13 +30,8 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      style={{
-        backgroundImage: `linear-gradient(135deg, oklch(0.62 0.17 ${h}), oklch(0.5 0.19 ${(h + 40) % 360}))`,
-      }}
-      className={cx(
-        'inline-flex shrink-0 items-center justify-center rounded-xl font-semibold tracking-wide text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_1px_2px_rgb(16_24_40/0.2)]',
-        className,
-      )}
+      style={{ backgroundColor: `oklch(0.55 0.15 ${h})` }}
+      className={cx('inline-flex shrink-0 items-center justify-center font-semibold tracking-wide text-white', className)}
     >
       {initials(name)}
     </span>
@@ -71,7 +66,7 @@ export function StatCard({
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="text-[13px] font-medium text-zinc-500">{label}</div>
-        <span className={cx('flex size-8 items-center justify-center rounded-lg ring-1', t.chip)}>
+        <span className={cx('flex size-8 items-center justify-center ring-1', t.chip)}>
           <Icon className="size-4" strokeWidth={1.75} />
         </span>
       </div>
@@ -87,7 +82,7 @@ export function StatCard({
     </>
   );
   const cls =
-    'rise group block rounded-2xl border border-zinc-200 bg-snow p-5 shadow-surface transition-[box-shadow,transform,border-color] hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-raised';
+    'group block border border-zinc-200 bg-snow p-5 transition-colors hover:border-zinc-400';
   return to ? (
     <Link to={to} className={cls}>
       {body}
@@ -113,7 +108,7 @@ export function Chips<T extends string>({
     <div
       role="group"
       aria-label={label}
-      className="inline-flex flex-wrap gap-1 rounded-xl bg-zinc-100 p-1"
+      className="inline-flex flex-wrap gap-px border border-zinc-300 bg-zinc-300"
     >
       {options.map((o) => (
         <button
@@ -122,10 +117,8 @@ export function Chips<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'rounded-lg px-3 py-1 text-[13px] font-medium whitespace-nowrap transition-colors',
-            value === o.value
-              ? 'bg-snow text-ink shadow-[0_1px_2px_rgb(16_24_40/0.1)]'
-              : 'text-zinc-600 hover:text-ink',
+            'px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors',
+            value === o.value ? 'bg-ink text-canvas' : 'bg-snow text-zinc-700 hover:bg-zinc-50',
           )}
         >
           {o.label}

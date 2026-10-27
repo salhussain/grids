@@ -1,182 +1,137 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import type { ProjectStatus, ProjectVisibility } from '@grids/schema';
-import { Button, ErrorNotice, Field, Input, Panel, Textarea, cx, useToast } from '@grids/ui';
-import { Archive, ArchiveRestore, Check, ChevronRight, Circle } from 'lucide-react';
-import { useState } from 'react';
+import { cx, relTime } from '@grids/ui';
+import { FreshnessBadge } from '@grids/viz';
+import {
+  ArrowUpRight,
+  BarChart3,
+  Boxes,
+  Check,
+  ChevronRight,
+  ClipboardList,
+  Settings,
+  Sigma,
+  UserCog,
+  Workflow,
+  type LucideIcon,
+} from 'lucide-react';
 import { api } from '../../api';
-import { iconOf, useProject } from './context';
-import { ChoiceCards, IconPicker, ImageField, STATUS, VISIBILITY } from './fields';
+import { useProject } from './context';
 
-/** A project's configuration home: profile, look, status and visibility, and setup progress. */
+/** A project's home: where it stands, what it holds, and what to do next. */
 export function OverviewTab() {
   const { tenantId, project, can, base } = useProject();
-  const qc = useQueryClient();
-  const toast = useToast();
   const manager = can('manager');
-  const [f, setF] = useState({
-    name: project.name,
-    description: project.description,
-    color: project.color,
-    icon: project.icon,
-    status: project.status as ProjectStatus,
-    visibility: project.visibility as ProjectVisibility,
-    logo: project.logo,
-    coverImage: project.coverImage,
-  });
-  const dirty = JSON.stringify(f) !== JSON.stringify({ name: project.name, description: project.description, color: project.color, icon: project.icon, status: project.status, visibility: project.visibility, logo: project.logo, coverImage: project.coverImage });
-  const save = useMutation({
-    mutationFn: () => api.updateProject(tenantId, project.key, f),
-    onSuccess: (p) => {
-      qc.setQueryData(['project', tenantId, project.key], p);
-      void qc.invalidateQueries({ queryKey: ['projects', tenantId] });
-      toast('Project saved');
-    },
-  });
-  const archive = useMutation({
-    mutationFn: () => api.archiveProject(tenantId, project.key, !project.archived),
-    onSuccess: (p) => {
-      qc.setQueryData(['project', tenantId, project.key], p);
-      void qc.invalidateQueries({ queryKey: ['projects', tenantId] });
-    },
-  });
   const types = useQuery({ queryKey: ['types', tenantId, project.key], queryFn: () => api.types(tenantId, project.key) });
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
   const datasets = useQuery({ queryKey: ['datasets', tenantId, project.key], queryFn: () => api.datasets(tenantId, project.key) });
+  const forms = useQuery({ queryKey: ['forms', tenantId, project.key], queryFn: () => api.forms(tenantId, project.key) });
+
+  const ready = !!(types.data && elements.data && datasets.data && forms.data);
+  const submissions = (forms.data ?? []).reduce((n, f) => n + f.submissionCount, 0);
   const steps = [
-    { done: (types.data?.length ?? 0) > 0, label: 'Define entity types', text: 'The kinds of things you track and how they nest', to: 'types' },
-    { done: project.counts.entities > 0, label: 'Add entities', text: 'Create them, import a CSV, or let a job load them', to: 'entities' },
-    { done: (elements.data?.length ?? 0) > 0 || (datasets.data?.length ?? 0) > 0, label: 'Set up data', text: 'Data elements for indicators, or datasets for tables', to: 'data' },
+    { done: (types.data?.length ?? 0) > 0, label: 'Define entity types', text: 'The kinds of things you track', to: 'types' },
+    { done: project.counts.entities > 0, label: 'Add entities', text: 'Create, import a CSV, or load with a job', to: 'entities' },
+    { done: (elements.data?.length ?? 0) > 0 || (datasets.data?.length ?? 0) > 0, label: 'Set up data', text: 'Indicators or datasets', to: 'data' },
     { done: project.counts.dashboards > 0, label: 'Build a dashboard', text: 'KPIs, charts, maps and tables', to: 'dashboards' },
     { done: project.counts.forms > 0, label: 'Create a form', text: 'Collect data in the field', to: 'forms' },
-    { done: project.status === 'live', label: 'Go live', text: 'Make it visible to everyone it is shared with', to: '' },
+    { done: project.status === 'live', label: 'Go live', text: 'Share it with everyone it is meant for', to: 'settings' },
   ];
-  const Icon = iconOf(f.icon);
+  const done = steps.filter((s) => s.done).length;
+  const next = steps.find((s) => !s.done);
+
+  const stats: { label: string; value: number; sub?: string; pending?: boolean; icon: LucideIcon; to: string }[] = [
+    { label: 'Entities', value: project.counts.entities, sub: types.data ? `${types.data.length} types` : undefined, icon: Boxes, to: 'entities' },
+    { label: 'Submissions', value: submissions, sub: `${project.counts.forms} forms`, pending: !forms.data, icon: ClipboardList, to: 'submissions' },
+    { label: 'Indicators', value: elements.data?.length ?? 0, sub: datasets.data ? `${datasets.data.length} datasets` : undefined, pending: !elements.data, icon: Sigma, to: 'data' },
+    { label: 'Dashboards', value: project.counts.dashboards, icon: BarChart3, to: 'dashboards' },
+    { label: 'Jobs', value: project.counts.jobs, icon: Workflow, to: 'jobs' },
+    { label: 'Members', value: project.counts.members, icon: UserCog, to: 'members' },
+  ];
 
   return (
     <div className="space-y-6">
-      <div
-        className="relative h-36 overflow-hidden border border-zinc-200 bg-cover bg-center"
+      {/* Hero */}
+      <section
+        className="relative overflow-hidden border border-zinc-200 bg-cover bg-center"
         style={
-          f.coverImage
-            ? { backgroundImage: `url("${f.coverImage}")` }
+          project.coverImage
+            ? { backgroundImage: `url("${project.coverImage}")` }
             : {
-                backgroundColor: `color-mix(in srgb, ${f.color} 8%, var(--color-snow))`,
-                backgroundImage: `linear-gradient(color-mix(in srgb, ${f.color} 16%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, ${f.color} 16%, transparent) 1px, transparent 1px)`,
-                backgroundSize: '16px 16px',
+                backgroundColor: `color-mix(in srgb, ${project.color} 7%, var(--color-snow))`,
+                backgroundImage: `linear-gradient(color-mix(in srgb, ${project.color} 14%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, ${project.color} 14%, transparent) 1px, transparent 1px)`,
+                backgroundSize: '18px 18px',
               }
         }
       >
-        <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/55 to-transparent p-4 text-white">
-          {f.logo ? (
-            <img src={f.logo} alt="" className="size-12 border border-white/40 bg-white object-contain p-1" />
-          ) : (
-            <span className="flex size-12 items-center justify-center" style={{ background: f.color }}>
-              <Icon className="size-6" />
-            </span>
-          )}
-          <div className="min-w-0">
-            <div className="truncate text-lg font-semibold">{f.name || project.name}</div>
-            <div className="truncate text-xs opacity-80">{f.description || 'No description yet'}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <Panel title="Profile">
-            <fieldset disabled={!manager} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-                <Field label="Name">
-                  <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-                </Field>
-                <Field label="Code" hint="Fixed once created (used in links)">
-                  <Input value={project.key} disabled className="font-mono" />
-                </Field>
-              </div>
-              <Field label="Description">
-                <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-              </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Colour">
-                  <div className="flex gap-2">
-                    <input type="color" aria-label="Colour" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="h-9 w-12 border border-zinc-300 bg-snow" />
-                    <Input value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="font-mono" />
-                  </div>
-                </Field>
-                <IconPicker label="Icon (when there is no logo)" value={f.icon} color={f.color} onChange={(icon) => setF({ ...f, icon })} />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ImageField label="Project logo" value={f.logo} onChange={(logo) => setF({ ...f, logo })} hint="Square works best" />
-                <ImageField label="Background image" aspect="wide" maxSize={1600} value={f.coverImage} onChange={(coverImage) => setF({ ...f, coverImage })} hint="Wide images work best" />
-              </div>
-            </fieldset>
-          </Panel>
-          <Panel title="Status and visibility">
-            <fieldset disabled={!manager} className="space-y-4">
-              <ChoiceCards label="Status" value={f.status} onChange={(status) => setF({ ...f, status })} options={STATUS} />
-              <ChoiceCards label="Visibility" value={f.visibility} onChange={(visibility) => setF({ ...f, visibility })} options={VISIBILITY} />
-            </fieldset>
-          </Panel>
-          <ErrorNotice error={save.error ?? archive.error} />
-          {manager && (
-            <div className="sticky bottom-0 -mx-1 flex items-center justify-between gap-3 border-t border-zinc-200 bg-snow/95 px-1 py-3 backdrop-blur">
-              <span className="text-xs text-zinc-500">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
-              <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!dirty || !f.name.trim()}>
-                Save changes
-              </Button>
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 bg-gradient-to-t from-snow via-snow/90 to-transparent p-5 pt-14 sm:p-6 sm:pt-16">
+          <div className="min-w-0 flex-1 basis-64">
+            <p className="max-w-2xl text-sm text-zinc-700">{project.description || 'No description yet.'}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-zinc-500">
+              {project.freshness.status !== 'unknown' && <FreshnessBadge value={project.freshness} compact />}
+              <span>Created {relTime(project.createdAt)}</span>
+              <span>Updated {relTime(project.updatedAt)}</span>
             </div>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <Panel flush title="Set-up" description={`${steps.filter((s) => s.done).length} of ${steps.length} done`}>
-            <ol>
-              {steps.map((s) => (
-                <li key={s.label}>
-                  <Link to={s.to ? `${base}/${s.to}` : base} className="flex items-center gap-3 border-t border-zinc-100 px-5 py-3 first:border-t-0 hover:bg-zinc-50">
-                    {s.done ? <Check className="size-5 shrink-0 bg-emerald-600 p-0.5 text-white" /> : <Circle className="size-5 shrink-0 text-zinc-300" />}
-                    <span className="min-w-0 flex-1">
-                      <span className={cx('block text-sm font-medium', s.done && 'text-zinc-500 line-through decoration-zinc-300')}>{s.label}</span>
-                      <span className="block text-xs text-zinc-500">{s.text}</span>
-                    </span>
-                    <ChevronRight className="size-4 text-zinc-400 rtl:rotate-180" />
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          </Panel>
-          <Panel title="At a glance">
-            <dl className="grid grid-cols-2 gap-px border border-zinc-200 bg-zinc-200 text-center">
-              {(
-                [
-                  ['Entities', project.counts.entities],
-                  ['Members', project.counts.members],
-                  ['Dashboards', project.counts.dashboards],
-                  ['Forms', project.counts.forms],
-                  ['Jobs', project.counts.jobs],
-                  ['Data elements', elements.data?.length ?? 0],
-                ] as const
-              ).map(([l, n]) => (
-                <div key={l} className="bg-snow px-3 py-3">
-                  <dd className="num text-xl font-semibold">{n.toLocaleString()}</dd>
-                  <dt className="text-xs text-zinc-500">{l}</dt>
-                </div>
-              ))}
-            </dl>
-          </Panel>
+          </div>
           {manager && (
-            <Panel title={project.archived ? 'Archived' : 'Archive'}>
-              <p className="mb-3 text-sm text-zinc-600">
-                {project.archived ? 'This project is archived: its jobs are stopped and it is hidden from lists.' : 'Archiving stops scheduled jobs and hides the project; you can restore it later.'}
-              </p>
-              <Button variant={project.archived ? 'secondary' : 'danger'} icon={project.archived ? ArchiveRestore : Archive} onClick={() => archive.mutate()} loading={archive.isPending}>
-                {project.archived ? 'Restore project' : 'Archive project'}
-              </Button>
-            </Panel>
+            <Link to={`${base}/settings`} className="inline-flex h-9 shrink-0 items-center gap-2 border border-zinc-300 bg-snow px-3 text-sm hover:border-zinc-500">
+              <Settings className="size-4" /> Edit project
+            </Link>
           )}
         </div>
-      </div>
+      </section>
+
+      {/* Key numbers */}
+      <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {stats.map((s) => (
+          <Link
+            key={s.label}
+            to={`${base}/${s.to}`}
+            className="group relative flex flex-col border border-zinc-200 bg-snow p-4 transition-[border-color,box-shadow] hover:border-accent-600 hover:shadow-surface focus-visible:outline-2 focus-visible:outline-accent-600"
+          >
+            <div className="flex items-start justify-between">
+              <span className="flex size-9 items-center justify-center bg-accent-50 text-accent-700">
+                <s.icon className="size-[18px]" strokeWidth={1.75} />
+              </span>
+              <ArrowUpRight className="size-4 text-zinc-300 transition-colors group-hover:text-accent-600 rtl:-scale-x-100" />
+            </div>
+            <div className={cx('num mt-4 text-[28px] leading-none font-semibold tracking-tight', (s.pending || s.value === 0) && 'text-zinc-400')}>{s.pending ? '–' : s.value.toLocaleString()}</div>
+            <div className="mt-2 text-sm font-medium">{s.label}</div>
+            <div className="mt-0.5 min-h-4 text-xs text-zinc-500">{s.sub ?? '\u00a0'}</div>
+          </Link>
+        ))}
+      </section>
+
+      {/* Next steps while the project is being set up */}
+      {ready && next && manager && (
+        <section className="border border-accent-100 bg-accent-50 p-5">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="min-w-0 flex-1 basis-64">
+              <div className="text-xs font-medium tracking-wide text-accent-800 uppercase">Set-up · {done} of {steps.length} done</div>
+              <div className="mt-1 text-base font-semibold">{next.label}</div>
+              <div className="text-sm text-zinc-600">{next.text}</div>
+              <div className="mt-3 flex h-1.5 max-w-sm gap-px">
+                {steps.map((s) => (
+                  <span key={s.label} className={cx('flex-1', s.done ? 'bg-accent-600' : 'bg-accent-100')} />
+                ))}
+              </div>
+            </div>
+            <Link to={`${base}/${next.to}`} className="inline-flex h-9 items-center gap-2 bg-accent-600 px-3.5 text-sm font-medium text-on-accent hover:bg-accent-700">
+              Continue <ChevronRight className="size-4 rtl:rotate-180" />
+            </Link>
+          </div>
+          <ol className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-accent-100 pt-3 text-xs">
+            {steps.map((s) => (
+              <li key={s.label}>
+                <Link to={`${base}/${s.to}`} className={cx('inline-flex items-center gap-1.5 hover:underline', s.done ? 'text-zinc-500' : 'text-ink')}>
+                  <span className={cx('flex size-4 items-center justify-center border', s.done ? 'border-accent-600 bg-accent-600 text-on-accent' : 'border-zinc-300 bg-snow')}>{s.done && <Check className="size-3" strokeWidth={3} />}</span>
+                  {s.label}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </div>
   );
 }

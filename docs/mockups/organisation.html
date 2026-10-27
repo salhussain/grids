@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Organisation Mockup</title>
+<meta name="description" content="Clickable mockup of every organisation-level page: home, people, structure, access, branding, security, billing and more." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<link rel="stylesheet" href="shared/mockup.css" />
+<style>
+  .tree { list-style: none; margin: 0; padding: 0; } .tree ul { list-style: none; margin: 0; padding-left: 22px; border-left: 1px solid var(--line); margin-left: 14px; }
+  .node { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); } .node:hover { background: var(--hover); }
+  .node .lvl { font: 500 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .matrix td, .matrix th { text-align: center; } .matrix td:first-child, .matrix th:first-child { text-align: left; }
+  .dot { display: inline-block; width: 8px; height: 8px; } .yes { color: var(--brand); } .no { color: var(--line-2); }
+  .app-card { display: grid; gap: 10px; padding: 18px; } .app-card .ico { width: 36px; height: 36px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-ink); border: 1px solid var(--brand-line); }
+  .login-prev { background: var(--canvas); padding: 26px; display: grid; place-items: center; min-height: 260px; position: relative; overflow: hidden; }
+  .login-prev .c { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 20px; width: 240px; display: grid; gap: 10px; position: relative; }
+  .org-card { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px solid var(--line); background: var(--sheet); cursor: pointer; transition: border-color .15s; } .org-card:hover { border-color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="org"><span class="mark" id="orgmark">M</span><div class="grow"><b>Ministry of Health</b><small>Vanuatu</small></div><button class="icon-btn" data-go="orgs" aria-label="Switch organisation" id="sw"></button></div>
+    <button class="search-btn" id="sb"></button>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot"><span class="avatar" style="background:#007d79">JT</span><div class="grow"><b style="font-size:13px;font-weight:500;display:block;line-height:1.2">Jean Tari</b><small class="muted">Administrator</small></div><button class="icon-btn" id="theme" aria-label="Toggle colour mode"></button></div>
+  </aside>
+  <div class="main"><div class="sheet"><div class="topbar"><div class="crumbs" id="crumbs"></div><div class="end row"><button class="btn sm ghost">EN ▾</button><button class="icon-btn" data-toast="Notifications">${''}</button></div></div><div class="page" id="view"></div></div></div>
+</div>
+<script src="shared/mockup.js"></script>
+<script>
+const NAV = [
+  ['Workspace', [['', 'Home', 'home'], ['people', 'People', 'users', '86'], ['structure', 'Structure', 'network'], ['entity-types', 'Entity types', 'boxes'], ['shared-entities', 'Shared entities', 'share'], ['access', 'Access', 'key']]],
+  ['Settings', [['branding', 'Branding', 'palette'], ['languages', 'Languages', 'lang'], ['security', 'Security', 'shield'], ['domains', 'Domains', 'globe'], ['applications', 'Applications', 'app'], ['billing', 'Billing', 'card']]],
+  ['Help', [['support', 'Support', 'help'], ['activity', 'Activity', 'activity']]],
+];
+const LABEL = Object.fromEntries(NAV.flatMap(([, i]) => i.map((x) => [x[0], x[1]])));
+const PEOPLE = [['Jean Tari', 'jean@moh.gov.vu', 'Administrator', 'Head Office', 'active', 'Today'], ['Marie Obed', 'marie@moh.gov.vu', 'Data manager', 'Shefa Province', 'active', 'Yesterday'], ['Peter Kalo', 'peter@moh.gov.vu', 'Analyst', 'Epidemiology', 'active', 'Oct 3'], ['Ruth Saul', 'ruth@moh.gov.vu', 'Viewer', 'Tafea Province', 'active', 'Sep 28'], ['Joel Bani', 'joel@moh.gov.vu', 'Data manager', 'Sanma Province', 'invited', '—'], ['Naomi Lui', 'naomi@moh.gov.vu', 'Analyst', 'Epidemiology', 'disabled', 'Aug 12']];
+const stT = { active: 'good', invited: 'brand', disabled: '', paid: 'good', open: 'warn', resolved: 'good', pending: 'warn', verified: 'good', dns: 'warn' };
+
+function nav(path) {
+  const cur = path.split('/')[0];
+  $('#nav').innerHTML = NAV.map(([g, items]) => `<div class="nav-group"><span class="eyebrow">${g}</span>${items.map(([to, l, i, c]) => `<a href="#/${to}" ${cur === to ? 'aria-current="page"' : ''}>${ic(i)}${l}${c ? `<span class="count">${c}</span>` : ''}</a>`).join('')}</div>`).join('');
+}
+
+const home = () => `
+  ${head('Workspace', 'Good morning, Jean', 'Your organisation at a glance.', `<button class="btn" data-modal="Invite people|Send invites" data-body='${field('Email addresses', '<textarea class="textarea" placeholder="one@example.org, two@example.org"></textarea>') + field('Role', '<select class="select"><option>Analyst</option><option>Data manager</option></select>')}'>${ic('plus')}Invite people</button>`)}
+  <div class="grid g4">${kpi('People', '86', '<span class="up">+4</span> this month', 'users', '', 'people')}${kpi('Org units', '23', '4 levels deep', 'network', '', 'structure')}${kpi('Pending invites', '5', '2 older than 7 days', 'mail', 'warn', 'people')}${kpi('Plan usage', '62%', 'Team · 47 of 75 users', 'layers', '', 'billing')}</div>
+  <div class="grid g21" style="margin-top:16px">
+    ${card('Sign-ins', bars([22, 31, 28, 40, 38, 12, 9, 35, 42, 39, 44, 41, 18, 14]), { sub: 'Last 14 days' })}
+    ${card('Get set up', `<div class="list" style="margin:-18px">${[['Add your logo and colour', 'branding', 1], ['Define your structure', 'structure', 1], ['Require two-step sign-in', 'security', 0], ['Connect a custom domain', 'domains', 0]].map(([l, to, d]) => `<a href="#/${to}" style="color:inherit"><span class="${d ? 'good' : ''}" style="width:18px;height:18px;display:grid;place-items:center;background:${d ? 'var(--good)' : 'transparent'};color:#fff;border:1px solid ${d ? 'var(--good)' : 'var(--line-2)'}">${d ? ic('check', 12) : ''}</span><span class="grow ${d ? 'muted' : ''}" style="${d ? 'text-decoration:line-through' : ''}">${l}</span>${ic('right')}</a>`).join('')}</div>`, { pad: false, sub: '2 of 4 done' })}
+  </div>
+  <div style="margin-top:16px">${card('Recent activity', `<div class="list" style="margin:-18px">${[['Marie Obed', 'invited Joel Bani as Data manager', '1 h'], ['Jean Tari', 'changed the sign-in policy', 'Yesterday'], ['Peter Kalo', 'accepted an invitation', 'Oct 3']].map(([w, a, t]) => `<div>${av(w, 'sm')}<span class="grow"><b style="font-weight:500">${w}</b> ${a}</span><span class="muted mono">${t} ago</span></div>`).join('')}</div>`, { pad: false, actions: '<a class="btn sm" href="#/activity">All activity</a>' })}</div>`;
+
+const people = () => `
+  ${head('Workspace', 'People', 'Everyone with access to this organisation.', `<button class="btn" data-toast="Exported">${ic('dl')}Export</button><button class="btn primary" data-modal="Invite people|Send invites">${ic('plus')}Invite people</button>`)}
+  <div class="card"><div class="toolbar"><div class="search grow" style="max-width:320px">${ic('search')}<input class="input" placeholder="Search by name or email" /></div><div class="seg">${['All', 'Active', 'Invited', 'Disabled'].map((x, i) => `<button aria-pressed="${!i}">${x}</button>`).join('')}</div><select class="select" style="width:auto"><option>All roles</option><option>Administrator</option><option>Data manager</option><option>Analyst</option></select></div>
+  <table class="tbl"><thead><tr><th>Person</th><th>Role</th><th>Org unit</th><th>Status</th><th>Last active</th><th></th></tr></thead><tbody>${PEOPLE.map((p) => `<tr class="click" data-modal="${p[0]}|Save changes" data-body="${field('Role', `<select class='select'><option>${p[2]}</option></select>`).replace(/"/g, "'") + field('Org unit', `<select class='select'><option>${p[3]}</option></select>`).replace(/"/g, "'")}"><td><div class="cell">${av(p[0])}<div><b>${p[0]}</b><small>${p[1]}</small></div></div></td><td>${p[2]}</td><td>${p[3]}</td><td>${badge(p[4], stT[p[4]])}</td><td class="muted">${p[5]}</td><td class="r"><button class="btn sm ghost">${ic('more')}</button></td></tr>`).join('')}</tbody></table>
+  <div class="pager">6 of 86<span class="end row"><button class="btn sm">${ic('left')}</button><button class="btn sm">${ic('right')}</button></span></div></div>`;
+
+const UNITS = ['Head Office|National|8', 'Shefa Province|Province|34', 'Sanma Province|Province|21', 'Tafea Province|Province|11'];
+const structure = () => `
+  ${head('Workspace', 'Structure', 'Your hierarchy: Country → Province → Zone → Facility. Roles can be granted for a unit and everything below it.', `<button class="btn primary" data-modal="Add top-level unit|Add unit">${ic('plus')}Add top-level unit</button>`)}
+  ${card('23 units', `<ul class="tree"><li><div class="node">${ic('chev')}${ic('building')}<b>Vanuatu — National</b><span class="lvl">Country</span><span class="end muted mono">86 people</span></div><ul>
+    ${[['Head Office', 'Department', 8, []], ['Shefa Province', 'Province', 34, [['Port Vila Zone', 'Zone', 19], ['Efate North Zone', 'Zone', 15]]], ['Sanma Province', 'Province', 21, [['Luganville Zone', 'Zone', 21]]], ['Tafea Province', 'Province', 11, []]].map(([n, l, c, kids]) => `<li><div class="node">${ic(kids.length ? 'chev' : 'right')}${ic('building')}<b style="font-weight:500">${n}</b><span class="lvl">${l}</span><span class="end muted mono">${c}</span><button class="icon-btn" data-modal="Add unit under ${n}|Add unit">${ic('plus')}</button></div>${kids.length ? `<ul>${kids.map(([k, kl, kc]) => `<li><div class="node">${ic('building')}<span>${k}</span><span class="lvl">${kl}</span><span class="end muted mono">${kc}</span></div></li>`).join('')}</ul>` : ''}</li>`).join('')}</ul></li></ul>`, { pad: false })}`;
+
+const entityTypes = () => `
+  ${head('Workspace', 'Entity types', 'Kinds of thing your organisation tracks everywhere. Projects can reuse these instead of redefining them.', `<button class="btn primary" data-modal="New entity type|Create type">${ic('plus')}New entity type</button>`)}
+  <div class="grid g3">${[['Facility', 'map', 12, 6, 'Health centres, clinics and hospitals'], ['District', 'pin', 6, 4, 'Administrative districts'], ['Health worker', 'users', 8, 3, 'Staff registered with a facility'], ['Medicine', 'zap', 9, 2, 'Essential medicines list'], ['Vaccination site', 'map', 7, 2, 'Fixed and outreach sites']].map(([n, i, a, p, d]) => `<section class="card app-card"><div class="row"><span class="ico">${ic(i)}</span><b style="font-size:15px">${n}</b></div><p class="sub">${d}</p><div class="row muted mono"><span>${a} attributes</span><span class="end">${p} projects</span></div></section>`).join('')}</div>`;
+
+const shared = () => `
+  ${head('Workspace', 'Shared entities', 'Records that several projects use, kept in one place so they never drift apart.', `<button class="btn primary" data-modal="Add shared entity|Add">${ic('plus')}Add shared entity</button>`)}
+  <div class="card"><div class="toolbar"><select class="select" style="width:auto"><option>Facility</option><option>District</option></select><div class="search grow" style="max-width:300px">${ic('search')}<input class="input" placeholder="Search facilities" /></div></div>
+  <table class="tbl"><thead><tr><th>Name</th><th>Code</th><th>Location</th><th class="r">Used in</th></tr></thead><tbody>${[['Vila Central Hospital', 'FAC-0001', 'Port Vila', 5], ['Northern District Hospital', 'FAC-0002', 'Luganville', 4], ['Lenakel Health Centre', 'FAC-0014', 'Tanna', 3], ['Norsup Health Centre', 'FAC-0021', 'Malekula', 2]].map((r) => `<tr><td><div class="cell"><span class="avatar sm" style="background:var(--brand)">${ic('map', 12)}</span><b>${r[0]}</b></div></td><td class="mono">${r[1]}</td><td>${r[2]}</td><td class="r mono">${r[3]} projects</td></tr>`).join('')}</tbody></table></div>`;
+
+const ROLES = [['Administrator', 'Full control of the organisation', 3], ['Data manager', 'Manage structure and people in their unit', 14], ['Analyst', 'Explore data and build dashboards', 41], ['Viewer', 'View published dashboards', 28]];
+const PERMS = ['View people', 'Manage people', 'Manage structure', 'Manage branding', 'Manage security', 'View billing', 'View audit log'];
+const access = () => `
+  ${head('Workspace', 'Access', 'Roles describe what someone can do; grants say who has which role, and where.', `<button class="btn primary" data-modal="New role|Create role">${ic('plus')}New role</button>`)}
+  <div class="tabs" data-tabs>${[['roles', 'Roles'], ['grants', 'Who has access'], ['matrix', 'Permission matrix']].map(([k, l], i) => `<button data-t="${k}" aria-selected="${!i}">${l}</button>`).join('')}</div>
+  <div data-pane="roles"><div class="grid g2">${ROLES.map(([n, d, c]) => `<section class="card"><div class="body"><div class="row"><h2 style="font-size:15px">${n}</h2><span class="end">${badge(c + ' people', 'plain')}</span></div><p class="sub" style="margin:6px 0 14px">${d}</p><button class="btn sm" data-modal="Edit ${n}|Save role">${ic('edit')}Edit</button></div></section>`).join('')}</div></div>
+  <div data-pane="grants" hidden>${card('4 grants', `<table class="tbl"><thead><tr><th>Person</th><th>Role</th><th>Scope</th><th></th></tr></thead><tbody>${[['Jean Tari', 'Administrator', 'Whole organisation'], ['Marie Obed', 'Data manager', 'Shefa Province and below'], ['Peter Kalo', 'Analyst', 'Whole organisation'], ['Ruth Saul', 'Viewer', 'Tafea Province and below']].map((g) => `<tr><td><div class="cell">${av(g[0], 'sm')}${g[0]}</div></td><td>${g[1]}</td><td class="muted">${g[2]}</td><td class="r"><button class="btn sm danger" data-modal="Revoke access|Revoke">Revoke</button></td></tr>`).join('')}</tbody></table>`, { pad: false, actions: '<button class="btn sm" data-modal="Grant access|Grant">Grant access</button>' })}</div>
+  <div data-pane="matrix" hidden>${card('Permission matrix', `<table class="tbl matrix"><thead><tr><th>Permission</th>${ROLES.map((r) => `<th>${r[0]}</th>`).join('')}</tr></thead><tbody>${PERMS.map((p, i) => `<tr><td>${p}</td>${ROLES.map((r, j) => `<td>${j === 0 || (j === 1 && i < 3) || (j === 2 && i === 0) || (j === 3 && i === 0 && false) ? `<span class="yes">${ic('check')}</span>` : '<span class="no">–</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table>`, { pad: false })}</div>`;
+
+const branding = () => `
+  ${head('Settings', 'Branding', 'How your organisation looks to everyone who signs in.', `<button class="btn primary" data-toast="Branding saved">Save changes</button>`)}
+  <div class="grid g2"><div class="stack">${card('Identity', `<div class="stack">${field('Application name', '<input class="input" value="Ministry of Health" />', 'Shown in the browser tab and emails.')}${field('Logo', `<div class="row"><span class="mark" id="lg" style="width:48px;height:48px;font-size:20px">M</span><button class="btn">Upload</button><button class="btn ghost">Remove</button></div>`, 'Square SVG or PNG.')}</div>`)}
+    ${card('Colour', `<div class="stack">${field('Brand colour', `<div class="row wrap">${['#0f62fe', '#007d79', '#8a3ffc', '#da1e28', '#ba4e00', '#198038', '#525252'].map((c) => `<span class="swatch" data-c="${c}" style="background:${c}"></span>`).join('')}<input class="input mono" style="width:110px" value="#0f62fe" /></div>`, 'Buttons, links and highlights. Text colour is chosen for contrast automatically.')}<div class="row">${tgl(true)}<span>Animated grid on the sign-in page</span></div></div>`)}</div>
+  ${card('Sign-in preview', `<div class="login-prev"><div class="c"><div class="row"><span class="mark">M</span><b>Ministry of Health</b></div><input class="input" placeholder="Email" /><input class="input" type="password" placeholder="Password" /><button class="btn primary">Sign in</button></div></div>`, { pad: false, sub: 'Updates live as you edit' })}</div>`;
+
+const languages = () => `
+  ${head('Settings', 'Languages', 'Choose which languages people can use, and who translates what.', `<button class="btn primary" data-modal="Add language|Add">${ic('plus')}Add language</button>`)}
+  ${card('4 languages', `<table class="tbl"><thead><tr><th>Language</th><th>Coverage</th><th>Status</th><th>Default</th></tr></thead><tbody>${[['English', 'en', 100, 'Published', 1], ['Français', 'fr', 100, 'Published', 0], ['Bislama', 'bi', 72, 'Draft', 0], ['Tok Pisin', 'tpi', 38, 'Draft', 0]].map((l) => `<tr><td><div class="cell"><span class="chip mono">${l[1]}</span><b>${l[0]}</b></div></td><td style="width:240px"><div class="row"><div class="meter grow ${l[2] < 50 ? 'warn' : ''}"><i style="width:${l[2]}%"></i></div><span class="mono muted">${l[2]}%</span></div></td><td>${badge(l[3], l[3] === 'Published' ? 'good' : 'warn')}</td><td>${l[4] ? badge('Default', 'brand') : '<button class="btn sm ghost">Make default</button>'}</td></tr>`).join('')}</tbody></table>`, { pad: false })}`;
+
+const security = () => `
+  ${head('Settings', 'Security', 'Sign-in rules for everyone in this organisation.', `<button class="btn primary" data-toast="Security policy saved">Save changes</button>`)}
+  <div class="grid g2">${card('Sign-in policy', `<div class="list" style="margin:-18px">${[['Require two-step sign-in', 'Everyone must add an authenticator app.', 1], ['Allow password sign-in', 'Turn off to require single sign-on.', 1], ['Allow public sign-up', 'Anyone with a matching email domain can join.', 0], ['Session timeout', 'Sign people out after 8 hours of inactivity.', 1]].map(([l, d, o]) => `<div><div class="grow"><b style="font-weight:500">${l}</b><div class="muted">${d}</div></div>${tgl(!!o)}</div>`).join('')}</div>`, { pad: false })}
+  ${card('Password rules', `<div class="stack">${field('Minimum length', '<input class="input" value="12" />')}${field('Breached password check', '<select class="select"><option>Block known breached passwords</option><option>Warn only</option></select>')}</div>`)}
+  ${card('Single sign-on', `<div class="row"><span class="avatar" style="background:#0078d4">${ic('lock', 14)}</span><div class="grow"><b>Microsoft Entra ID</b><div class="muted">OpenID Connect · 86 people</div></div>${badge('Connected', 'good')}<button class="btn sm">Configure</button></div>`)}
+  ${card('Recent sign-in events', `<div class="list" style="margin:-18px">${[['Failed sign-in for ruth@moh.gov.vu', '3 h'], ['New device for jean@moh.gov.vu', 'Yesterday']].map(([a, t]) => `<div>${ic('shield')}<span class="grow">${a}</span><span class="muted mono">${t} ago</span></div>`).join('')}</div>`, { pad: false })}</div>`;
+
+const domains = () => `
+  ${head('Settings', 'Domains', 'Serve the workspace and public forms from your own address.', `<button class="btn primary" data-modal="Add domain|Verify domain" data-body='${field('Domain', '<input class="input" placeholder="data.example.org" />') + field('Used for', '<select class="select"><option>Workspace</option><option>Public forms</option></select>')}'>${ic('plus')}Add domain</button>`)}
+  ${card('3 domains', `<table class="tbl"><thead><tr><th>Domain</th><th>Used for</th><th>Status</th><th></th></tr></thead><tbody>${[['moh.grids.app', 'Workspace', 'Default', 'good'], ['data.health.gov.vu', 'Workspace', 'Verified', 'good'], ['survey.health.gov.vu', 'Public forms', 'DNS pending', 'warn']].map((d) => `<tr><td class="mono">${d[0]}</td><td>${d[1]}</td><td>${badge(d[2], d[3])}</td><td class="r">${d[3] === 'warn' ? '<button class="btn sm" data-modal="DNS records|Check again" data-body="<div class=\'pre\'>CNAME  survey  →  edge.grids.app</div>">View DNS records</button>' : ''}</td></tr>`).join('')}</tbody></table>`, { pad: false })}`;
+
+const applications = () => `
+  ${head('Settings', 'Applications', 'Apps that sign in through your organisation, and the keys they use.', `<button class="btn primary" data-modal="Register application|Register">${ic('plus')}Register application</button>`)}
+  <div class="grid g2">${[['Field data app', 'Mobile · public client', 'app', 'fda_live_4f9a…'], ['Reporting service', 'Server · confidential', 'zap', 'rpt_live_a21c…'], ['Partner dashboard', 'Web · public client', 'chart', 'ptn_live_77d0…']].map(([n, t, i, k]) => `<section class="card app-card"><div class="row"><span class="ico">${ic(i)}</span><div class="grow"><b>${n}</b><div class="muted">${t}</div></div>${badge('Active', 'good')}</div><div class="row"><code class="grow">${k}</code><button class="btn sm" data-toast="Copied">Copy</button><button class="btn sm" data-modal="Rotate secret|Rotate">Rotate</button></div></section>`).join('')}</div>`;
+
+const billing = () => `
+  ${head('Settings', 'Billing', 'Your plan, usage and invoices.', `<button class="btn" data-modal="Update payment method|Save">Payment method</button>`)}
+  <div class="grid g21"><div class="stack">${card('Usage this month', [['Users', 47, 75], ['Projects', 14, 40], ['Submissions', 21800, 25000], ['Storage (GB)', 38, 100]].map(([l, v, m]) => `<div style="margin-bottom:16px"><div class="row"><span>${l}</span><span class="end mono muted">${v.toLocaleString()} / ${m.toLocaleString()}</span></div><div class="meter ${v / m > .85 ? 'warn' : ''}" style="margin-top:6px"><i style="width:${(v / m) * 100}%"></i></div></div>`).join(''), { sub: 'Resets Nov 1' })}
+  ${card('Invoices', `<table class="tbl"><tbody>${[['INV-0412', 'Oct 1, 2026', '$199.00'], ['INV-0371', 'Sep 1, 2026', '$199.00'], ['INV-0330', 'Aug 1, 2026', '$199.00']].map((i) => `<tr><td class="mono">${i[0]}</td><td class="muted">${i[1]}</td><td class="mono">${i[2]}</td><td>${badge('Paid', 'good')}</td><td class="r"><button class="btn sm ghost">${ic('dl')}PDF</button></td></tr>`).join('')}</tbody></table>`, { pad: false })}</div>
+  <div class="stack">${card('Current plan', `<div style="font:600 28px var(--sans);letter-spacing:-.03em">Team <span class="muted" style="font-size:14px;font-weight:400">$199 / month</span></div><p class="muted" style="margin:8px 0 14px">Renews Nov 1, 2026 · Visa ···· 4242</p><a class="btn primary" style="width:100%" data-modal="Change plan|Change plan">Change plan</a>`)}${card('Need more?', '<p class="sub">Enterprise adds SSO audit export, a dedicated schema and priority support.</p><button class="btn" style="margin-top:12px" data-toast="We\'ll be in touch">Talk to sales</button>')}</div></div>`;
+
+const support = () => `
+  ${head('Help', 'Support', 'Ask the Grids team for help. Replies arrive here and by email.', `<button class="btn primary" data-modal="New ticket|Submit" data-body='${field('Subject', '<input class="input"/>') + field('What do you need?', '<textarea class="textarea"></textarea>') + field('Priority', '<select class="select"><option>Normal</option><option>High</option></select>')}'>${ic('plus')}New ticket</button>`)}
+  ${card('Your tickets', `<table class="tbl"><thead><tr><th>Ticket</th><th>Status</th><th>Updated</th></tr></thead><tbody>${[['T-1048', 'SSO redirect loop after Entra update', 'open', '2 h'], ['T-1021', 'Bulk import of 40k rows times out', 'resolved', '5 d']].map((t) => `<tr class="click" data-go="support/${t[0]}"><td><b style="font-weight:500">${t[1]}</b><div class="muted mono">${t[0]}</div></td><td>${badge(t[2], stT[t[2]])}</td><td class="muted">${t[3]} ago</td></tr>`).join('')}</tbody></table>`, { pad: false })}`;
+const ticket = () => `
+  ${head('Support · T-1048', 'SSO redirect loop after Entra update', '', `<a class="btn" href="#/support">${ic('left')}Back</a>`)}
+  ${card('Conversation', `<div class="list" style="margin:-18px">${[['Jean Tari', 'Since Microsoft rotated our app registration, everyone is stuck in a redirect loop.', '2 d'], ['Amara Kone · Grids', 'Could you confirm the redirect URI ends with /auth/callback?', '1 d']].map(([w, m, t]) => `<div style="align-items:flex-start">${av(w.split(' ·')[0], 'sm')}<div><b style="font-weight:500">${w}</b> <span class="muted">${t} ago</span><p style="margin-top:4px">${m}</p></div></div>`).join('')}</div><div style="padding:16px 0 0"><textarea class="textarea" placeholder="Write a reply…"></textarea><div class="row" style="margin-top:10px"><button class="btn primary end" data-toast="Reply sent">Send reply</button></div></div>`)}`;
+
+const activity = () => `
+  ${head('Help', 'Activity', 'An audit trail of changes made in this organisation.', `<button class="btn" data-toast="Exported">${ic('dl')}Export</button>`)}
+  <div class="card"><div class="toolbar"><div class="search grow" style="max-width:300px">${ic('search')}<input class="input" placeholder="Filter by person or action" /></div><select class="select" style="width:auto"><option>Last 7 days</option><option>Last 30 days</option></select></div>
+  <table class="tbl"><thead><tr><th>When</th><th>Person</th><th>Action</th><th>Target</th></tr></thead><tbody>${[['10:42', 'Jean Tari', 'security.update', 'Sign-in policy'], ['09:15', 'Marie Obed', 'people.invite', 'joel@moh.gov.vu'], ['Yesterday', 'Jean Tari', 'branding.update', 'Brand colour'], ['Oct 3', 'Peter Kalo', 'invite.accept', '—'], ['Oct 2', 'Jean Tari', 'domain.verify', 'data.health.gov.vu']].map((r) => `<tr><td class="mono muted">${r[0]}</td><td><div class="cell">${av(r[1], 'sm')}${r[1]}</div></td><td><code>${r[2]}</code></td><td>${r[3]}</td></tr>`).join('')}</tbody></table></div>`;
+
+const orgs = () => `<div style="max-width:520px;margin:30px auto" class="stack">${head('Welcome back', 'Choose an organisation', 'You belong to 3 organisations.')}${[['Ministry of Health', 'Vanuatu · Administrator', '#0f62fe'], ['Pacific Community (SPC)', 'Nouméa · Analyst', '#007d79'], ['Tonga Statistics Dept', 'Nukuʻalofa · Viewer', '#8a3ffc']].map(([n, r, c]) => `<div class="org-card" data-go=""><span class="mark" style="background:${c};width:40px;height:40px">${n[0]}</span><div class="grow"><b>${n}</b><div class="muted">${r}</div></div>${ic('right')}</div>`).join('')}</div>`;
+const invite = () => `<div style="max-width:440px;margin:40px auto">${card('Join Ministry of Health', `<div class="stack"><p class="sub">Jean Tari invited you as <b>Analyst</b>.</p>${field('Full name', '<input class="input" value="Joel Bani" />')}${field('Password', '<input class="input" type="password" />', 'At least 12 characters.')}<button class="btn primary" data-go="">Accept invitation</button></div>`)}</div>`;
+
+const routes = { '': home, people, structure, 'entity-types': entityTypes, 'shared-entities': shared, access, branding, languages, security, domains, applications, billing, support, 'support/:id': ticket, activity, orgs, 'invite/:t': invite };
+initTheme($('#theme')); $('#sw').innerHTML = ic('chev'); $('#sb').innerHTML = ic('search') + 'Search…<span class="kbd">⌘K</span>'; $('[aria-label="Notifications"], .end.row .icon-btn').innerHTML = ic('mail');
+$('#sb').onclick = () => toast('Command palette — jump to any page or person');
+router(routes, (path, html) => {
+  nav(path);
+  const base = path.split('/')[0];
+  $('#crumbs').innerHTML = base === '' ? '<b>Home</b>' : base === 'orgs' || base === 'invite' ? '<b>Organisations</b>' : `<span>${NAV.find(([, i]) => i.some((x) => x[0] === base))?.[0] ?? ''}</span><span>/</span><b>${LABEL[base] ?? ''}</b>`;
+  const v = $('#view'); v.innerHTML = html; wire(v);
+  $$('tr[data-go]', v).forEach((r) => (r.onclick = () => (location.hash = '#/' + r.dataset.go)));
+  $$('tr[data-modal]', v).forEach((r) => (r.onclick = () => { const [t, ok] = r.dataset.modal.split('|'); modal(t, r.dataset.body, ok); }));
+  $$('.swatch', v).forEach((s) => { const old = s.onclick; s.onclick = () => { old(); $('#orgmark').style.background = s.dataset.c; const l = $('#lg'); if (l) l.style.background = s.dataset.c; }; });
+});
+</script>
+</body>
+</html>

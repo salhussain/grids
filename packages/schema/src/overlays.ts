@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Key } from './common.js';
+import { ElementRef, Key } from './common.js';
 import { Freshness } from './projects.js';
 import { AGGREGATIONS } from './viz.js';
 
@@ -17,6 +17,26 @@ export const OVERLAY_DISPLAYS = ['shade', 'extrude', 'bubbles', 'heatmap'] as co
 export const OverlayDisplay = z.enum(OVERLAY_DISPLAYS);
 export type OverlayDisplay = z.infer<typeof OverlayDisplay>;
 
+/**
+ * Where an overlay's numbers come from when it is built from a dataset instead of an indicator: each row names
+ * a place in `entityColumn` (matched on the place's code, name or id) and carries its number in `valueColumn`.
+ */
+export const OVERLAY_ENTITY_KEYS = ['code', 'name', 'id'] as const;
+export const OverlayDataset = z.object({
+  dataset: Key,
+  /** The column that says which place a row is about. */
+  entityColumn: z.string().trim().min(1).max(63),
+  /** What that column holds: the place's code, its name, or its id. */
+  entityKey: z.enum(OVERLAY_ENTITY_KEYS).default('code'),
+  /** Narrows the match to one type of place (codes only need to be unique within a type). */
+  entityType: Key.nullable().default(null),
+  /** The column with the number; not needed when counting rows. */
+  valueColumn: z.string().trim().min(1).max(63).nullable().default(null),
+  /** A date column, so the overlay's time window and "latest" apply to the rows. */
+  timeColumn: z.string().trim().min(1).max(63).nullable().default(null),
+});
+export type OverlayDataset = z.infer<typeof OverlayDataset>;
+
 export const MapOverlayInput = z.object({
   key: Key,
   name: z.string().trim().min(1).max(120),
@@ -25,7 +45,10 @@ export const MapOverlayInput = z.object({
   /** A configured overlay group (levels nest); when set, `group` shows its path. */
   groupId: z.uuid().nullable().default(null),
   description: z.string().trim().max(500).default(''),
-  element: Key,
+  /** The indicator to colour by; null when the overlay is built from a dataset. */
+  element: ElementRef.nullable().default(null),
+  /** A dataset to colour by instead of an indicator. */
+  dataset: OverlayDataset.nullable().default(null),
   aggregation: z.enum(AGGREGATIONS).default('sum'),
   /** Window of observations; null = each entity's latest value. */
   hours: z.number().int().min(1).max(24 * 3660).nullable().default(24 * 30),
@@ -38,10 +61,14 @@ export const MapOverlayInput = z.object({
   /** Higher is better (flips the performance palette). */
   higherIsBetter: z.boolean().default(false),
   unit: z.string().trim().max(20).default(''),
+  /** Whether the unit is written after the number (12 cases) or before it ($12). */
+  unitPosition: z.enum(['after', 'before']).default('after'),
+  /** Long numbers shortened: 12,400 as 12.4k. */
+  compact: z.boolean().default(false),
   decimals: z.number().int().min(0).max(6).default(0),
   isPublic: z.boolean().default(false),
   /** Only members of this permission group (or a group above it) see the overlay. */
-  permissionGroup: Key.nullable().default(null),
+  permissionGroup: z.uuid().nullable().default(null),
 });
 export type MapOverlayInput = z.input<typeof MapOverlayInput>;
 export type MapOverlay = z.output<typeof MapOverlayInput>;

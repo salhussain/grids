@@ -1,5 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 import type { IdentityDB } from '@grids/db';
+import type { Sealer } from './crypto.js';
+import { clientMetadata } from './clients.js';
 
 type Payload = Record<string, unknown> & { grantId?: string; uid?: string; userCode?: string; consumed?: number };
 
@@ -7,7 +9,7 @@ type Payload = Record<string, unknown> & { grantId?: string; uid?: string; userC
  * oidc-provider storage adapter on Postgres (one table for all models).
  * Expired rows are ignored on read and swept periodically.
  */
-export function createAdapterClass(db: Kysely<IdentityDB>) {
+export function createAdapterClass(db: Kysely<IdentityDB>, sealer: Sealer) {
   return class PgAdapter {
     constructor(readonly kind: string) {}
 
@@ -28,7 +30,14 @@ export function createAdapterClass(db: Kysely<IdentityDB>) {
         .execute();
     }
 
+    /** Applications registered by organisations (the `Client` model); first-party clients are static. */
+    async findClient(id: string): Promise<Payload | undefined> {
+      const row = await db.selectFrom('org_client').selectAll().where('client_id', '=', id).where('disabled', '=', false).executeTakeFirst();
+      return row ? clientMetadata(row, sealer) : undefined;
+    }
+
     async findBy(column: 'id' | 'uid' | 'user_code', value: string): Promise<Payload | undefined> {
+      if (this.kind === 'Client') return column === 'id' ? this.findClient(value) : undefined;
       const row = await db
         .selectFrom('oidc_model')
         .select(['payload', 'consumed_at', 'expires_at'])

@@ -29,6 +29,7 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
       icon: 'hospital',
       color: '#da1e28',
       geometry: 'point',
+      marker: { style: 'pin' },
       parentTypes: ['district'],
       attributes: [
         { key: 'facility_type', label: 'Type', type: 'select', options: [...TYPES], summary: true, required: true },
@@ -187,11 +188,10 @@ export async function healthSurveillance(tx: Tx, c: TemplateCtx, now = new Date(
       ],
     },
     settings: {
-      fillRole: 'editor',
       workflow: {
         enabled: true,
         stages: [
-          { key: 'district', name: 'District review', description: 'Verify with the facility by phone and check the line list.', approvers: { role: 'editor' } },
+          { key: 'district', name: 'District review', description: 'Verify with the facility by phone and check the line list.', approvers: { role: 'manager' } },
           { key: 'national', name: 'National sign-off', description: 'Decide on a rapid response team.', approvers: { role: 'manager' }, condition: '${cases} >= 10 or ${deaths} > 0' },
         ],
       },

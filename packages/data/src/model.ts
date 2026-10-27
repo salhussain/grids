@@ -1,8 +1,12 @@
-import { sql, type Kysely, type Transaction } from 'kysely';
+import { sql, type Kysely, type RawBuilder, type Transaction } from 'kysely';
 import type { CellDB } from '@grids/db';
 import { uuidv7, type AttributeDef, type Geometry } from '@grids/schema';
 
 export type CellTx = Kysely<CellDB> | Transaction<CellDB>;
+
+/** An entity is in a project when it belongs to it or is shared (belongs to the organisation). */
+export const inProject = (alias: string, projectId: string): RawBuilder<boolean> =>
+  sql<boolean>`(${sql.ref(`${alias}.project_id`)} = ${projectId} or ${sql.ref(`${alias}.project_id`)} is null)`;
 
 /** ltree label for an entity: its id without dashes. */
 export const label = (id: string) => id.replace(/-/g, '');
@@ -52,20 +56,42 @@ export interface TypeInfo {
   id: string;
   key: string;
   name: string;
+  plural: string;
   attributes: AttributeDef[];
   parentTypes: string[];
   geometry: string;
+  maxPerProject: number | null;
+  /** Set when the organisation defines the type: its entities are shared, not owned by a project. */
+  orgTypeId: string | null;
 }
 
-export async function entityType(tx: CellTx, projectId: string, key: string): Promise<TypeInfo> {
+export async function entityType(tx: CellTx, projectId: string | null, key: string): Promise<TypeInfo> {
   const t = await tx
     .selectFrom('entity_type')
-    .select(['id', 'key', 'name', 'attributes', 'parent_types', 'geometry'])
-    .where('project_id', '=', projectId)
+    .select(['id', 'key', 'name', 'plural', 'attributes', 'parent_types', 'geometry', 'max_per_project', 'org_type_id'])
+    .where('project_id', projectId === null ? 'is' : '=', projectId)
     .where('key', '=', key)
     .executeTakeFirst();
   if (!t) throw new DataError(`Unknown entity type "${key}"`, 404);
-  return { id: t.id, key: t.key, name: t.name, attributes: t.attributes as AttributeDef[], parentTypes: t.parent_types, geometry: t.geometry };
+  return { id: t.id, key: t.key, name: t.name, attributes: t.attributes as AttributeDef[], parentTypes: t.parent_types, geometry: t.geometry, maxPerProject: t.max_per_project, plural: t.plural, orgTypeId: t.org_type_id };
+}
+
+/** Key of the hidden entity type every project's own entity has. */
+export const PROJECT_TYPE_KEY = 'this_project';
+
+/** A project is itself an entity (so forms can be about it): creates its system type and entity once. */
+export async function ensureProjectEntity(tx: CellTx, p: { tenantId: string; projectId: string; key: string; name: string }): Promise<string> {
+  let type = await tx.selectFrom('entity_type').select('id').where('project_id', '=', p.projectId).where('key', '=', PROJECT_TYPE_KEY).executeTakeFirst();
+  if (!type) {
+    const id = uuidv7();
+    await tx.insertInto('entity_type').values({ id, tenant_id: p.tenantId, project_id: p.projectId, key: PROJECT_TYPE_KEY, name: 'Project', plural: 'Projects', system: true, attributes: '[]', parent_types: [] }).execute();
+    type = { id };
+  }
+  const existing = await tx.selectFrom('entity').select('id').where('type_id', '=', type.id).executeTakeFirst();
+  if (existing) return existing.id;
+  const id = uuidv7();
+  await tx.insertInto('entity').values({ id, tenant_id: p.tenantId, project_id: p.projectId, type_id: type.id, code: p.key, name: p.name, parent_id: null, path: label(id), attributes: '{}' }).execute();
+  return id;
 }
 
 export interface EntityRowInput {
@@ -92,22 +118,24 @@ const geoKey = (g: Geometry | null | undefined) => (g ? JSON.stringify(g.coordin
 /**
  * Creates or updates entities of one type by code (idempotent for jobs and imports).
  * Attributes merge into the current state; every change is recorded in entity_change.
- * `scopePath` restricts writes to a subtree (scoped project members).
+ * `scope` restricts writes to these subtrees (scoped project members); null = anywhere.
  */
 export async function upsertEntities(
   tx: CellTx,
   opts: {
     tenantId: string;
-    projectId: string;
+    /** null = shared entities, owned by the organisation (types the organisation defines). */
+    projectId: string | null;
     typeKey: string;
     rows: EntityRowInput[];
     source: string;
     sourceRef?: string | null;
     actorId?: string | null;
-    scopePath?: string | null;
+    scope?: string[] | null;
   },
 ): Promise<UpsertResult> {
   const type = await entityType(tx, opts.projectId, opts.typeKey);
+  if (opts.projectId !== null && type.orgTypeId) throw new DataError(`${type.plural} are shared across the organisation: add them under the organisation’s shared entities`, 422);
   const result: UpsertResult = { created: 0, updated: 0, unchanged: 0, skipped: 0, ids: new Map() };
   // Last row wins for duplicate codes within a batch.
   const rows = [...new Map(opts.rows.filter((r) => r.code && r.name).map((r) => [String(r.code), r])).values()];
@@ -119,7 +147,7 @@ export async function upsertEntities(
       await tx
         .selectFrom('entity')
         .select(['id', 'code', 'name', 'attributes', 'parent_id', sql<string>`path::text`.as('path'), sql<string | null>`ST_AsGeoJSON(geom, 6)`.as('geo')])
-        .where('project_id', '=', opts.projectId)
+        .where('project_id', opts.projectId === null ? 'is' : '=', opts.projectId)
         .where('type_id', '=', type.id)
         .where('code', 'in', rows.map((r) => String(r.code)))
         .execute()
@@ -136,7 +164,7 @@ export async function upsertEntities(
       .selectFrom('entity as e')
       .innerJoin('entity_type as t', 't.id', 'e.type_id')
       .select(['e.id', 'e.code', sql<string>`e.path::text`.as('path'), 't.key as type_key'])
-      .where('e.project_id', '=', opts.projectId)
+      .where(opts.projectId === null ? sql<boolean>`e.project_id is null` : inProject('e', opts.projectId))
       .where((eb) =>
         eb.or([
           ...(parentIds.length ? [eb('e.id', 'in', parentIds)] : []),
@@ -150,7 +178,7 @@ export async function upsertEntities(
     }
   }
 
-  const inScope = (path: string) => !opts.scopePath || path === opts.scopePath || path.startsWith(`${opts.scopePath}.`);
+  const inScope = (path: string) => !opts.scope || opts.scope.some((r) => path === r || path.startsWith(`${r}.`));
   const inserts: { id: string; code: string; name: string; parent_id: string | null; path: string; attributes: string; geo: string | null }[] = [];
   const changes: { tenant_id: string; entity_id: string; changes: string; source: string; source_ref: string | null; actor_id: string | null }[] = [];
 
@@ -212,6 +240,11 @@ export async function upsertEntities(
     result.updated++;
   }
 
+  if (type.maxPerProject !== null && inserts.length) {
+    const have = Number((await tx.selectFrom('entity').select((eb) => eb.fn.countAll<string>().as('n')).where('type_id', '=', type.id).executeTakeFirstOrThrow()).n);
+    if (have + inserts.length > type.maxPerProject)
+      throw new DataError(`A project can have at most ${type.maxPerProject} ${type.maxPerProject === 1 ? type.name : type.plural}`, 422);
+  }
   for (let i = 0; i < inserts.length; i += 500) {
     await tx
       .insertInto('entity')
@@ -266,11 +299,11 @@ export async function writeObservations(
     (
       await tx
         .selectFrom('data_element')
-        .select(['id', 'key', 'value_type'])
+        .select(['id', 'ref', 'value_type'])
         .where('project_id', '=', opts.projectId)
-        .where('key', 'in', [...new Set(opts.items.map((i) => i.element))])
+        .where('ref', 'in', [...new Set(opts.items.map((i) => i.element))])
         .execute()
-    ).map((e) => [e.key, e]),
+    ).map((e) => [e.ref, e]),
   );
   const unknown = [...new Set(opts.items.map((i) => i.element))].filter((k) => !elements.has(k));
   if (unknown.length) throw new DataError(`Unknown data element(s): ${unknown.join(', ')}`, 422);
@@ -323,7 +356,7 @@ export async function entityIdsByCode(tx: CellTx, projectId: string, typeKey: st
     .selectFrom('entity as e')
     .innerJoin('entity_type as t', 't.id', 'e.type_id')
     .select(['e.id', 'e.code'])
-    .where('e.project_id', '=', projectId)
+    .where(inProject('e', projectId))
     .where('t.key', '=', typeKey)
     .where('e.code', 'in', [...new Set(codes)])
     .execute();

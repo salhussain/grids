@@ -5,6 +5,7 @@ import type { IdentityDB } from '@grids/db';
 import type { Accounts } from './accounts.js';
 import { createAdapterClass } from './adapter.js';
 import type { IdentityConfig } from './config.js';
+import type { Sealer } from './crypto.js';
 
 /** First-party clients: public SPAs using authorization code + PKCE. */
 export function clients(config: IdentityConfig) {
@@ -18,19 +19,33 @@ export function clients(config: IdentityConfig) {
     redirect_uris: [`${origin}/auth/callback`],
     post_logout_redirect_uris: [`${origin}/`],
   });
+  // The mobile app: a native public client (PKCE) that returns to its own link scheme.
+  const mobile = {
+    client_id: 'grids-mobile',
+    client_name: 'Grids Mobile',
+    token_endpoint_auth_method: 'none' as const,
+    application_type: 'native' as const,
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code' as const],
+    redirect_uris: ['grids://auth/callback', ...config.MOBILE_DEV_REDIRECTS.split(',').map((u) => u.trim()).filter(Boolean)],
+    post_logout_redirect_uris: ['grids://auth/signed-out'],
+  };
   return [
+    mobile,
     spa('grids-console', 'Grids Console', config.CONSOLE_URL),
     spa('grids-web', 'Grids Workspace', config.WEB_URL),
     spa('grids-portal', 'Grids Portal', config.PORTAL_URL),
   ];
 }
 
-export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, accounts: Accounts, keys: JWK[]) {
+export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, accounts: Accounts, keys: JWK[], sealer: Sealer) {
   const audience = config.API_AUDIENCE;
   const configuration: Configuration = {
-    adapter: createAdapterClass(db) as never,
+    adapter: createAdapterClass(db, sealer) as never,
     clients: clients(config),
-    findAccount: async (_ctx, sub) => {
+    // Applications registered by organisations carry the organisation they belong to.
+    extraClientMetadata: { properties: ['org_id'], validator: () => undefined },
+    findAccount: async (ctx, sub) => {
       const a = await accounts.find(sub);
       if (!a || a.status !== 'active') return undefined;
       return {
@@ -43,11 +58,13 @@ export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, a
           given_name: a.given_name ?? undefined,
           family_name: a.family_name ?? undefined,
           locale: a.locale ?? undefined,
+          // Which organisation's application is signing in (tenant-registered clients only).
+          ...(ctx?.oidc?.client?.['org_id'] ? { org_id: String(ctx.oidc.client['org_id']) } : {}),
         }),
       };
     },
     claims: {
-      openid: ['sub'],
+      openid: ['sub', 'org_id'],
       email: ['email', 'email_verified'],
       profile: ['name', 'given_name', 'family_name', 'locale'],
     },
@@ -80,10 +97,11 @@ export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, a
       // Access tokens for the Grids API are JWTs with audience `grids-api`.
       resourceIndicators: {
         enabled: true,
-        defaultResource: () => audience,
+        // Organisation applications never get tokens for the Grids API: they sign people in (ID token, userinfo) only.
+        defaultResource: (_ctx, client) => (client?.['org_id'] ? undefined : audience),
         useGrantedResource: () => true,
-        getResourceServerInfo: (_ctx, resourceIndicator) => {
-          if (resourceIndicator !== audience) throw new Error('unknown resource');
+        getResourceServerInfo: (_ctx, resourceIndicator, client) => {
+          if (resourceIndicator !== audience || client?.['org_id']) throw new Error('unknown resource');
           return { scope: 'api', audience, accessTokenTTL: 15 * 60, accessTokenFormat: 'jwt', jwt: { sign: { alg: 'RS256' } } };
         },
       },
@@ -93,9 +111,10 @@ export function createProvider(config: IdentityConfig, db: Kysely<IdentityDB>, a
       AuthorizationCode: 60,
       IdToken: 60 * 60,
       Interaction: 60 * 60,
-      Session: 14 * 24 * 3600,
-      Grant: 14 * 24 * 3600,
-      RefreshToken: 14 * 24 * 3600,
+      // One working day: the sign-in is forced again after 12 hours whatever the activity (see MAX_SESSION_SECONDS).
+      Session: 12 * 3600,
+      Grant: 12 * 3600,
+      RefreshToken: 12 * 3600,
     },
     rotateRefreshToken: true,
     clientBasedCORS: (_ctx, origin, client) => (client.redirectUris ?? []).some((u: string) => new URL(u).origin === origin),

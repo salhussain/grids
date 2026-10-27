@@ -32,8 +32,9 @@ export interface IdentityDeps {
 
 export async function buildIdentityApp(deps: IdentityDeps) {
   const { config, db } = deps;
-  const accounts = new Accounts(db, sealer(config.IDENTITY_SECRET_KEY), deps.mailer);
-  const provider = createProvider(config, db, accounts, await loadSigningKeys(db));
+  const seal = sealer(config.IDENTITY_SECRET_KEY);
+  const accounts = new Accounts(db, seal, deps.mailer);
+  const provider = createProvider(config, db, accounts, await loadSigningKeys(db), seal);
   const origin = originOf(config.IDENTITY_ISSUER);
 
   const app = Fastify({ logger: deps.logger ?? false, trustProxy: true, bodyLimit: 64 * 1024 });
@@ -46,7 +47,8 @@ export async function buildIdentityApp(deps: IdentityDeps) {
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
         connectSrc: ["'self'"],
-        formAction: ["'self'", config.CONSOLE_URL, config.WEB_URL, config.PORTAL_URL],
+        // Sign-out ends on organisations' own application addresses, so redirects after a form may go anywhere https.
+        formAction: ["'self'", 'https:', 'http://localhost:*', 'http://127.0.0.1:*', config.CONSOLE_URL, config.WEB_URL, config.PORTAL_URL],
         frameAncestors: ["'none'"],
       },
     },
@@ -75,10 +77,11 @@ export async function buildIdentityApp(deps: IdentityDeps) {
   // Login app API (same-origin only).
   await app.register(async (ui) => {
     ui.addHook('preHandler', sameOrigin(origin));
-    interactionRoutes(ui, { provider, accounts, config, branding: deps.branding ?? brandingLoader(config.API_URL) });
-    selfServiceRoutes(ui, { provider, accounts, config });
+    const branding = deps.branding ?? brandingLoader(config.API_URL);
+    interactionRoutes(ui, { provider, accounts, config, branding });
+    selfServiceRoutes(ui, { provider, accounts, config, branding });
   });
-  internalRoutes(app, { accounts, config });
+  internalRoutes(app, { accounts, config, db, seal });
 
   // The built login app at /ui (SPA: unknown /ui paths serve index.html).
   if (existsSync(join(config.LOGIN_DIST, 'index.html'))) {

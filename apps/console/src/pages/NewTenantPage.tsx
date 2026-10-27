@@ -17,6 +17,7 @@ import {
 } from '@grids/ui';
 import {
   AddressFields,
+  BillingAddressFields,
   BusinessFields,
   ContactFields,
   PreferenceFields,
@@ -136,6 +137,14 @@ export function NewTenantPage() {
           </Panel>
           <Panel title="Registered address">
             <AddressFields v={profile.address} set={(a) => set('address', a)} errors={errors} />
+          </Panel>
+          <Panel title="Billing address" description="Where invoices and receipts are addressed.">
+            <BillingAddressFields
+              v={profile.billingAddress}
+              set={(a) => set('billingAddress', a)}
+              registered={profile.address}
+              errors={errors}
+            />
           </Panel>
           <Panel
             title="Primary contact"

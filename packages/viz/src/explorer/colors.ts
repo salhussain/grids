@@ -34,7 +34,17 @@ export interface LegendItem {
   label: string;
 }
 
-const fmt = (v: number, decimals: number) => v.toLocaleString(undefined, { maximumFractionDigits: decimals });
+const fmt = (v: number, decimals: number, compact = false) =>
+  compact ? new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: Math.max(1, decimals) }).format(v) : v.toLocaleString(undefined, { maximumFractionDigits: decimals });
+
+/** A value as an overlay shows it: its decimals, shortened if wanted, with the unit before or after. */
+export function formatOverlayValue(o: Pick<MapOverlayDto, 'decimals' | 'unit'> & Partial<Pick<MapOverlayDto, 'unitPosition' | 'compact'>>, v: number) {
+  const n = fmt(v, o.decimals ?? 0, !!o.compact);
+  if (!o.unit) return n;
+  // Symbols hug the number ($12, 12%, 21°C); words stand apart (12 cases, USD 12).
+  if (o.unitPosition === 'before') return /^[^\p{L}\p{N}\s]{1,2}$/u.test(o.unit) ? `${o.unit}${n}` : `${o.unit} ${n}`;
+  return /^[%°′″]/.test(o.unit) ? `${n}${o.unit}` : `${n} ${o.unit}`;
+}
 
 /**
  * A colour function and legend for an overlay: class breaks when it defines
@@ -48,7 +58,7 @@ export function scaleFor(o: MapOverlayDto, min: number | null, max: number | nul
     const t = o.thresholds;
     const legend: LegendItem[] = colors.map((color, i) => ({
       color,
-      label: i === 0 ? `< ${fmt(t[0]!, o.decimals)}` : i === n - 1 ? `≥ ${fmt(t[n - 2]!, o.decimals)}` : `${fmt(t[i - 1]!, o.decimals)} – ${fmt(t[i]!, o.decimals)}`,
+      label: i === 0 ? `< ${fmt(t[0]!, o.decimals, o.compact)}` : i === n - 1 ? `≥ ${fmt(t[n - 2]!, o.decimals, o.compact)}` : `${fmt(t[i - 1]!, o.decimals, o.compact)} – ${fmt(t[i]!, o.decimals, o.compact)}`,
     }));
     const color = (v: number | null) => {
       if (v === null) return NO_DATA;
@@ -63,7 +73,7 @@ export function scaleFor(o: MapOverlayDto, min: number | null, max: number | nul
   return {
     color,
     legend: [] as LegendItem[],
-    gradient: min === null ? null : { from: ramp[0]!, to: ramp[ramp.length - 1]!, stops: ramp, min: fmt(lo, o.decimals), max: fmt(hi, o.decimals) },
+    gradient: min === null ? null : { from: ramp[0]!, to: ramp[ramp.length - 1]!, stops: ramp, min: fmt(lo, o.decimals, o.compact), max: fmt(hi, o.decimals, o.compact) },
   };
 }
 

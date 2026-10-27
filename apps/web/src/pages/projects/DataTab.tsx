@@ -1,59 +1,88 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DataElementDto } from '@grids/schema';
-import { Button, Dialog, Empty, ErrorNotice, Field, Input, Pagination, Panel, Select, Table, Td, Textarea, relTime, usePagination } from '@grids/ui';
-import { Pencil, Plus, Sigma } from 'lucide-react';
+import { DEFAULT_DATA_GROUP, DataGroupInput, type DataElementDto } from '@grids/schema';
+import { confirmDialog, Button, Dialog, ErrorNotice, Pagination, Panel, Table, Td, relTime, usePagination, SectionHead, Empty, Loading } from '@grids/ui';
+import { Pencil, Plus, Sigma, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../../api';
+import { ElementForm, freeKey, keyProblem, type ElementDraft } from './ElementForm';
 import { useProject } from './context';
 
 export function DataTab() {
   const { tenantId, project, can } = useProject();
   const elements = useQuery({ queryKey: ['elements', tenantId, project.key], queryFn: () => api.elements(tenantId, project.key) });
+  const groups = useQuery({ queryKey: ['data-groups', tenantId, project.key], queryFn: () => api.dataGroups(tenantId, project.key) });
   const [editing, setEditing] = useState<DataElementDto | 'new' | null>(null);
+  const qc = useQueryClient();
+  const remove = useMutation({
+    mutationFn: (key: string) => api.deleteElement(tenantId, project.key, key),
+    onSuccess: (data) => qc.setQueryData(['elements', tenantId, project.key], data),
+  });
   return (
     <div className="space-y-6">
-      <Panel
-        flush
-        title="Data elements"
-        description="Indicators recorded as observations over time (by forms, jobs or the API)."
-        actions={can('manager') ? <Button size="sm" icon={Plus} onClick={() => setEditing('new')}>Add element</Button> : undefined}
-      >
-        <ErrorNotice error={elements.error} />
-        <Table head={['Name', 'Key', 'Type', 'Aggregation', 'Observations', 'Latest', '']} empty={<Empty icon={Sigma} title="No data elements yet" />}>
+      <>
+        <SectionHead title="Data elements" description="Indicators recorded as observations over time (by forms, jobs or the API)." actions={can('manager') ? (
+          <>
+            <Button size="sm" icon={Plus} onClick={() => setEditing('new')}>
+              Add element
+            </Button>
+          </>
+        ) : undefined} />
+        <ErrorNotice error={elements.error ?? remove.error} />
+        {elements.isPending ? (
+          <Loading />
+        ) : (
+        <Panel flush>
+        <Table head={['Name', 'Key', 'Group', 'Type', 'Aggregation', 'Observations', 'Latest', '']} empty={<Empty icon={Sigma} title="No data elements yet">A data element is one indicator you measure over time, such as malaria cases or stock-out days. Forms, jobs and the API record values against it.</Empty>}>
           {elements.data?.map((e) => (
-            <tr key={e.key} className="border-t border-zinc-100">
+            <tr key={e.ref} className="border-t border-zinc-100">
               <Td>
                 <div className="font-medium">{e.name}</div>
                 {e.description && <div className="text-xs text-zinc-500">{e.description}</div>}
               </Td>
               <Td className="font-mono text-xs">{e.key}</Td>
+              <Td className="text-xs text-zinc-600">{e.groupName}</Td>
               <Td>
                 {e.valueType}
                 {e.unit && <span className="text-zinc-500"> ({e.unit})</span>}
               </Td>
-              <Td>{e.aggregation}</Td>
+              <Td>{e.aggregation}{e.forms.length > 0 && <div className="text-xs text-zinc-500">in {e.forms.length} {e.forms.length === 1 ? 'form' : 'forms'}</div>}</Td>
               <Td className="num">{e.observationCount.toLocaleString()}</Td>
               <Td className="text-xs text-zinc-500">{e.lastAt ? relTime(e.lastAt) : '—'}</Td>
               <Td>
                 {can('manager') && (
-                  <button type="button" aria-label={`Edit ${e.name}`} onClick={() => setEditing(e)} className="p-1 text-zinc-500 hover:text-ink">
-                    <Pencil className="size-4" />
-                  </button>
+                  <span className="flex items-center justify-end">
+                    <button type="button" aria-label={`Edit ${e.name}`} title="Edit" onClick={() => setEditing(e)} className="p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-ink">
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${e.name}`}
+                      title={e.forms.length ? `Used by ${e.forms.join(', ')}` : 'Delete'}
+                      disabled={e.forms.length > 0}
+                      onClick={async () => (await confirmDialog(`Delete ${e.name}${e.observationCount ? ` and its ${e.observationCount.toLocaleString()} readings` : ''}? This cannot be undone.`, { confirmLabel: 'Delete', danger: true })) && remove.mutate(e.ref)}
+                      className="p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-red-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </span>
                 )}
               </Td>
             </tr>
           ))}
         </Table>
       </Panel>
-      {editing && <ElementDialog element={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+        )}
+      </>
+      {editing && <ElementDialog element={editing === 'new' ? null : editing} taken={(elements.data ?? []).filter((e) => e.ref !== (editing === 'new' ? '' : editing.ref)).map((e) => ({ group: e.group, key: e.key }))} groups={groups.data ?? []} onClose={() => setEditing(null)} />}
     </div>
   );
 }
 
-function ElementDialog({ element, onClose }: { element: DataElementDto | null; onClose(): void }) {
+function ElementDialog({ element, taken, groups, onClose }: { element: DataElementDto | null; taken: { group: string; key: string }[]; groups: { key: string; name: string }[]; onClose(): void }) {
   const { tenantId, project } = useProject();
   const qc = useQueryClient();
-  const [f, setF] = useState({
+  const [f, setF] = useState<ElementDraft>({
+    group: element?.group ?? DEFAULT_DATA_GROUP,
     key: element?.key ?? '',
     name: element?.name ?? '',
     description: element?.description ?? '',
@@ -61,15 +90,10 @@ function ElementDialog({ element, onClose }: { element: DataElementDto | null; o
     unit: element?.unit ?? '',
     aggregation: element?.aggregation ?? 'sum',
   });
+  const forms = element?.forms ?? [];
+  const locked = !!element && (forms.length > 0 || element.observationCount > 0);
   const save = useMutation({
-    mutationFn: () => api.saveElement(tenantId, project.key, f, element?.key),
-    onSuccess: (data) => {
-      qc.setQueryData(['elements', tenantId, project.key], data);
-      onClose();
-    },
-  });
-  const remove = useMutation({
-    mutationFn: () => api.deleteElement(tenantId, project.key, element!.key),
+    mutationFn: () => api.saveElement(tenantId, project.key, { ...f, name: f.name.trim() }, element?.ref),
     onSuccess: (data) => {
       qc.setQueryData(['elements', tenantId, project.key], data);
       onClose();
@@ -82,48 +106,32 @@ function ElementDialog({ element, onClose }: { element: DataElementDto | null; o
       title={element ? `Edit ${element.name}` : 'New data element'}
       footer={
         <>
-          {element && (
-            <Button variant="danger" className="me-auto" onClick={() => confirm(`Delete ${element.name} and all its observations?`) && remove.mutate()}>
-              Delete
-            </Button>
-          )}
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!f.key || !f.name}>
+          <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!f.name.trim() || (!locked && !!keyProblem(f.key, taken.filter((t) => t.group === f.group).map((t) => t.key)))}>
             Save
           </Button>
         </>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ErrorNotice error={save.error ?? remove.error} />
-        <Field label="Name" className="sm:col-span-2">
-          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value, key: element ? f.key : e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') })} />
-        </Field>
-        <Field label="Key" hint="snake_case; used in forms, jobs and queries">
-          <Input value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} className="font-mono" />
-        </Field>
-        <Field label="Unit">
-          <Input value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
-        </Field>
-        <Field label="Value type">
-          <Select value={f.valueType} onChange={(e) => setF({ ...f, valueType: e.target.value as typeof f.valueType })}>
-            <option value="number">Number</option>
-            <option value="text">Text</option>
-            <option value="boolean">Yes / no</option>
-          </Select>
-        </Field>
-        <Field label="Default aggregation">
-          <Select value={f.aggregation} onChange={(e) => setF({ ...f, aggregation: e.target.value as typeof f.aggregation })}>
-            {['sum', 'avg', 'min', 'max', 'last', 'count'].map((a) => (
-              <option key={a}>{a}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Description" className="sm:col-span-2">
-          <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-        </Field>
+      <div className="space-y-4">
+        <ErrorNotice error={save.error} />
+        <ElementForm
+          value={f}
+          onChange={setF}
+          taken={taken}
+          groups={groups}
+          onNewGroup={async (name) => {
+            const key = freeKey(name, groups.map((g) => g.key)).replace(/^indicator$/, 'group');
+            qc.setQueryData(['data-groups', tenantId, project.key], await api.saveDataGroup(tenantId, project.key, DataGroupInput.parse({ key, name })));
+            return key;
+          }}
+          autoKey={!element}
+          keyLocked={locked}
+          typeLocked={locked}
+          lockedBecause={forms.length ? `Held because ${forms.join(', ')} record${forms.length === 1 ? 's' : ''} into it.` : 'Held because readings have been recorded.'}
+        />
       </div>
     </Dialog>
   );

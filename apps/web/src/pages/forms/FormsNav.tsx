@@ -1,12 +1,12 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { FormGroupDto, MenuForm } from '@grids/schema';
 import { cx } from '@grids/ui';
-import { ChevronRight, FolderKanban, Inbox } from 'lucide-react';
+import { ChevronRight, FolderKanban } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useCan, useWorkspace } from '../../session';
 import { iconOf } from '../projects/context';
-import { fillHref, groupTree, useFormsMenu } from './FormsHome';
-import { useInbox } from './InboxPage';
+import { groupTree, useFormsMenu } from './FormsHome';
+import { formHref, useInbox } from './InboxPage';
 
 interface Tone {
   muted: string;
@@ -27,7 +27,7 @@ const readOpen = (): Set<string> => {
  * The Forms section of the sidebar: the organisation's groups as menu items,
  * sub-groups nested beneath, and the forms the person can fill in under each.
  */
-export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => void }) {
+export function FormsNav({ tone, onNavigate, compact }: { tone: Tone; onNavigate?: () => void; compact?: boolean }) {
   const ws = useWorkspace();
   const can = useCan();
   const admin = ws.me.role === 'org_admin' || can('projects.manage');
@@ -60,12 +60,8 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
     for (let g: string | null | undefined = f.groupId; g; g = menu.data?.groups.find((x) => x.id === g)?.parentId) if (g === groupId) return true;
     return false;
   };
-  const toReview = inbox.data?.toReview.length ?? 0;
-  const returned = inbox.data?.mine.filter((s) => s.status === 'returned').length ?? 0;
   const anyForms = !!menu.data?.forms.length;
-  const reviewing = toReview > 0 || !!inbox.data?.mine.length;
-  // Only shown when there is something to fill in (or review).
-  if (!anyForms && !reviewing) return null;
+  if (!anyForms) return null;
 
   const toggle = (id: string) => {
     const next = new Set(open);
@@ -111,8 +107,10 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
     );
   };
   const renderForm = (f: MenuForm, depth: number) => {
-    const href = fillHref(ws.tenant.id, f);
+    const href = formHref(ws.tenant.id, f);
+    const waiting = inbox.data?.toReview.filter((r) => r.project.key === f.project.key && r.formKey === f.key).length ?? 0;
     const active = path.startsWith(href);
+    const FormIcon = iconOf(f.icon ?? 'clipboard');
     return (
       <li key={`${f.project.key}/${f.key}`}>
         <Link
@@ -123,8 +121,13 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
           style={{ marginInlineStart: `${depth * 14}px` }}
           title={`${f.name} · ${f.project.name}`}
         >
-          <span className={cx('size-1.5 shrink-0 rounded-full', active ? 'bg-accent-500' : 'bg-current opacity-40')} />
-          <span className="truncate">{f.name}</span>
+          <FormIcon className={cx('size-4 shrink-0', active && 'text-accent-500')} strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 truncate">{f.name}</span>
+          {waiting > 0 && (
+            <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${waiting} waiting on you`}>
+              {waiting}
+            </span>
+          )}
         </Link>
       </li>
     );
@@ -154,25 +157,18 @@ export function FormsNav({ tone, onNavigate }: { tone: Tone; onNavigate?: () => 
       </li>
     );
   };
+  // Icon rail: the inbox and one link to the forms home (the tree needs the full menu).
+  if (compact)
+    return (
+      <div className="mb-4">
+        <Link to={`${base}/forms`} onClick={onNavigate} title="Forms" aria-label="Forms" className={cx(row, 'justify-center px-0', path === `${base}/forms` ? tone.active : tone.hover)}>
+          <FolderKanban className="size-[18px] shrink-0" strokeWidth={1.75} />
+        </Link>
+      </div>
+    );
   return (
     <div className="mb-4">
       <div className={cx('px-3 pb-1.5 font-mono text-[10px] tracking-[0.12em] uppercase', tone.muted)}>Forms</div>
-      {reviewing && (
-        <Link
-          to={`${base}/inbox`}
-          onClick={onNavigate}
-          aria-current={path.startsWith(`${base}/inbox`) ? 'page' : undefined}
-          className={cx(row, path.startsWith(`${base}/inbox`) ? tone.active : tone.hover)}
-        >
-          <Inbox className="size-[18px] shrink-0" strokeWidth={1.75} />
-          <span className="flex-1">To review</span>
-          {toReview + returned > 0 && (
-            <span className="num min-w-5 bg-accent-600 px-1.5 text-center text-[11px] leading-5 font-semibold text-on-accent" title={`${toReview} to review, ${returned} sent back to you`}>
-              {toReview + returned}
-            </span>
-          )}
-        </Link>
-      )}
       <ul>{projects.map(renderProject)}</ul>
     </div>
   );

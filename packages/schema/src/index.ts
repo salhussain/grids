@@ -7,3 +7,6 @@ export * from './orchestration.js';
 export * from './viz.js';
 export * from './forms.js';
 export * from './overlays.js';
+export * from './connections.js';
+export * from './work.js';
+export * from './support.js';

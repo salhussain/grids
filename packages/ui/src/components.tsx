@@ -1,7 +1,11 @@
-import { AlertTriangle, Check, Copy, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Loader2, Save, X } from 'lucide-react';
 import {
+  Children,
+  Fragment,
   cloneElement,
+  isValidElement,
   createContext,
+  forwardRef,
   useCallback,
   useContext,
   useEffect,
@@ -12,7 +16,6 @@ import {
   type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
 import { ApiError } from './http';
@@ -29,7 +32,7 @@ const VARIANTS: Record<Variant, string> = {
     'bg-snow text-ink border border-zinc-300 shadow-[0_1px_2px_rgb(16_24_40/0.05)] hover:bg-zinc-50 hover:border-zinc-400',
   ghost: 'text-zinc-700 border border-transparent hover:bg-zinc-200/60',
   danger:
-    'bg-snow text-red-700 border border-red-300 shadow-[0_1px_2px_rgb(16_24_40/0.05)] hover:bg-red-600 hover:text-white hover:border-red-600',
+    'bg-[#7a1f24] text-white border border-[#5c1519] shadow-[0_1px_2px_rgb(16_24_40/0.12),inset_0_1px_0_rgb(255_255_255/0.12)] hover:bg-[#641a1e]',
 };
 
 export function Button({
@@ -78,21 +81,75 @@ const control =
 const width = (className?: string) =>
   className && /(^|\s)(\w+:)?w-/.test(className) ? '' : 'w-full';
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx(control, width(className), 'h-9', className)} />;
-}
+type IconType = React.ComponentType<{ className?: string }>;
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+/** A control with an icon at its start. */
+function WithIcon({
+  icon: Icon,
+  className,
+  top,
+  children,
+}: {
+  icon: IconType;
+  className?: string;
+  top?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <textarea {...props} className={cx(control, width(className), 'min-h-24 py-2', className)} />
+    <div className={cx('relative', width(className), className?.match(/(^|\s)(\w+:)?w-\S+/)?.[0])}>
+      <Icon
+        className={cx(
+          'pointer-events-none absolute start-3 size-4 text-zinc-400',
+          top ? 'top-3' : 'top-1/2 -translate-y-1/2',
+        )}
+      />
+      {children}
+    </div>
   );
 }
 
-export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select {...props} className={cx(control, width(className), 'h-9 pe-8', className)}>
-      {children}
-    </select>
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { icon?: IconType }
+>(function Input({ className, icon, ...props }, ref) {
+  const input = (
+    <input
+      {...props}
+      ref={ref}
+      className={cx(control, icon ? 'w-full ps-9' : width(className), 'h-9', !icon && className)}
+    />
+  );
+  return icon ? (
+    <WithIcon icon={icon} className={className}>
+      {input}
+    </WithIcon>
+  ) : (
+    input
+  );
+});
+
+export function Textarea({
+  className,
+  icon,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { icon?: IconType }) {
+  const area = (
+    <textarea
+      {...props}
+      className={cx(
+        control,
+        icon ? 'w-full ps-9' : width(className),
+        'min-h-24 py-2',
+        !icon && className,
+      )}
+    />
+  );
+  return icon ? (
+    <WithIcon icon={icon} className={className} top>
+      {area}
+    </WithIcon>
+  ) : (
+    area
   );
 }
 
@@ -104,13 +161,19 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
 export function Field({
   label,
   hint,
+  intro,
   error,
   required,
   className,
+  row,
   children,
 }: {
+  /** Label and help on the left, the control on the right. */
+  row?: boolean;
   label: string;
   hint?: ReactNode;
+  /** Help text between the label and the control, rather than under it. */
+  intro?: ReactNode;
   error?: string;
   required?: boolean;
   className?: string;
@@ -119,6 +182,33 @@ export function Field({
   const id = useId();
   const noteId = `${id}-note`;
   const note = error ?? hint;
+  if (row)
+    return (
+      <div className={cx('flex flex-wrap items-center justify-between gap-x-4 gap-y-2', className)}>
+        <div className="min-w-40 flex-1 text-sm leading-tight">
+          <label htmlFor={id} className="block font-medium text-ink">
+            {label}
+          </label>
+          {(intro || note) && (
+            <span
+              id={noteId}
+              className={cx('mt-0.5 block text-xs', error ? 'text-red-700' : 'text-zinc-500')}
+            >
+              {intro}
+              {intro && note ? ' · ' : ''}
+              {note}
+            </span>
+          )}
+        </div>
+        <div className="w-full shrink-0 sm:w-56">
+          {cloneElement(children, {
+            id,
+            ...(note ? { 'aria-describedby': noteId } : {}),
+            ...(error ? { 'aria-invalid': true } : {}),
+          })}
+        </div>
+      </div>
+    );
   return (
     <div className={cx('block', className)}>
       <label htmlFor={id} className="mb-1.5 block text-[13px] font-medium text-zinc-700">
@@ -130,6 +220,7 @@ export function Field({
           </span>
         )}
       </label>
+      {intro && <span className="-mt-1 mb-1.5 block text-xs text-zinc-500">{intro}</span>}
       {cloneElement(children, {
         id,
         ...(note ? { 'aria-describedby': noteId } : {}),
@@ -266,21 +357,31 @@ export function PageHeader({
   title,
   meta,
   actions,
+  divided,
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
   meta?: ReactNode;
   actions?: ReactNode;
+  /** A line under the header, as on a project's page. */
+  divided?: boolean;
 }) {
   return (
-    <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div
+      className={cx(
+        'flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between',
+        divided ? 'mb-6 border-b border-zinc-300 pb-4' : 'mb-8',
+      )}
+    >
       <div className="min-w-0">
         {eyebrow && (
           <div className="mb-1.5 font-mono text-[11px] tracking-[0.1em] text-zinc-500 uppercase">
             {eyebrow}
           </div>
         )}
-        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-ink">
+          {title}
+        </h1>
         {meta && (
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-600">
             {meta}
@@ -288,6 +389,30 @@ export function PageHeader({
         )}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * Heading for a page inside a larger page (a project's menu items): the same title,
+ * one-line description and actions at the right on every one of them.
+ */
+export function SectionHead({
+  title,
+  description,
+  actions,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      <div className="min-w-0 flex-1 basis-72">
+        <h2 className="text-xl font-semibold tracking-tight text-ink">{title}</h2>
+        {description && <p className="mt-1 max-w-2xl text-sm text-zinc-600">{description}</p>}
+      </div>
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -345,7 +470,12 @@ export function Tabs<T extends string>({
   value,
   onChange,
 }: {
-  tabs: { id: T; label: string; count?: number }[];
+  tabs: {
+    id: T;
+    label: string;
+    count?: number;
+    icon?: React.ComponentType<{ className?: string }>;
+  }[];
   value: T;
   onChange: (id: T) => void;
 }) {
@@ -364,9 +494,12 @@ export function Tabs<T extends string>({
               : 'border-transparent text-zinc-600 hover:border-zinc-400 hover:text-ink',
           )}
         >
+          {t.icon && <t.icon className="size-4" aria-hidden />}
           {t.label}
           {t.count !== undefined && t.count > 0 && (
-            <span className="num rounded-full bg-zinc-200 px-1.5 text-xs text-zinc-700">{t.count}</span>
+            <span className="num rounded-full bg-zinc-200 px-1.5 text-xs text-zinc-700">
+              {t.count}
+            </span>
           )}
         </button>
       ))}
@@ -380,10 +513,13 @@ export function Table({
   head,
   children,
   empty,
+  tintEmpty,
 }: {
   head: ReactNode[];
   children: ReactNode;
   empty?: ReactNode;
+  /** Fill the empty message with the accent tint (for a table inside a titled panel). */
+  tintEmpty?: boolean;
 }) {
   const hasRows = Array.isArray(children) ? children.flat().filter(Boolean).length > 0 : !!children;
   return (
@@ -401,10 +537,19 @@ export function Table({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100 [&>tr]:transition-colors [&>tr:hover]:bg-zinc-50/80">{children}</tbody>
+        <tbody className="divide-y divide-zinc-100 [&>tr]:transition-colors [&>tr:hover]:bg-zinc-50/80">
+          {children}
+        </tbody>
       </table>
       {!hasRows && empty && (
-        <div className="px-5 py-12 text-center text-sm text-zinc-500">{empty}</div>
+        <div
+          className={cx(
+            'text-center text-sm text-zinc-500',
+            tintEmpty ? 'border-t border-accent-100 bg-accent-50' : 'px-5 py-12',
+          )}
+        >
+          {empty}
+        </div>
       )}
     </div>
   );
@@ -417,12 +562,12 @@ export const Td = ({ children, className }: { children?: ReactNode; className?: 
 
 type Tone = 'good' | 'warn' | 'bad' | 'info' | 'neutral' | 'accent';
 const TONES: Record<Tone, string> = {
-  good: 'text-emerald-800 bg-emerald-50 border-emerald-300 [--dot:#198038]',
-  warn: 'text-amber-900 bg-amber-50 border-amber-300 [--dot:#b28600]',
-  bad: 'text-red-800 bg-red-50 border-red-300 [--dot:#da1e28]',
-  info: 'text-sky-900 bg-sky-50 border-sky-300 [--dot:#0072c3]',
-  accent: 'text-accent-800 bg-accent-50 border-accent-100 [--dot:#0f62fe]',
-  neutral: 'text-zinc-700 bg-zinc-100 border-zinc-300 [--dot:#6f6f6f]',
+  good: 'text-emerald-800 bg-emerald-50',
+  warn: 'text-amber-900 bg-amber-50',
+  bad: 'text-red-800 bg-red-50',
+  info: 'text-sky-900 bg-sky-50',
+  accent: 'text-accent-800 bg-accent-50',
+  neutral: 'text-zinc-700 bg-zinc-100',
 };
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -452,16 +597,34 @@ const STATUS_TONE: Record<string, Tone> = {
 };
 
 /** Status label with a square marker: never colour alone. */
-export function Status({ value, tone, label }: { value: string; tone?: Tone; label?: string }) {
+export function Status({
+  value,
+  tone,
+  label,
+  color,
+}: {
+  value: string;
+  tone?: Tone;
+  label?: string;
+  /** Any CSS colour (a #rrggbb or a variable), instead of a tone. */ color?: string | null;
+}) {
   const t = tone ?? STATUS_TONE[value] ?? 'neutral';
+  const own = color && /^(#[0-9a-f]{6}|var\(--[a-z0-9-]+\))$/i.test(color) ? color : null;
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
-        TONES[t],
+        'inline-flex items-center px-2.5 py-0.5 text-xs font-medium whitespace-nowrap capitalize',
+        own ? 'text-ink' : TONES[t],
       )}
+      style={
+        own
+          ? ({
+              background: `color-mix(in srgb, ${own} 14%, white)`,
+              color: `color-mix(in srgb, ${own} 75%, black)`,
+            } as React.CSSProperties)
+          : undefined
+      }
     >
-      <span className="size-1.5 rounded-full bg-[var(--dot)]" />
       {label ?? value.replace(/_/g, ' ')}
     </span>
   );
@@ -485,28 +648,45 @@ export function Spinner({ className = 'size-5' }: { className?: string }) {
   return <Loader2 className={cx('animate-spin text-accent-600', className)} aria-label="Loading" />;
 }
 
+/** Spinner that only appears if loading takes a moment, so fast loads don't flash. */
 export function Loading() {
   return (
-    <div className="flex justify-center py-20">
+    <div className="loading-delay flex justify-center py-20">
       <Spinner />
     </div>
   );
 }
 
+/**
+ * The error shown above a form or table. When a new one appears it scrolls into view (the dialog
+ * or page may be scrolled down) and a toast repeats it, so it is not missed.
+ */
 export function ErrorNotice({ error }: { error: unknown }) {
   if (!error) return null;
+  return <Notice error={error} />;
+}
+
+function Notice({ error }: { error: unknown }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const toast = useToast();
   const p = error instanceof ApiError ? error.problem : null;
+  const detail = p?.detail ?? (error instanceof Error && !p ? error.message : null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    toast([p?.title ?? 'Something went wrong', detail].filter(Boolean).join(': '));
+    // Once for each new error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
   return (
     <div
+      ref={ref}
       role="alert"
-      className="flex gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+      className="mb-4 flex scroll-mt-20 gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
     >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <div>
         <p className="font-medium">{p?.title ?? 'Something went wrong'}</p>
-        {(p?.detail ?? (error instanceof Error && !p ? error.message : null)) && (
-          <p className="mt-0.5">{p?.detail ?? (error as Error).message}</p>
-        )}
+        {detail && <p className="mt-0.5">{detail}</p>}
         {p?.errors?.map((e) => (
           <p key={e.path} className="mt-0.5 text-xs">
             <Mono>{e.path.replace(/^\//, '')}</Mono> — {e.message}
@@ -569,12 +749,19 @@ export function Empty({
 }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
-      <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-accent-50 ring-1 ring-accent-100">
-        <Icon className="size-5 text-accent-600" />
-      </div>
+      <Icon className="mb-3 size-7 text-accent-600" />
       <p className="text-sm font-semibold text-ink">{title}</p>
       {children && <p className="mt-1 max-w-sm text-sm text-zinc-500">{children}</p>}
       {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
+
+/** An empty page or section: the message on the accent tint, with an optional action. */
+export function EmptyState(props: React.ComponentProps<typeof Empty>) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-snow">
+      <Empty {...props} />
     </div>
   );
 }
@@ -616,6 +803,8 @@ export function Dialog({
   children,
   footer,
   wide,
+  tone,
+  headerActions,
   closeLabel = 'Close',
 }: {
   open: boolean;
@@ -624,7 +813,11 @@ export function Dialog({
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  wide?: boolean;
+  wide?: boolean | 'full';
+  /** `danger`: the top edge takes the delete button's red instead of the accent. */
+  tone?: 'danger';
+  /** Buttons or tags in the header, before the close button. */
+  headerActions?: ReactNode;
   /** Accessible name of the close (×) button, for translated UIs. */
   closeLabel?: string;
 }) {
@@ -638,11 +831,16 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // React passes a dialog's close up to the dialogs around it; a nested one must only close itself.
+      onClose={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
       onClick={(e) => e.target === ref.current && onClose()}
       className={cx(
-        'm-auto max-h-[90vh] w-[calc(100%-2rem)] rounded-2xl border border-zinc-200 bg-snow p-0 text-ink shadow-[var(--shadow-raised)]',
-        wide ? 'max-w-3xl' : 'max-w-lg',
+        'm-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-2xl border-0 border-t-4 border-solid bg-snow p-0 text-ink shadow-[var(--shadow-raised)]',
+        wide === 'full' ? 'max-w-6xl' : wide ? 'max-w-3xl' : 'max-w-lg',
+        tone === 'danger' ? 'border-t-[#7a1f24]' : 'border-t-accent-600',
       )}
     >
       {open && (
@@ -652,24 +850,61 @@ export function Dialog({
               <h2 className="text-[17px] font-semibold tracking-tight">{title}</h2>
               {description && <p className="mt-0.5 text-sm text-zinc-500">{description}</p>}
             </div>
-            <button
-              onClick={onClose}
-              aria-label={closeLabel}
-              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-ink"
-            >
-              <X className="size-4" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {headerActions}
+              <button
+                onClick={onClose}
+                aria-label={closeLabel}
+                className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-ink"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           </header>
           <div className="overflow-y-auto px-6 py-5">{children}</div>
           {footer && (
             <footer className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-zinc-50/70 px-6 py-3.5">
-              {footer}
+              {withFooterIcons(footer)}
             </footer>
           )}
         </div>
       )}
     </dialog>
   );
+}
+
+/** Footer buttons get a default icon so every dialog reads the same: a cross on the dismiss button,
+ *  a disk on a "Save…" action and a tick on any other confirming one. Buttons that bring their own icon are left alone. */
+function withFooterIcons(footer: ReactNode): ReactNode {
+  const flat = (n: ReactNode): ReactNode[] =>
+    Children.toArray(n).flatMap((c) =>
+      isValidElement<{ children?: ReactNode }>(c) && c.type === Fragment
+        ? flat(c.props.children)
+        : [c],
+    );
+  const items = flat(footer);
+  const confirms = items.some(
+    (n) =>
+      isValidElement<{ variant?: Variant; icon?: unknown }>(n) &&
+      n.type === Button &&
+      (n.props.variant ?? 'primary') === 'primary',
+  );
+  return items.map((n) => {
+    if (
+      !isValidElement<{ variant?: Variant; icon?: unknown; children?: ReactNode }>(n) ||
+      n.type !== Button ||
+      n.props.icon
+    )
+      return n;
+    const v = n.props.variant ?? 'primary';
+    if (v === 'primary')
+      return cloneElement(n, {
+        icon:
+          typeof n.props.children === 'string' && /^save/i.test(n.props.children) ? Save : Check,
+      });
+    if (v === 'secondary' && confirms) return cloneElement(n, { icon: X });
+    return n;
+  });
 }
 
 // ---------------------------------------------------------------- toasts
@@ -681,15 +916,30 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<{ id: number; msg: string }[]>([]);
   const push = useCallback((msg: string) => {
     const id = Date.now() + Math.random();
-    setItems((xs) => [...xs, { id, msg }]);
+    // The same message shown at once (twelve widgets failing the same way) appears once.
+    setItems((xs) => (xs.some((x) => x.msg === msg) ? xs : [...xs, { id, msg }]));
     setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 3500);
   }, []);
+  // A popover sits in the top layer, so toasts show above open dialogs too.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el?.showPopover) return;
+    try {
+      if (el.matches(':popover-open')) el.hidePopover();
+      if (items.length) el.showPopover();
+    } catch {
+      /* popover unsupported */
+    }
+  }, [items]);
   return (
     <ToastCtx.Provider value={push}>
       {children}
       <div
+        ref={box}
+        popover="manual"
         aria-live="polite"
-        className="pointer-events-none fixed end-4 bottom-4 z-50 flex flex-col gap-2"
+        className="pointer-events-none fixed inset-auto end-4 bottom-4 m-0 flex flex-col gap-2 overflow-visible border-0 bg-transparent p-0"
       >
         {items.map((t) => (
           <div
@@ -702,5 +952,58 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ))}
       </div>
     </ToastCtx.Provider>
+  );
+}
+
+/** Settings sections down the left, the selected one's content beside them (along the top on a phone). */
+export function VerticalTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  label,
+  wide,
+  children,
+}: {
+  tabs: { id: T; label: string; icon?: React.ComponentType<{ className?: string }>; count?: number }[];
+  value: T;
+  onChange: (id: T) => void;
+  label?: string;
+  /** Content that needs the full width (a form beside its preview). */
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
+      <nav aria-label={label} className="lg:sticky lg:top-20 lg:self-start">
+        <div
+          role="tablist"
+          aria-orientation="vertical"
+          className="flex gap-1 overflow-x-auto pb-2 lg:block lg:overflow-visible lg:pb-0"
+        >
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={value === t.id}
+              onClick={() => onChange(t.id)}
+              className={cx(
+                'flex w-full shrink-0 items-center gap-2.5 border-s-2 px-2 py-1.5 text-start text-sm whitespace-nowrap transition-colors',
+                value === t.id
+                  ? 'border-accent-600 bg-accent-50 font-medium text-ink'
+                  : 'border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-ink',
+              )}
+            >
+              {t.icon && <t.icon className="size-4 shrink-0" aria-hidden />}
+              <span className="flex-1">{t.label}</span>
+              {t.count !== undefined && <span className="num text-xs text-zinc-400">{t.count}</span>}
+            </button>
+          ))}
+        </div>
+      </nav>
+      <div role="tabpanel" className={cx('min-h-[28rem] min-w-0 space-y-4', !wide && 'max-w-4xl')}>
+        {children}
+      </div>
+    </div>
   );
 }

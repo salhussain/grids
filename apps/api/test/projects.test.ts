@@ -30,6 +30,9 @@ const api = (who: string) => {
   };
 };
 
+/** Permission ids by name, shared by the tests that build on each other. */
+const perm: Record<string, string> = {};
+
 describe('projects and the data model', () => {
   it('admins create projects; members need permission; plans limit the count', async () => {
     expect((await api(ed).post('', { name: 'Nope' })).status).toBe(403);
@@ -91,7 +94,56 @@ describe('projects and the data model', () => {
     const list = await p.get('/water-points/entities?type=water_point&q=one');
     expect(list.body).toMatchObject({ total: 1, items: [{ code: 'W1', hasGeometry: true }] });
     const geo = await p.get('/water-points/geo?type=water_point');
-    expect(geo.body.features[0]).toMatchObject({ geometry: { coordinates: [178.4, -18.1] }, properties: { name: 'Well One', kind: 'Well' } });
+    expect(geo.body.features[0]).toMatchObject({
+      geometry: { coordinates: [178.4, -18.1] },
+      properties: { name: 'Well One', kind: 'Well', marker: 'dot', icon: 'box' },
+    });
+
+    // Areas carry an optional boundary and an optional centre point
+    const box = [
+      [
+        [178, -18],
+        [179, -18],
+        [179, -17],
+        [178, -17],
+        [178, -18],
+      ],
+    ];
+    const east = await p.post('/water-points/entities', {
+      typeKey: 'district',
+      code: 'E',
+      name: 'East',
+      geometry: { type: 'Polygon', coordinates: box },
+      point: { type: 'Point', coordinates: [178.5, -17.5] },
+    });
+    expect(east.body).toMatchObject({
+      geometry: { type: 'Polygon' },
+      point: { type: 'Point', coordinates: [178.5, -17.5] },
+    });
+    const west = await p.post('/water-points/entities', {
+      typeKey: 'district',
+      code: 'W',
+      name: 'West',
+      point: { type: 'Point', coordinates: [177.5, -17.5] },
+    });
+    expect(west.body).toMatchObject({ geometry: null, hasGeometry: true });
+    const cleared = await p.patch(`/water-points/entities/${east.body.id}`, { point: null });
+    expect(cleared.body.point).toBeNull();
+    const areas = (await p.get('/water-points/geo?type=district')).body.features;
+    expect(areas.map((f: { geometry: { type: string } }) => f.geometry.type).sort()).toEqual([
+      'Point',
+      'Polygon',
+    ]);
+
+    // Types choose how their places are drawn on maps
+    const pinned = await p.put('/water-points/types/water_point', {
+      ...types.body[1],
+      marker: { style: 'icon', rotateBy: 'depth_m' },
+    });
+    expect(pinned.body[1].marker).toEqual({ style: 'icon', rotateBy: 'depth_m' });
+    expect(
+      (await p.get('/water-points/geo?type=water_point')).body.features[0].properties,
+    ).toMatchObject({ marker: 'icon', rotation: 12.5 });
   });
 
   it('imports rows idempotently and records observations', async () => {
@@ -115,20 +167,76 @@ describe('projects and the data model', () => {
     expect(obs.body).toEqual({ written: 2, skipped: 0 });
     expect((await p.get(`/water-points/entities/${w2.id}/series?element=flow_lpm`)).body.map((o: { value: number }) => o.value)).toEqual([10, 15]);
     expect((await p.get(`/water-points/entities/${w2.id}`)).body.latest).toEqual([expect.objectContaining({ element: 'flow_lpm', value: 15 })]);
+    // The district above it has recorded nothing itself, so it shows what is under it, combined the way the indicator says (an average).
+    const north = (await p.get('/water-points/entities?type=district&q=north')).body.items[0];
+    const above = (await p.get(`/water-points/entities/${north.id}`)).body.latest;
+    expect(above).toEqual([expect.objectContaining({ element: 'flow_lpm', rolledUp: true, aggregation: 'avg', value: 15, places: 1 })]);
+    expect((await p.get(`/water-points/entities/${north.id}/series?element=flow_lpm&rollup=1`)).body.map((o: { value: number }) => o.value)).toEqual([10, 15]);
+    expect((await p.get(`/water-points/entities/${w2.id}`)).body.latest[0].rolledUp).toBe(false);
+  });
+
+  it('only lets an indicator be combined in ways its type allows, and keeps its key and type once readings exist', async () => {
+    const p = api(admin);
+    expect((await p.post('/water-points/elements', { key: 'notes', name: 'Notes', valueType: 'text', aggregation: 'sum' })).status).toBe(400);
+    expect((await p.post('/water-points/elements', { key: 'notes', name: 'Notes', valueType: 'text', aggregation: 'count' })).status).toBe(200);
+    expect((await p.post('/water-points/elements', { key: 'working', name: 'Working', valueType: 'boolean', aggregation: 'max' })).status).toBe(400);
+    expect((await p.post('/water-points/elements', { key: 'working', name: 'Working', valueType: 'boolean', aggregation: 'avg' })).status).toBe(200);
+    expect((await p.post('/water-points/elements', { key: 'flow_lpm', name: 'Again', aggregation: 'sum' })).status).toBe(409); // keys are unique
+    // flow_lpm has readings (above): its type and key are held, the rest can change.
+    expect((await p.put('/water-points/elements/flow_lpm', { key: 'flow_lpm', name: 'Flow rate', valueType: 'text', aggregation: 'count' })).status).toBe(409);
+    expect((await p.put('/water-points/elements/flow_lpm', { key: 'flow_lpm', name: 'Flow rate', unit: 'L/min', aggregation: 'max' })).status).toBe(200);
+  });
+
+  it('keeps indicators in groups, so two groups can both have a `date`', async () => {
+    const p = api(admin);
+    expect((await p.post('/water-points/data-groups', { key: 'visits', name: 'Site visits' })).status).toBe(200);
+    expect((await p.post('/water-points/data-groups', { key: 'visits', name: 'Again' })).status).toBe(409);
+    expect((await p.post('/water-points/elements', { group: 'nope', key: 'date', name: 'Date' })).status).toBe(400);
+    expect((await p.post('/water-points/elements', { group: 'visits', key: 'readings', name: 'Visit readings' })).status).toBe(200);
+    // The same key in the default group and in another one.
+    expect((await p.post('/water-points/elements', { key: 'readings', name: 'Readings' })).status).toBe(200);
+    expect((await p.post('/water-points/elements', { group: 'visits', key: 'readings', name: 'Duplicate' })).status).toBe(409);
+    const list = (await p.get('/water-points/elements')).body as { ref: string; group: string; groupName: string }[];
+    expect(list.filter((e) => e.ref === 'readings' || e.ref === 'visits.readings').map((e) => [e.ref, e.group, e.groupName]).sort()).toEqual([
+      ['readings', 'general', 'General'],
+      ['visits.readings', 'visits', 'Site visits'],
+    ]);
+    // Readings go to the one the reference names.
+    const w2 = (await p.get('/water-points/entities?q=tank')).body.items[0];
+    expect((await p.post('/water-points/observations', { observations: [{ entityId: w2.id, element: 'visits.readings', at: '2026-09-03T00:00:00Z', value: 7 }] })).body).toEqual({ written: 1, skipped: 0 });
+    expect((await p.get(`/water-points/entities/${w2.id}/series?element=visits.readings`)).body.map((o: { value: number }) => o.value)).toEqual([7]);
+    expect((await p.get(`/water-points/entities/${w2.id}/series?element=readings`)).body).toEqual([]);
+    // A group with indicators in it cannot be removed.
+    expect((await p.del('/water-points/data-groups/visits')).status).toBe(409);
+    expect((await p.del('/water-points/data-groups/general')).status).toBe(409);
+    // Unless asked to take the indicators (and their readings) with it.
+    expect((await p.del('/water-points/data-groups/visits?cascade=true')).status).toBe(200);
+    const after = (await p.get('/water-points/elements')).body as { ref: string }[];
+    expect(after.some((e) => e.ref === 'visits.readings')).toBe(false);
+    expect(after.some((e) => e.ref === 'readings')).toBe(true); // the one in General stays
+    expect(((await p.get('/water-points/data-groups')).body as { key: string }[]).some((g) => g.key === 'visits')).toBe(false);
   });
 
   it('scoped members only see and edit their subtree', async () => {
     const p = api(admin);
     const north = (await p.get('/water-points/entities?type=district&q=north')).body.items[0];
-    await p.put('/water-points/members', { userId: (await h.userId(tenantId, 'ed@ih.org'))!, role: 'editor', rootEntityId: north.id });
+    await p.put('/water-points/members', { userId: (await h.userId(tenantId, 'ed@ih.org'))!, rootEntityIds: [north.id] });
     const mine = await api(ed).get('/water-points/entities?type=water_point');
     expect(mine.body.items.map((e: { code: string }) => e.code).sort()).toEqual(['W2', 'W3']); // W1 moved to South
     const w1 = (await p.get('/water-points/entities?q=one')).body.items[0];
     expect((await api(ed).get(`/water-points/entities/${w1.id}`)).status).toBe(404);
     expect((await api(ed).patch('/water-points/types/district', { key: 'district', name: 'X', plural: 'X' })).status).toBe(404);
-    expect((await api(ed).put('/water-points/types/district', { key: 'district', name: 'X', plural: 'X' })).status).toBe(403); // editors don't configure
+    expect((await api(ed).put('/water-points/types/district', { key: 'district', name: 'X', plural: 'X' })).status).toBe(403); // members don't configure
     const members = (await p.get('/water-points/members')).body;
-    expect(members).toContainEqual(expect.objectContaining({ email: 'ed@ih.org', role: 'editor', rootEntity: expect.objectContaining({ name: 'North' }) }));
+    expect(members).toContainEqual(expect.objectContaining({ email: 'ed@ih.org', rootEntities: [expect.objectContaining({ name: 'North' })] }));
+
+    // Several entities at once: the member sees each subtree.
+    const south = (await p.get('/water-points/entities?type=district&q=south')).body.items[0];
+    await p.put('/water-points/members', { userId: (await h.userId(tenantId, 'ed@ih.org'))!, rootEntityIds: [north.id, south.id] });
+    const both = await api(ed).get('/water-points/entities?type=water_point');
+    expect(both.body.items.map((e: { code: string }) => e.code).sort()).toEqual(['W1', 'W2', 'W3']);
+    expect((await api(ed).get(`/water-points/entities/${w1.id}`)).status).toBe(200);
+    await p.put('/water-points/members', { userId: (await h.userId(tenantId, 'ed@ih.org'))!, rootEntityIds: [north.id] });
   });
 });
 
@@ -183,6 +291,28 @@ describe('templates, queries and dashboards', () => {
     expect(badFilter.status).toBe(400);
   });
 
+  it('shows a widget only at the levels of the hierarchy it is set to', async () => {
+    const p = api(admin);
+    const ds = (await p.get(`/${key}/dashboards`)).body;
+    const overview = ds.find((d: { key: string }) => d.key === 'overview');
+    const widgets = overview.widgets.map((w: { id: string; options: object }) =>
+      w.id === 'malaria' ? { ...w, options: { ...w.options, levels: ['district'] } } : w,
+    );
+    const saved = await p.put(`/${key}/dashboards/overview`, {
+      ...overview,
+      widgets,
+      filters: { ...overview.filters, areaType: 'province', areaTypes: ['district'] },
+    });
+    expect(saved.status).toBe(200);
+    expect((await p.put(`/${key}/dashboards/overview`, { ...overview, widgets, filters: { ...overview.filters, areaTypes: ['planet'] } })).status).toBe(400);
+    const province = (await p.get(`/${key}/entities?type=province`)).body.items[0].id;
+    const district = (await p.get(`/${key}/entities?type=district`)).body.items[0].id;
+    const widget = (area?: string) => p.get(`/${key}/dashboards/overview/widgets/malaria${area ? `?area=${area}` : ''}`);
+    expect((await widget()).status).toBe(404);
+    expect((await widget(province)).status).toBe(404);
+    expect((await widget(district)).status).toBe(200);
+  });
+
   it('explores the hierarchy with overlays that roll up each place', async () => {
     const p = api(admin);
     const top = (await p.get(`/${key}/explore`)).body;
@@ -225,7 +355,7 @@ describe('templates, queries and dashboards', () => {
     ]);
 
     // Scoped members start at their own place and can't leave it.
-    await p.put(`/${key}/members`, { userId: await h.userId(tenantId, 'ed@ih.org'), role: 'viewer', rootEntityId: central.id });
+    await p.put(`/${key}/members`, { userId: await h.userId(tenantId, 'ed@ih.org'), rootEntityIds: [central.id] });
     expect((await api(ed).get(`/${key}/explore`)).body.entity.name).toBe('Central');
     expect((await api(ed).get(`/${key}/places`)).body.map((n: { name: string }) => n.name)).toEqual(['Central']);
     const other = top.children.features.find((f: { properties: { name: string } }) => f.properties.name === 'Northern');
@@ -236,18 +366,37 @@ describe('templates, queries and dashboards', () => {
 
   it('hides dashboards, widgets and overlays outside a member’s permission groups', async () => {
     const p = api(admin);
-    await p.post(`/${key}/permission-groups`, { key: 'admin', name: 'Admin' });
-    await p.post(`/${key}/permission-groups`, { key: 'staff', name: 'Staff', parent: 'admin' });
-    const tree = (await p.post(`/${key}/permission-groups`, { key: 'public', name: 'Public', parent: 'staff' })).body;
-    expect(tree.map((g: { key: string; depth: number }) => [g.key, g.depth])).toEqual([['admin', 0], ['staff', 1], ['public', 2]]);
-    expect((await p.put(`/${key}/permission-groups/admin`, { key: 'admin', name: 'Admin', parent: 'public' })).status).toBe(400); // no cycles
+    const make = async (name: string, parent?: string) => {
+      const body = (await p.post(`/${key}/permission-groups`, { name, parent: parent ?? null })).body;
+      perm[name] = body.find((g: { name: string }) => g.name === name).id;
+      return body;
+    };
+    await make('Admin');
+    await make('Staff', perm.Admin);
+    const tree = await make('Guest', perm.Staff);
+    const builtIn = (kind: string) => tree.find((g: { kind: string }) => g.kind === kind);
+    // Every project starts with its own admin and public permissions, first and built in.
+    expect(tree.map((g: { name: string; depth: number }) => [g.name.replace(/^.* Admin$/, 'Project Admin').replace(/^.* Public$/, 'Project Public'), g.depth])).toEqual([
+      ['Project Admin', 0],
+      ['Project Public', 0],
+      ['Admin', 0],
+      ['Staff', 1],
+      ['Guest', 2],
+    ]);
+    expect(tree[0]).toMatchObject({ system: true, kind: 'admin' });
+    expect((await p.del(`/${key}/permission-groups/${builtIn('admin').id}`)).status).toBe(409); // built in
+    expect((await p.del(`/${key}/permission-groups/${builtIn('public').id}`)).status).toBe(409);
+    expect((await p.put(`/${key}/permission-groups/${builtIn('admin').id}`, { name: 'Admins', parent: perm.Staff })).status).toBe(400); // stays at the top
+    expect((await p.post(`/${key}/permission-groups`, { name: 'Under public', parent: builtIn('public').id })).status).toBe(400); // public has no children
+    expect((await p.post(`/${key}/permission-groups`, { name: 'staff', parent: perm.Admin })).status).toBe(409); // names are unique
+    expect((await p.put(`/${key}/permission-groups/${perm.Admin}`, { name: 'Admin', parent: perm.Guest })).status).toBe(400); // no cycles
 
     const overview = (await p.get(`/${key}/dashboards`)).body[0];
-    const widgets = overview.widgets.map((w: { id: string }) => (w.id === 'malaria' ? { ...w, permissionGroup: 'admin' } : w));
-    expect((await p.post(`/${key}/dashboards`, { key: 'bad', name: 'Bad', permissionGroup: 'nope' })).status).toBe(400);
-    await p.post(`/${key}/dashboards`, { key: 'staff_only', name: 'Staff only', permissionGroup: 'staff', widgets: [overview.widgets[1]] });
+    const widgets = overview.widgets.map((w: { id: string }) => (w.id === 'malaria' ? { ...w, permissionGroup: perm.Admin } : w));
+    expect((await p.post(`/${key}/dashboards`, { key: 'bad', name: 'Bad', permissionGroup: '019e0000-0000-7000-8000-000000000000' })).status).toBe(400);
+    await p.post(`/${key}/dashboards`, { key: 'staff_only', name: 'Staff only', permissionGroup: perm.Staff, widgets: [overview.widgets[1]] });
     await p.put(`/${key}/dashboards/overview`, { ...overview, widgets });
-    await p.post(`/${key}/overlays`, { key: 'secret', name: 'Secret', element: 'deaths', permissionGroup: 'admin' });
+    await p.post(`/${key}/overlays`, { key: 'secret', name: 'Secret', element: 'deaths', permissionGroup: perm.Admin });
 
     // ed: a viewer (scoped to Central) without a group sees only unrestricted visuals.
     const ed_ = api(ed);
@@ -261,17 +410,17 @@ describe('templates, queries and dashboards', () => {
 
     // In "staff": the staff dashboard and everything below; still not admin's widget.
     const userId = await h.userId(tenantId, 'ed@ih.org');
-    expect((await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'nope' })).status).toBe(400);
-    const members = (await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'staff' })).body;
-    expect(members.find((m: { email: string }) => m.email === 'ed@ih.org').permissionGroup).toBe('staff');
+    expect((await p.put(`/${key}/members`, { userId, permissionGroups: ['019e0000-0000-7000-8000-000000000000'] })).status).toBe(400);
+    const members = (await p.put(`/${key}/members`, { userId, permissionGroups: [perm.Staff] })).body;
+    expect(members.find((m: { email: string }) => m.email === 'ed@ih.org').permissionGroups).toEqual([perm.Staff]);
     expect(await seen()).toEqual([['overview', false], ['staff_only', false]]);
     // In "admin": everything.
-    await p.put(`/${key}/members`, { userId, role: 'viewer', permissionGroup: 'admin' });
+    await p.put(`/${key}/members`, { userId, permissionGroups: [perm.Admin] });
     expect(await seen()).toEqual([['overview', true], ['staff_only', false]]);
     expect((await ed_.get(`/${key}/overlays/secret/values`)).status).toBe(200);
 
-    expect((await p.del(`/${key}/permission-groups/staff`)).status).toBe(409); // still used
-    expect((await p.get(`/${key}/permission-groups`)).body.find((g: { key: string }) => g.key === 'admin').memberCount).toBe(1);
+    expect((await p.del(`/${key}/permission-groups/${perm.Staff}`)).status).toBe(409); // still used
+    expect((await p.get(`/${key}/permission-groups`)).body.find((g: { id: string }) => g.id === perm.Admin).memberCount).toBe(1);
   });
 
   it('validates overlays', async () => {
@@ -302,7 +451,7 @@ describe('forms', () => {
     const base = { id, version: 1, entityId: facility.id, collectedAt: '2026-09-30T10:00:00Z' };
     const invalid = await api(admin).post(`/${key}/forms/weekly_report/submissions`, { ...base, answers: { malaria: 3, ili: 1, diarrhoea: 0, measles: 0, deaths: 0, outbreak: true } });
     expect(invalid.status).toBe(422);
-    expect(invalid.body.errors).toEqual([{ path: 'outbreak_details', message: 'Required' }]);
+    expect(invalid.body.errors).toEqual([{ path: 'outbreak_details', message: 'This is a required field' }]);
 
     const ok = await api(admin).post(`/${key}/forms/weekly_report/submissions`, {
       ...base,
@@ -364,22 +513,37 @@ describe('forms', () => {
     const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
     const save = (settings: unknown, groupId: string | null = sub.id) =>
       api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId, settings });
-    expect((await save({ fillRole: 'viewer', fillGroup: 'nope' })).status).toBe(400);
-    const saved = (await save({ fillRole: 'viewer', fillGroup: 'staff' })).body.find((f: { key: string }) => f.key === 'weekly_report');
-    expect(saved).toMatchObject({ groupId: sub.id, settings: { fillRole: 'viewer', fillGroup: 'staff', workflow: { enabled: false } }, canFill: true });
+    expect((await save({ fillGroup: '019e0000-0000-7000-8000-000000000000' })).status).toBe(400);
+    const saved = (await save({ fillGroup: perm.Staff })).body.find((f: { key: string }) => f.key === 'weekly_report');
+    expect(saved).toMatchObject({ groupId: sub.id, settings: { fillGroup: perm.Staff, workflow: { enabled: false } }, canFill: true });
     expect((await g(admin).get()).body.find((x: { id: string }) => x.id === sub.id).formCount).toBe(1);
 
     // ed is a viewer in "admin", above "staff": the form shows up in their menu.
     const menu = (await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body;
     expect(menu.groups.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(['Surveillance', 'Weekly returns']));
     expect(menu.forms.find((f: { key: string }) => f.key === 'weekly_report')).toMatchObject({ groupId: sub.id, project: { key }, layout: 'steps', hasWorkflow: false });
-    expect((await save({ fillRole: 'editor' })).status).toBe(200);
-    expect((await h.call(ed, 'GET', `/tenants/${tenantId}/forms/menu`)).body.forms.some((f: { key: string }) => f.key === 'weekly_report')).toBe(false);
+
+    // A form belongs to a permission group: members in that group, or above it, can see it and its submissions.
+    const edId = await h.userId(tenantId, 'ed@ih.org');
+    const place = (...permissionGroups: (string | undefined)[]) => api(admin).put(`/${key}/members`, { userId: edId, permissionGroups });
+    const visible = async () => (await api(ed).get(`/${key}/forms`)).body.some((f: { key: string }) => f.key === 'weekly_report');
+    expect((await save({ fillGroup: perm.Staff })).status).toBe(200);
+    await place(perm.Guest); // below "staff"
+    expect(await visible()).toBe(false);
+    expect((await api(ed).get(`/${key}/forms/weekly_report/submissions`)).status).toBe(404);
+    await place(perm.Staff);
+    expect(await visible()).toBe(true);
+    await place(perm.Guest, perm.Staff); // holding several: any one is enough
+    expect(await visible()).toBe(true);
+    await place(perm.Admin); // above "staff"
+    expect(await visible()).toBe(true);
+    expect((await api(ed).get(`/${key}/forms/weekly_report/submissions`)).status).toBe(200);
+    expect((await save({})).status).toBe(200); // no group: everyone in the project
   });
 
   it('routes submissions through multi-stage approvals before their data takes effect', async () => {
     const form = (await api(admin).get(`/${key}/forms`)).body.find((f: { key: string }) => f.key === 'weekly_report');
-    const settings = (stages: unknown[]) => ({ fillRole: 'viewer', workflow: { enabled: true, stages } });
+    const settings = (stages: unknown[]) => ({ workflow: { enabled: true, stages } });
     const put = (stages: unknown[]) =>
       api(admin).put(`/${key}/forms/weekly_report`, { key: form.key, name: form.name, subjectType: 'facility', definition: form.draft, groupId: form.groupId, settings: settings(stages) });
     expect((await put([{ key: 'x', name: 'X', approvers: { role: null, group: null, users: [] } }])).status).toBe(400); // nobody can approve
@@ -387,7 +551,7 @@ describe('forms', () => {
     expect(
       (
         await put([
-          { key: 'district', name: 'District review', approvers: { role: 'viewer', group: 'admin' } },
+          { key: 'district', name: 'District review', approvers: { group: perm.Admin } },
           { key: 'national', name: 'National sign-off', approvers: { role: 'manager' }, condition: '${deaths} > 0' },
         ])
       ).status,
@@ -397,7 +561,7 @@ describe('forms', () => {
     const answers = { malaria: 1, ili: 777, diarrhoea: 0, measles: 0, deaths: 0, outbreak: false, stockout: 0 };
     const sub = await api(ed).post(`/${key}/forms/weekly_report/submissions`, { id: uuidv7(), version: 1, entityId: mine.id, collectedAt: '2026-08-05T10:00:00Z', answers });
     expect(sub.status).toBe(201);
-    expect(sub.body).toMatchObject({ status: 'in_review', stage: 0, stageName: 'District review', stages: ['District review', 'National sign-off'], canReview: false });
+    expect(sub.body).toMatchObject({ status: 'in_review', stage: 0, stageName: 'District review', stages: ['District review'], canReview: false }); // no deaths: the national stage doesn't apply
     const id = sub.body.id;
     const series = async () => (await api(admin).get(`/${key}/entities/${mine.id}/series?element=ili_cases`)).body.map((x: { value: number }) => x.value);
     expect(await series()).not.toContain(777); // nothing takes effect while in review
@@ -412,7 +576,7 @@ describe('forms', () => {
     expect((await review(admin, { decision: 'return', comment: 'Check deaths' })).body).toMatchObject({ status: 'returned', canResubmit: false });
     expect((await review(admin, { decision: 'approve' })).status).toBe(409);
     const again = await api(ed).put(`/${key}/submissions/${id}`, { answers: { ...answers, deaths: 2 }, comment: 'Fixed' });
-    expect(again.body).toMatchObject({ status: 'in_review', stage: 0 });
+    expect(again.body).toMatchObject({ status: 'in_review', stage: 0, stages: ['District review', 'National sign-off'] });
 
     // Deaths > 0 now, so the national stage applies after the district one.
     expect((await review(admin, { decision: 'approve' })).body).toMatchObject({ status: 'in_review', stage: 1, stageName: 'National sign-off' });
@@ -490,7 +654,7 @@ describe('jobs and public projects', () => {
     expect(all).toBe(2);
     expect(ie).toBe(1);
     expect((await pub(`/widgets/tracked?area=${uuidv7()}`)).status).toBe(404); // not an area of this dashboard
-    expect((await pub('/widgets/tracked?hours=5')).status).toBe(400);
+    expect((await pub('/widgets/tracked?hours=0')).status).toBe(400);
     // The explorer's selected place scopes any widget (it must be a place in this project).
     expect((await pub(`/widgets/tracked?entity=${ireland.id}&hours=8760`)).body.rows[0].value).toBe(1);
     expect((await pub(`/widgets/tracked?entity=${uuidv7()}`)).status).toBe(404);

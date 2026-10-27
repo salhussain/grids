@@ -8,7 +8,7 @@ import {
   signedIn,
 } from './helpers';
 
-// Platform console end-to-end against the real stack (identity service, Mailpit, API, console).
+// Platform console end-to-end against the real stack (identity service, API, console).
 const shots = process.env.SHOTS_DIR;
 const snap = async (page: Page, name: string) => {
   if (shots) await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
@@ -95,7 +95,7 @@ test('onboarding: create → subscribe yearly → pay → invite admin → admin
   await snap(page, 'v2-04-invited');
   await invite.getByRole('button', { name: 'Done' }).click();
 
-  // The invitation email (Mailpit) carries the link and message
+  // The invitation email carries the link and message
   const mail = await latestEmail(adminEmail, sentAt);
   expect(mail).toContain('Welcome to Grids!');
   // Members join through the organisation workspace (web app), not the console.

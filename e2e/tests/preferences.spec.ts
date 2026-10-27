@@ -14,12 +14,10 @@ test('preferences, languages, right-to-left and billing', async ({ browser }) =>
   });
   const nav = page.getByRole('navigation', { name: 'Workspace' });
 
-  // Dark mode is a personal preference that persists
-  await page.getByRole('button', { name: 'Preferences' }).click();
-  const prefs = page.getByRole('dialog');
-  await prefs.getByRole('radio', { name: 'Dark' }).click();
+  // Dark mode is a personal preference that persists (the header toggle, as on the sign-in page)
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await prefs.getByRole('button', { name: 'Close' }).click();
+  await page.waitForLoadState('networkidle');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   if (shots) await page.screenshot({ path: `${shots}/p-01-dark-home.png`, fullPage: true });
@@ -43,28 +41,30 @@ test('preferences, languages, right-to-left and billing', async ({ browser }) =>
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Language settings saved')).toBeVisible();
 
-  // Each person picks their language among those offered
-  await page.getByRole('button', { name: 'Preferences' }).click();
-  await page.getByRole('dialog').getByRole('radio', { name: 'Français' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Fermer' }).click();
+  // Each person picks their language among those offered, from the header's language menu
+  await page.getByRole('button', { name: /^Language: / }).click();
+  await page.getByRole('option', { name: 'Français' }).click();
   const navFr = page.getByRole('navigation', { name: 'Espace de travail' });
   await expect(navFr.getByRole('link', { name: 'Équipe' })).toBeVisible(); // organisation wording
   await expect(navFr.getByRole('link', { name: 'Facturation' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Préférences' }).click();
-  await page.getByRole('dialog').getByRole('radio', { name: 'العربية' }).click();
+  await page.getByRole('button', { name: /: Français$/ }).click();
+  await page.getByRole('option', { name: 'العربية' }).click();
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
-  await page.getByRole('dialog').getByRole('button', { name: 'إغلاق' }).click();
-  await page.getByRole('navigation', { name: 'مساحة العمل' }).getByRole('link', { name: 'الرئيسية' }).click();
+  await page
+    .getByRole('navigation', { name: 'مساحة العمل' })
+    .getByRole('link', { name: 'الرئيسية' })
+    .click();
   // The sidebar sits on the right in right-to-left layouts
   const box = (await page.locator('aside').boundingBox())!;
   expect(box.x).toBeGreaterThan(500);
   if (shots) await page.screenshot({ path: `${shots}/p-03-arabic-rtl.png`, fullPage: true });
 
   // Back to light English for the next run's screenshots
-  await page.getByRole('button', { name: 'التفضيلات' }).click();
-  await page.getByRole('dialog').getByRole('radio', { name: 'English', exact: true }).click();
-  await page.getByRole('dialog').getByRole('radio', { name: 'Light' }).click();
+  await page.getByRole('button', { name: /: العربية$/ }).click();
+  await page.getByRole('option', { name: 'English', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });

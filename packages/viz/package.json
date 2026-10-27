@@ -20,9 +20,22 @@
   "dependencies": {
     "@grids/schema": "workspace:^",
     "@grids/ui": "workspace:^",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-code-block-lowlight": "^3.31.4",
+    "@tiptap/extension-image": "^3.31.4",
+    "@tiptap/extension-placeholder": "^3.31.4",
+    "@tiptap/extension-task-item": "^3.31.4",
+    "@tiptap/extension-task-list": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "@tiptap/suggestion": "^3.31.4",
     "echarts": "^6",
+    "lowlight": "^3.3.0",
     "lucide-react": "^1.49.0",
-    "maplibre-gl": "^5"
+    "maplibre-gl": "^5",
+    "markdown-it-container": "^4.0.0",
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@tanstack/react-query": "^5.104.0",

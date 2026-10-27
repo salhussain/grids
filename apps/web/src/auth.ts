@@ -1,4 +1,5 @@
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
+import { storedColorMode } from '@grids/ui';
 import { env } from './env';
 
 // Authorization code + PKCE against the Grids identity service. Access tokens are
@@ -17,6 +18,9 @@ export const userManager = new UserManager({
   userStore: new WebStorageStateStore({ store: window.localStorage }),
   automaticSilentRenew: true,
 });
+
+/** The most a sign-in can last, however active the person is (organisations may choose less): the identity service asks for the password again after this. */
+const MAX_SESSION_SECONDS = 12 * 3600;
 
 export interface SignInOptions {
   returnTo?: string;
@@ -41,7 +45,8 @@ const storedLocale = () => {
 export function signIn(opts: SignInOptions = {}): Promise<void> {
   const locale = opts.locale ?? storedLocale();
   return userManager.signinRedirect({
-    state: { returnTo: opts.returnTo ?? window.location.pathname },
+    state: { returnTo: opts.returnTo ?? window.location.pathname + window.location.search },
+    max_age: MAX_SESSION_SECONDS,
     ...(opts.forceLogin && { prompt: 'login consent' }),
     ...(locale && { ui_locales: locale }),
     ...(opts.loginHint && { login_hint: opts.loginHint }),
@@ -55,7 +60,36 @@ let callback: Promise<User> | undefined;
  * effects twice in development, and redeeming an authorization code twice makes the
  * identity service revoke everything issued from it.
  */
-export const completeSignIn = (): Promise<User> => (callback ??= userManager.signinRedirectCallback());
+export const completeSignIn = (): Promise<User> =>
+  (callback ??= userManager.signinRedirectCallback());
+
+let ending: Promise<void> | undefined;
+/** The session is over (it expired and could not be renewed): sign in again and come back to this page. */
+export const endSession = (): Promise<void> => (ending ??= signIn());
+
+/**
+ * A valid access token. An expired one is renewed with the refresh token first (a laptop
+ * that slept, a tab left open); if that fails the person signs in again instead of the app
+ * failing with "Missing bearer token".
+ */
+export async function accessToken(): Promise<string | null> {
+  let user = await userManager.getUser();
+  if (user?.expired) {
+    try {
+      user = await userManager.signinSilent();
+    } catch {
+      user = null;
+    }
+  }
+  if (!user) {
+    void endSession();
+    return null;
+  }
+  return user.access_token;
+}
+
+// The renewal in the background failed: nothing will work until the person signs in again.
+userManager.events.addSilentRenewError(() => void endSession());
 
 export async function signOut(): Promise<void> {
   await userManager.signoutRedirect();
@@ -67,5 +101,9 @@ export async function currentUser(): Promise<User | null> {
 }
 
 /** Password and two-step settings, hosted by the identity service. */
-export const accountUrl = () =>
-  `${new URL(env.oidcAuthority).origin}/ui/account?return_to=${encodeURIComponent(window.location.href)}`;
+/**
+ * The account page, in the organisation's branding when opened from its workspace,
+ * and in the person's colour mode (it lives on another origin, so it can't read it).
+ */
+export const accountUrl = (tenantId?: string) =>
+  `${new URL(env.oidcAuthority).origin}/ui/account?return_to=${encodeURIComponent(window.location.href)}&mode=${storedColorMode()}${tenantId ? `&org=${encodeURIComponent(tenantId)}` : ''}`;

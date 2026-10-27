@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grids Billing Mockup</title>
+<meta name="description" content="Four clickable redesign directions for the billing module: overview, tabs, plan-first, and the staff console." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  /* Same tokens as the other mockups: sharp corners, Plex Sans for UI, Plex Mono for figures and meta. */
+  :root {
+    --brand: #0f62fe;
+    --brand-soft: color-mix(in oklab, var(--brand) 9%, white);
+    --brand-line: color-mix(in oklab, var(--brand) 28%, white);
+    --brand-ink: color-mix(in oklab, var(--brand) 78%, black);
+    --canvas: #efeff1; --sheet: #fff; --raise: #fafafb;
+    --ink: #121316; --ink-2: #4a4c55; --ink-3: #82848d;
+    --line: #e4e4e8; --line-2: #d3d4da; --hover: #f3f3f5;
+    --shadow: 0 1px 2px rgb(16 18 24 / .05), 0 8px 28px -14px rgb(16 18 24 / .16);
+    --good: #198038; --good-soft: #e8f5ec; --warn: #9a7400; --warn-soft: #fcf4d6; --warn-line: #ecd98a; --bad: #da1e28; --bad-soft: #fdecec; --info-soft: #e5f0ff;
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --brand-soft: color-mix(in oklab, var(--brand) 18%, #17181b); --brand-line: color-mix(in oklab, var(--brand) 45%, #17181b); --brand-ink: color-mix(in oklab, var(--brand) 55%, white);
+      --canvas: #0d0e10; --sheet: #17181b; --raise: #1c1d21; --ink: #f1f1f3; --ink-2: #b4b6bf; --ink-3: #7c7e88; --line: #26272c; --line-2: #34363c; --hover: #202126;
+      --good: #42be65; --good-soft: #10261a; --warn: #f1c21b; --warn-soft: #2a2410; --warn-line: #5a4c16; --bad: #ff6b72; --bad-soft: #2d1416; --info-soft: #14233d;
+    }
+  }
+  * { box-sizing: border-box; } [hidden] { display: none !important; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; } button { cursor: pointer; }
+  a { color: var(--brand-ink); } h1, h2, h3, p { margin: 0; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .muted { color: var(--ink-3); } .sub { color: var(--ink-2); }
+  svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .row { display: flex; align-items: center; gap: 10px; } .wrap { flex-wrap: wrap; } .grow { flex: 1; min-width: 0; } .end { margin-left: auto; }
+
+  .switch { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 4px; padding: 10px 16px; background: var(--ink); color: #fff; flex-wrap: wrap; }
+  .switch b { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; margin-right: 10px; opacity: .6; }
+  .switch button { background: transparent; border: 1px solid #ffffff30; color: #fff; padding: 5px 12px; }
+  .switch button[aria-pressed='true'] { background: #fff; color: #121316; border-color: #fff; }
+  .note { max-width: 1280px; margin: 14px auto 0; padding: 0 16px; font-size: 13px; color: var(--ink-2); } .note b { color: var(--ink); }
+  .stage { max-width: 1280px; margin: 12px auto 48px; padding: 0 16px; }
+  .opt { display: none; } .opt.on { display: block; }
+
+  .sheet { background: var(--sheet); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .card { background: var(--sheet); border: 1px solid var(--line); }
+  .card > header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .card > header h3 { font-size: 14px; font-weight: 600; } .card > header small { color: var(--ink-3); }
+  .card .body { padding: 16px; }
+  .pad { padding: 22px 26px; } .gap { display: grid; gap: 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line-2); background: var(--sheet); white-space: nowrap; } .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; } .btn.primary:hover { background: var(--brand-ink); }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); } .btn.sm { height: 26px; padding: 0 9px; font-size: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid var(--line); background: var(--raise); font-size: 12px; white-space: nowrap; }
+  .chip.good { background: var(--good-soft); color: var(--good); border-color: transparent; } .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; } .chip.info { background: var(--info-soft); color: var(--brand-ink); border-color: transparent; }
+  .banner { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid; }
+  .banner.bad { background: var(--bad-soft); border-color: color-mix(in oklab, var(--bad) 35%, transparent); } .banner.info { background: var(--info-soft); border-color: var(--brand-line); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; } .kpi { background: var(--sheet); border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 4px; }
+  .kpi .v { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th { text-align: left; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--raise); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); } tr:hover td { background: var(--hover); } td.num, th.num { text-align: right; }
+  tr.click { cursor: pointer; }
+  .meter { display: grid; gap: 5px; } .meter .bar { height: 8px; background: var(--line); position: relative; } .meter .bar i { position: absolute; inset: 0 auto 0 0; background: var(--brand); } .meter .bar i.warn { background: #d4a600; } .meter .bar i.bad { background: var(--bad); }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 13px; padding: 4px 0; } .kv dt { color: var(--ink-3); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .tl { list-style: none; margin: 0; padding: 0; position: relative; } .tl::before { content: ''; position: absolute; left: 11px; top: 6px; bottom: 6px; width: 1px; background: var(--line-2); }
+  .tl li { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; padding: 8px 0; align-items: start; } .tl .ic { width: 23px; height: 23px; background: var(--sheet); border: 1px solid var(--line-2); border-radius: 50%; display: grid; place-items: center; position: relative; color: var(--ink-2); }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 26px; overflow-x: auto; } .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 11px 14px; color: var(--ink-3); margin-bottom: -1px; display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; } .tabs button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--brand); }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); } .seg button { border: 0; background: var(--sheet); padding: 4px 12px; color: var(--ink-2); } .seg button[aria-pressed='true'] { background: var(--ink); color: var(--sheet); }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; } .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; } .grid2e { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .plan { border: 1px solid var(--line); background: var(--sheet); padding: 18px; display: grid; gap: 12px; align-content: start; } .plan.cur { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); } .plan .price { font-size: 28px; font-weight: 600; letter-spacing: -.02em; } .plan ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 13px; } .plan li { display: flex; gap: 8px; } .plan li svg { color: var(--good); margin-top: 3px; }
+  .stack-bar { display: flex; height: 14px; background: var(--line); } .stack-bar i { display: block; height: 100%; }
+  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: grid; place-items: center; padding: 16px; z-index: 40; } .modal { background: var(--sheet); width: min(920px, 100%); max-height: 92vh; overflow: auto; box-shadow: var(--shadow); border-top: 3px solid var(--brand); } .modal.narrow { width: min(560px, 100%); }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: var(--sheet); box-shadow: -12px 0 40px -16px rgb(0 0 0 / .4); z-index: 40; overflow: auto; border-left: 1px solid var(--line); }
+  .field { display: grid; gap: 4px; } .field label { font-size: 12px; font-weight: 500; color: var(--ink-2); } .field input, .field select { height: 34px; border: 1px solid var(--line-2); background: var(--sheet); padding: 0 10px; }
+  .copy { display: inline-flex; align-items: center; gap: 6px; background: var(--raise); border: 1px solid var(--line); padding: 2px 8px; font: 12px var(--mono); }
+  @media (max-width: 1000px) { .grid2, .grid3, .grid2e, .kpis { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="switch" role="toolbar" aria-label="Design option">
+  <b>Billing redesign</b>
+  <button data-opt="A" aria-pressed="true">A · Overview</button>
+  <button data-opt="B" aria-pressed="false">B · Tabs</button>
+  <button data-opt="C" aria-pressed="false">C · Plan-first</button>
+  <button data-opt="D" aria-pressed="false">D · Console (staff)</button>
+  <span class="end" style="font-size:12px;opacity:.65">Click invoices, “Change plan”, “Edit details”, “How to pay”</span>
+</div>
+<p class="note" id="note"></p>
+
+<div class="stage">
+
+<!-- ================= A · OVERVIEW ================= -->
+<section class="opt on sheet" id="optA"><div class="pad gap" id="A"></div></section>
+<!-- ================= B · TABS ================= -->
+<section class="opt sheet" id="optB">
+  <div class="pad" style="padding-bottom:14px"><div class="row wrap"><div class="grow"><div class="eyebrow">Settings</div><h1 style="font-size:24px;font-weight:600;letter-spacing:-.01em">Billing</h1></div>
+    <span class="chip good">● Team · annual · active</span><button class="btn" data-act="statement">Download statement</button><button class="btn primary" data-act="plan">Change plan</button></div></div>
+  <div class="tabs" role="tablist" id="Btabs"></div>
+  <div class="pad gap" id="B"></div>
+</section>
+<!-- ================= C · PLAN-FIRST ================= -->
+<section class="opt sheet" id="optC"><div class="pad gap" id="C"></div></section>
+<!-- ================= D · CONSOLE ================= -->
+<section class="opt sheet" id="optD"><div class="pad gap" id="D"></div></section>
+
+</div>
+<div id="layer"></div>
+
+<script>
+  const I = {
+    card: '<svg viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9"/><path d="M1.5 6.5h13"/></svg>',
+    bank: '<svg viewBox="0 0 16 16"><path d="M2 6 8 2l6 4M3.5 7v5M6.5 7v5M9.5 7v5M12.5 7v5M2 13.5h12"/></svg>',
+    down: '<svg viewBox="0 0 16 16"><path d="M8 2v8m-3-3 3 3 3-3M3 13.5h10"/></svg>',
+    copy: '<svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="8"/><path d="M3 11V3h8"/></svg>',
+    check: '<svg viewBox="0 0 16 16"><path d="m3 8.5 3.2 3L13 4.5"/></svg>',
+    warn: '<svg viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13zM8 6.5v3M8 11.5v.5"/></svg>',
+    edit: '<svg viewBox="0 0 16 16"><path d="M2.5 13.5 3 10l7.5-7.5 3 3L6 13z"/></svg>',
+    x: '<svg viewBox="0 0 16 16"><path d="m3.5 3.5 9 9m0-9-9 9"/></svg>',
+    clock: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>',
+    mail: '<svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9"/><path d="m2.5 4 5.5 4.5L13.5 4"/></svg>',
+    plus: '<svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>',
+    user: '<svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.7"/><path d="M2.5 14c.6-3 2.7-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/></svg>',
+    bell: '<svg viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"/></svg>',
+    file: '<svg viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9zM9.5 1.5v3h3"/></svg>',
+    refresh: '<svg viewBox="0 0 16 16"><path d="M13 5A5.5 5.5 0 0 0 3 6M3 3v3h3M3 11a5.5 5.5 0 0 0 10 1M13 13v-3h-3"/></svg>',
+  };
+  const INVOICES = [
+    ['INV-2026-0142', '1 Oct 2026', '1 Oct – 31 Oct', 480.0, 'overdue', 'Net 14 · was due 9 Oct'],
+    ['INV-2026-0121', '1 Sep 2026', '1 Sep – 30 Sep', 1140.0, 'paid', 'Bank transfer · 4 Sep'],
+    ['INV-2026-0098', '1 Aug 2026', '1 Aug – 31 Aug', 1140.0, 'paid', 'Bank transfer · 6 Aug'],
+    ['INV-2026-0071', '1 Jul 2026', '1 Jul – 31 Jul', 1065.0, 'paid', 'Card •••• 4242 · 1 Jul'],
+    ['INV-2026-0044', '1 Jun 2026', '1 Jun – 30 Jun', 1065.0, 'paid', 'Card •••• 4242 · 1 Jun'],
+    ['INV-2026-0017', '14 May 2026', 'Plan upgrade (prorated)', 310.0, 'paid', 'Credit applied'],
+  ];
+  const USAGE = [
+    ['Members', 18, 25, '', 'seats'], ['Projects', 6, 10, '', ''], ['Storage', 42, 100, ' GB', ''],
+    ['Dataset rows', 4.1, 5, ' M', ''], ['Form submissions', 8.9, 10, ' k /mo', 'resets 1 Nov'], ['Emails sent', 1.1, 5, ' k /mo', 'resets 1 Nov'],
+    ['API calls', 212, 500, ' k /mo', 'resets 1 Nov'], ['Map tile loads', 64, 200, ' k /mo', 'resets 1 Nov'],
+  ];
+  const ACTIVITY = [
+    ['bell', 'Payment reminder sent to finance@moh.gov.vu', 'INV-2026-0142 · 12 Oct, 09:00', ''],
+    ['warn', 'Invoice INV-2026-0142 became overdue', '9 Oct', ''],
+    ['file', 'Invoice INV-2026-0142 issued · USD 480.00', '1 Oct · includes 3 extra seats and 1.1M rows over', ''],
+    ['check', 'Payment received · USD 1,140.00', '4 Sep · bank transfer · ref MOH-0921 · recorded by Grids staff', ''],
+    ['refresh', 'Plan changed Starter → Team', '14 May · Jean Tari · prorated USD 310.00', ''],
+    ['edit', 'Billing contact changed to Aroha Finau', '2 Apr · Jean Tari', ''],
+  ];
+  const money = (n) => 'USD ' + n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const chip = (s) => `<span class="chip ${s === 'paid' ? 'good' : s === 'overdue' ? 'bad' : s === 'open' ? 'warn' : ''}">${s === 'paid' ? '● Paid' : s === 'overdue' ? '● Overdue' : 'Open'}</span>`;
+  const meter = (u) => {
+    const pct = Math.round((u[1] / u[2]) * 100), c = pct >= 100 ? 'bad' : pct >= 80 ? 'warn' : '';
+    return `<div class="meter"><div class="row"><span>${u[0]}</span><span class="end mono">${u[1].toLocaleString()}${u[3]} <span class="muted">of ${u[2]}${u[3]}</span></span></div><div class="bar" role="progressbar" aria-valuenow="${pct}"><i class="${c}" style="width:${Math.min(pct, 100)}%"></i></div><div class="row muted" style="font-size:12px"><span>${pct}%${pct >= 80 ? ' · near the limit' : ''}</span><span class="end">${u[4] || ''}</span></div></div>`;
+  };
+  const invRows = (n) => INVOICES.slice(0, n).map((r, i) => `<tr class="click" data-inv="${i}"><td class="mono">${r[0]}</td><td>${r[1]}</td><td class="muted">${r[2]}</td><td class="num mono">${money(r[3])}</td><td>${chip(r[4])}</td><td class="muted">${r[5]}</td><td class="num"><button class="btn sm ghost" aria-label="Download PDF" data-pdf>${I.down}</button></td></tr>`).join('');
+  const invTable = (n = 6) => `<table><thead><tr><th>Invoice</th><th>Issued</th><th>Period</th><th class="num">Amount</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>${invRows(n)}</tbody></table>`;
+  const bankBox = () => `<div class="gap" style="gap:10px"><div class="row"><span style="width:30px;height:30px;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink)">${I.bank}</span><div class="grow"><b>Bank transfer</b><div class="muted" style="font-size:12px">Use the invoice number as the reference</div></div></div>
+    <dl class="kv" style="margin:0"><dt>Bank</dt><dd>Pacific Commercial Bank</dd><dt>Account name</dt><dd>Grids Platform Ltd</dd><dt>IBAN / account</dt><dd><span class="copy">VU93 0001 0023 4455 6677 ${I.copy}</span></dd><dt>SWIFT / BIC</dt><dd><span class="copy">PCBKVUVU ${I.copy}</span></dd><dt>Reference</dt><dd><span class="copy">INV-2026-0142 ${I.copy}</span></dd></dl></div>`;
+  const cardBox = () => `<div class="row"><span style="width:44px;height:30px;display:grid;place-items:center;border:1px solid var(--line-2);font:600 11px var(--mono)">VISA</span><div class="grow"><b class="mono">•••• 4242</b> <span class="chip">Default</span><div class="muted" style="font-size:12px">Expires 08/2027 · Jean Tari</div></div><button class="btn sm">Replace</button></div>`;
+  const details = () => `<dl class="kv" style="margin:0"><dt>Legal name</dt><dd>Ministry of Health, Republic of Vanuatu</dd><dt>Billing contact</dt><dd>Aroha Finau<br><span class="muted">finance@moh.gov.vu</span></dd><dt>Also send to</dt><dd><span class="chip">jean.tari@moh.gov.vu</span> <span class="chip">accounts@moh.gov.vu</span></dd><dt>Address</dt><dd>Private Mail Bag 9014<br>Port Vila, Vanuatu</dd><dt>Tax ID</dt><dd class="mono">VAT 100-482-117</dd><dt>PO number</dt><dd class="mono">PO-2026-0442</dd><dt>Currency</dt><dd>USD · invoices in English</dd></dl>`;
+  const timeline = (n = 6) => `<ul class="tl">${ACTIVITY.slice(0, n).map((a) => `<li><span class="ic">${I[a[0]]}</span><div><div style="font-size:13px">${a[1]}</div><div class="muted" style="font-size:12px">${a[2]}</div></div></li>`).join('')}</ul>`;
+  const alerts = () => `<div class="gap" style="gap:10px"><div class="row"><div class="grow"><b>Usage alerts</b><div class="muted" style="font-size:12px">Email billing contacts when a limit is near</div></div><span class="chip good">On</span></div><div class="row wrap"><span class="chip">80% of any limit</span><span class="chip">100% of any limit</span><span class="chip">Invoice overdue</span><button class="btn sm ghost">${I.plus} Add</button></div></div>`;
+  const dunning = () => `<div class="banner bad">${I.warn}<div class="grow"><b>1 invoice is overdue · USD 480.00</b><div class="sub" style="font-size:13px">INV-2026-0142 was due 9 Oct. Pay by 23 Oct to avoid your workspace going read-only.</div></div><button class="btn" data-act="pay">How to pay</button><button class="btn primary" data-inv="0">View invoice</button></div>`;
+
+  /* ---------- A ---------- */
+  document.getElementById('A').innerHTML = `
+    <div class="row wrap"><div class="grow"><div class="eyebrow">Settings</div><h1 style="font-size:24px;font-weight:600;letter-spacing:-.01em">Billing</h1><p class="sub">Your plan, what it costs, what you use and how you pay.</p></div><button class="btn" data-act="statement">${I.down} Statement</button><button class="btn primary" data-act="plan">Change plan</button></div>
+    ${dunning()}
+    <div class="kpis">
+      <div class="kpi"><span class="eyebrow">Plan</span><span class="v">Team</span><span class="sub" style="font-size:13px">Annual · <span class="chip good">● Active</span></span></div>
+      <div class="kpi"><span class="eyebrow">Next invoice</span><span class="v mono">USD 1,140</span><span class="sub" style="font-size:13px">1 Nov 2026 · estimate</span></div>
+      <div class="kpi"><span class="eyebrow">Outstanding</span><span class="v mono" style="color:var(--bad)">USD 480</span><span class="sub" style="font-size:13px">1 invoice · 1 overdue</span></div>
+      <div class="kpi"><span class="eyebrow">Credit</span><span class="v mono">USD 0</span><span class="sub" style="font-size:13px">Applied to the next invoice</span></div>
+    </div>
+    <div class="grid2">
+      <div class="gap">
+        <div class="card"><header><h3>Usage this period</h3><small>1 Oct – 31 Oct · resets in 16 days</small><button class="btn sm end" data-act="plan">Raise limits</button></header><div class="body" style="display:grid;grid-template-columns:1fr 1fr;gap:18px 28px">${USAGE.map(meter).join('')}</div></div>
+        <div class="card"><header><h3>Invoices</h3><div class="seg end" id="Afilter"><button aria-pressed="true">All</button><button aria-pressed="false">Open</button><button aria-pressed="false">Paid</button></div></header>${invTable()}</div>
+      </div>
+      <div class="gap">
+        <div class="card"><header><h3>How to pay</h3><small>Methods on file</small></header><div class="body gap" style="gap:16px">${cardBox()}<hr style="border:0;border-top:1px solid var(--line);width:100%;margin:0">${bankBox()}</div></div>
+        <div class="card"><header><h3>Billing details</h3><button class="btn sm end" data-act="details">${I.edit} Edit</button></header><div class="body">${details()}</div></div>
+        <div class="card"><header><h3>Alerts</h3></header><div class="body">${alerts()}</div></div>
+        <div class="card"><header><h3>Activity</h3><a class="end" href="#" style="font-size:12px">All</a></header><div class="body">${timeline(4)}</div></div>
+      </div>
+    </div>`;
+
+  /* ---------- B ---------- */
+  const TABS = [['overview', 'Overview'], ['plan', 'Plan & usage'], ['invoices', 'Invoices'], ['payment', 'Payment & details'], ['activity', 'Activity']];
+  let bTab = 'overview';
+  const paintB = () => {
+    document.getElementById('Btabs').innerHTML = TABS.map(([id, l]) => `<button role="tab" aria-selected="${id === bTab}" data-tab="${id}">${l}${id === 'invoices' ? ' <span class="chip bad">1</span>' : ''}</button>`).join('');
+    const v = {
+      overview: `${dunning()}<div class="kpis"><div class="kpi"><span class="eyebrow">Plan</span><span class="v">Team</span><span class="sub" style="font-size:13px">Renews 1 Jan 2027</span></div><div class="kpi"><span class="eyebrow">Next invoice</span><span class="v mono">USD 1,140</span><span class="sub" style="font-size:13px">1 Nov 2026</span></div><div class="kpi"><span class="eyebrow">Outstanding</span><span class="v mono" style="color:var(--bad)">USD 480</span><span class="sub" style="font-size:13px">1 overdue</span></div><div class="kpi"><span class="eyebrow">Paid this year</span><span class="v mono">USD 9,420</span><span class="sub" style="font-size:13px">8 invoices</span></div></div>
+        <div class="grid2e"><div class="card"><header><h3>Closest to a limit</h3></header><div class="body gap">${[USAGE[4], USAGE[3], USAGE[0]].map(meter).join('')}</div></div><div class="card"><header><h3>Recent activity</h3></header><div class="body">${timeline(4)}</div></div></div>`,
+      plan: `<div class="grid2"><div class="gap"><div class="card"><header><h3>Team plan</h3><span class="chip good">● Active</span><small class="end">Billed annually · renews 1 Jan 2027</small></header><div class="body"><div class="row wrap" style="gap:28px"><div><div class="eyebrow">Price</div><div class="mono" style="font-size:20px;font-weight:600">USD 95 /mo</div><div class="muted" style="font-size:12px">USD 1,140 billed yearly</div></div><div><div class="eyebrow">Included seats</div><div class="mono" style="font-size:20px;font-weight:600">25</div><div class="muted" style="font-size:12px">USD 6 per extra seat</div></div><div><div class="eyebrow">Started</div><div style="font-size:16px;font-weight:500">14 May 2026</div><div class="muted" style="font-size:12px">Upgraded from Starter</div></div></div><div class="row" style="margin-top:16px"><button class="btn primary" data-act="plan">Change plan</button><button class="btn" data-act="cancel">Cancel subscription</button></div></div></div>
+        <div class="card"><header><h3>Usage by limit</h3><small>Resets in 16 days</small></header><div class="body" style="display:grid;grid-template-columns:1fr 1fr;gap:18px 28px">${USAGE.map(meter).join('')}</div></div></div>
+        <div class="gap"><div class="card"><header><h3>Included in Team</h3></header><div class="body"><ul style="list-style:none;margin:0;padding:0;display:grid;gap:7px;font-size:13px">${['Unlimited forms and dashboards', 'Custom branding and domains', 'Approval workflows', 'Python, R and JavaScript datasets', 'Email design', 'Priority support (next business day)'].map((f) => `<li class="row" style="gap:8px"><span style="color:var(--good)">${I.check}</span>${f}</li>`).join('')}</ul></div></div><div class="card"><header><h3>Alerts</h3></header><div class="body">${alerts()}</div></div></div></div>`,
+      invoices: `<div class="card"><header><div class="seg" id="Bfilter"><button aria-pressed="true">All</button><button aria-pressed="false">Open</button><button aria-pressed="false">Overdue</button><button aria-pressed="false">Paid</button></div><div class="end row"><button class="btn sm">${I.down} All as ZIP</button><button class="btn sm">${I.down} CSV</button></div></header>${invTable()}</div><p class="muted" style="font-size:12px">Receipts for paid invoices are in each invoice. Amounts are in USD. Tax is shown on the invoice.</p>`,
+      payment: `<div class="grid2e"><div class="gap"><div class="card"><header><h3>How you pay</h3></header><div class="body gap" style="gap:16px">${cardBox()}<div class="row"><span class="grow sub" style="font-size:13px">Charge the card automatically when an invoice is issued</span><span class="chip">Off</span></div><hr style="border:0;border-top:1px solid var(--line);width:100%;margin:0">${bankBox()}</div></div></div><div class="gap"><div class="card"><header><h3>Billing details</h3><button class="btn sm end" data-act="details">${I.edit} Edit</button></header><div class="body">${details()}</div></div><div class="card"><header><h3>Invoice settings</h3></header><div class="body"><dl class="kv" style="margin:0"><dt>Payment terms</dt><dd>Net 14</dd><dt>Send invoices</dt><dd>On the 1st, by email with PDF</dd><dt>Footer note</dt><dd>Please quote the invoice number when paying.</dd></dl></div></div></div></div>`,
+      activity: `<div class="card"><header><h3>Billing activity</h3><div class="seg end"><button aria-pressed="true">All</button><button aria-pressed="false">Payments</button><button aria-pressed="false">Plan changes</button><button aria-pressed="false">Emails</button></div></header><div class="body">${timeline(6)}</div></div>`,
+    };
+    document.getElementById('B').innerHTML = v[bTab];
+  };
+
+  /* ---------- C ---------- */
+  document.getElementById('C').innerHTML = `
+    <div class="row wrap"><div class="grow"><div class="eyebrow">Settings</div><h1 style="font-size:24px;font-weight:600;letter-spacing:-.01em">Billing</h1><p class="sub">Choose a plan that fits what you use.</p></div><div class="seg" id="Cinterval"><button aria-pressed="false">Monthly</button><button aria-pressed="true">Annual · 2 months free</button></div></div>
+    ${dunning()}
+    <div class="grid3" id="Cplans"></div>
+    <div class="grid2">
+      <div class="gap">
+        <div class="card"><header><h3>What you will pay on 1 Nov</h3><small>Estimate · tax included at 12.5%</small><span class="chip info end">USD 1,140.00</span></header><div class="body gap" style="gap:14px">
+          <div class="stack-bar" aria-label="Cost breakdown"><i style="width:68%;background:var(--brand)"></i><i style="width:12%;background:#6d9cff"></i><i style="width:8%;background:#d4a600"></i><i style="width:12%;background:#8d8f99"></i></div>
+          <table style="font-size:13px"><tbody><tr><td><span class="chip" style="background:var(--brand);border-color:var(--brand)">&nbsp;</span> Team plan, annual</td><td class="num mono">USD 777.00</td></tr><tr><td><span class="chip" style="background:#6d9cff;border-color:#6d9cff">&nbsp;</span> 3 extra seats × USD 6 × 12</td><td class="num mono">USD 216.00</td></tr><tr><td><span class="chip" style="background:#d4a600;border-color:#d4a600">&nbsp;</span> Rows over 5M (est. 1.1M)</td><td class="num mono">USD 91.00</td></tr><tr><td><span class="chip" style="background:#8d8f99;border-color:#8d8f99">&nbsp;</span> Tax 12.5%</td><td class="num mono">USD 56.00</td></tr><tr><td><b>Total</b></td><td class="num mono"><b>USD 1,140.00</b></td></tr></tbody></table></div></div>
+        <div class="card"><header><h3>Invoices</h3></header>${invTable(5)}</div>
+      </div>
+      <div class="gap">
+        <div class="card"><header><h3>Insight</h3></header><div class="body gap" style="gap:12px"><div class="banner info" style="padding:10px 12px">${I.bell}<div style="font-size:13px"><b>Form submissions will pass 10k around 24 Oct.</b><div class="sub">Business includes 50k. Upgrading mid-period is prorated.</div></div></div><div class="meter">${meter(USAGE[0])}</div><div class="meter">${meter(USAGE[3])}</div></div></div>
+        <div class="card"><header><h3>How to pay</h3></header><div class="body gap" style="gap:14px">${cardBox()}${bankBox()}</div></div>
+        <div class="card"><header><h3>Billing details</h3><button class="btn sm end" data-act="details">${I.edit} Edit</button></header><div class="body">${details()}</div></div>
+      </div>
+    </div>`;
+  const PLANS = [
+    ['Starter', 0, 0, ['Up to 5 members', '3 projects', '5 GB storage', 'Community support']],
+    ['Team', 95, 79, ['25 members, USD 6 per extra', '10 projects', '100 GB storage', 'Custom branding and domains', 'Approval workflows', 'Next-business-day support']],
+    ['Business', 290, 240, ['100 members', 'Unlimited projects', '1 TB storage', 'Single sign-on and audit export', 'Row-level security', '4-hour support, named contact']],
+  ];
+  let annual = true;
+  const paintPlans = () => {
+    document.getElementById('Cplans').innerHTML = PLANS.map((p) => `<div class="plan ${p[0] === 'Team' ? 'cur' : ''}"><div class="row"><b>${p[0]}</b>${p[0] === 'Team' ? '<span class="chip info end">Current plan</span>' : ''}</div><div class="price mono">${p[1] === 0 ? 'Free' : 'USD ' + (annual ? p[2] : p[1])}<span class="muted" style="font-size:13px;font-weight:400">${p[1] ? ' /mo' : ''}</span></div><div class="muted" style="font-size:12px">${p[1] ? (annual ? 'Billed yearly · save USD ' + (p[1] - p[2]) * 12 : 'Billed monthly') : 'No card needed'}</div><ul>${p[3].map((f) => `<li><span>${I.check}</span>${f}</li>`).join('')}</ul>${p[0] === 'Team' ? '<button class="btn" disabled>Your plan</button>' : p[0] === 'Business' ? '<button class="btn primary" data-act="plan">Upgrade to Business</button>' : '<button class="btn" data-act="plan">Downgrade</button>'}</div>`).join('');
+  };
+
+  /* ---------- D ---------- */
+  document.getElementById('D').innerHTML = `
+    <div class="row wrap"><div class="grow"><div class="eyebrow">Console · Organisations · Ministry of Health · Billing</div><h1 style="font-size:24px;font-weight:600;letter-spacing:-.01em">Ministry of Health, Vanuatu</h1><div class="row wrap" style="margin-top:6px"><span class="chip good">● Active</span><span class="chip">Team · annual</span><span class="chip bad">1 invoice overdue · 3 days</span><span class="chip">Manual invoicing</span></div></div><button class="btn">Add note</button><button class="btn">Apply credit</button><button class="btn primary">Issue invoice</button></div>
+    <div class="kpis"><div class="kpi"><span class="eyebrow">MRR</span><span class="v mono">USD 95</span><span class="sub" style="font-size:13px">+ USD 25 overage avg</span></div><div class="kpi"><span class="eyebrow">Lifetime paid</span><span class="v mono">USD 11,260</span><span class="sub" style="font-size:13px">Since 14 Jan 2025</span></div><div class="kpi"><span class="eyebrow">Outstanding</span><span class="v mono" style="color:var(--bad)">USD 480</span><span class="sub" style="font-size:13px">Dunning step 2 of 4</span></div><div class="kpi"><span class="eyebrow">Avg days to pay</span><span class="v mono">3.4</span><span class="sub" style="font-size:13px">Last 12 invoices</span></div></div>
+    <div class="grid2"><div class="gap">
+      <div class="card"><header><h3>Invoices</h3><button class="btn sm end">${I.plus} Manual invoice</button></header><table><thead><tr><th>Invoice</th><th>Issued</th><th>Period</th><th class="num">Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>${INVOICES.slice(0, 5).map((r, i) => `<tr><td class="mono">${r[0]}</td><td>${r[1]}</td><td class="muted">${r[2]}</td><td class="num mono">${money(r[3])}</td><td>${chip(r[4])}</td><td>${r[4] === 'overdue' ? '<button class="btn sm primary">Record payment</button> <button class="btn sm">Remind</button> <button class="btn sm ghost">Void</button>' : '<button class="btn sm ghost">Refund</button> <button class="btn sm ghost">Receipt</button>'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="card"><header><h3>Subscription timeline</h3></header><div class="body">${timeline(5)}</div></div>
+    </div><div class="gap">
+      <div class="card"><header><h3>Subscription</h3><button class="btn sm end">Change plan</button></header><div class="body"><dl class="kv" style="margin:0"><dt>Plan</dt><dd>Team · annual · USD 1,140</dd><dt>Seats</dt><dd>18 used of 25 (+ 3 extra billed)</dd><dt>Renews</dt><dd>1 Jan 2027 · auto-renew on</dd><dt>Trial</dt><dd>Ended 28 Jan 2025</dd><dt>Discount</dt><dd><span class="chip">10% · Ministry agreement</span></dd><dt>Overrides</dt><dd><span class="chip">+5k emails /mo</span> <span class="chip">API 500k</span></dd></dl><div class="row wrap" style="margin-top:12px"><button class="btn sm">Extend trial</button><button class="btn sm">Pause</button><button class="btn sm">Cancel…</button></div></div></div>
+      <div class="card"><header><h3>Collections</h3></header><div class="body"><dl class="kv" style="margin:0"><dt>Dunning</dt><dd>Reminder 1 sent 9 Oct · reminder 2 sent 12 Oct<br><span class="muted">Next: warning 19 Oct · read-only 23 Oct</span></dd><dt>Billing contact</dt><dd>Aroha Finau · finance@moh.gov.vu</dd><dt>Tax ID</dt><dd class="mono">VAT 100-482-117 · verified</dd><dt>PO</dt><dd class="mono">PO-2026-0442</dd></dl><button class="btn sm" style="margin-top:10px">Pause reminders</button></div></div>
+      <div class="card"><header><h3>Internal notes</h3></header><div class="body gap" style="gap:8px"><div style="font-size:13px;padding:8px 10px;background:var(--warn-soft);border:1px solid var(--warn-line)">Finance confirmed payment is in their approval queue. Chase on 20 Oct. <span class="muted">· Salman, 12 Oct</span></div><input class="field" placeholder="Add a note for staff…" style="height:34px;border:1px solid var(--line-2);padding:0 10px;background:var(--sheet)"></div></div>
+    </div></div>`;
+
+  /* ---------- modals ---------- */
+  const layer = document.getElementById('layer');
+  const close = () => (layer.innerHTML = '');
+  const modal = (html, cls = '') => { layer.innerHTML = `<div class="scrim" id="scrim"><div class="modal ${cls}" role="dialog" aria-modal="true">${html}</div></div>`; layer.querySelector('#scrim').addEventListener('mousedown', (e) => e.target.id === 'scrim' && close()); };
+  const head = (t, s = '') => `<header class="row" style="padding:16px 22px;border-bottom:1px solid var(--line)"><div class="grow"><h2 style="font-size:17px;font-weight:600">${t}</h2>${s ? `<div class="muted" style="font-size:13px">${s}</div>` : ''}</div><button class="btn ghost" data-close aria-label="Close">${I.x}</button></header>`;
+  const planModal = () => modal(`${head('Change plan', 'Prorated from today · you will not lose any data')}<div style="padding:20px 22px" class="gap"><div class="row"><div class="seg"><button aria-pressed="false">Monthly</button><button aria-pressed="true">Annual</button></div><span class="muted" style="font-size:13px">Annual saves USD 192 a year on Business</span></div><div class="grid3">${PLANS.map((p) => `<div class="plan ${p[0] === 'Business' ? 'cur' : ''}"><b>${p[0]}</b><div class="price mono" style="font-size:22px">${p[1] ? 'USD ' + p[2] : 'Free'}<span class="muted" style="font-size:12px;font-weight:400">${p[1] ? ' /mo' : ''}</span></div><ul>${p[3].slice(0, 4).map((f) => `<li><span>${I.check}</span>${f}</li>`).join('')}</ul></div>`).join('')}</div>
+    <div class="card"><header><h3>What changes today</h3></header><table><tbody><tr><td>Business, annual</td><td class="num mono">USD 2,880.00</td></tr><tr><td class="muted">Credit for unused Team time (2.5 months)</td><td class="num mono">− USD 237.50</td></tr><tr><td class="muted">Tax 12.5%</td><td class="num mono">USD 330.31</td></tr><tr><td><b>Due now</b></td><td class="num mono"><b>USD 2,972.81</b></td></tr></tbody></table></div>
+    <div class="row"><span class="muted" style="font-size:13px">Invoice goes to finance@moh.gov.vu · due in 14 days</span><span class="end row"><button class="btn" data-close>Cancel</button><button class="btn primary" data-close>Upgrade to Business</button></span></div></div>`);
+  const detailsModal = () => modal(`${head('Billing details', 'Shown on every invoice from now on')}<div style="padding:20px 22px;display:grid;gap:14px"><div class="grid2e"><div class="field"><label>Legal name</label><input value="Ministry of Health, Republic of Vanuatu"></div><div class="field"><label>Tax ID</label><input value="VAT 100-482-117"></div><div class="field"><label>Billing contact</label><input value="Aroha Finau"></div><div class="field"><label>Billing email</label><input value="finance@moh.gov.vu"></div></div><div class="field"><label>Address</label><input value="Private Mail Bag 9014, Port Vila, Vanuatu"></div><div class="grid2e"><div class="field"><label>PO number</label><input value="PO-2026-0442"></div><div class="field"><label>Also send invoices to</label><input value="jean.tari@moh.gov.vu, accounts@moh.gov.vu"></div></div><div class="row"><span class="end row"><button class="btn" data-close>Cancel</button><button class="btn primary" data-close>Save</button></span></div></div>`, 'narrow');
+  const cancelModal = () => modal(`${head('Cancel subscription', 'You keep Team until 31 Dec 2026')}<div style="padding:20px 22px;display:grid;gap:14px"><div class="banner info">${I.clock}<div style="font-size:13px">After that your workspace becomes read-only for 30 days, then data is archived. You can export everything first.</div></div><div class="field"><label>What made you leave?</label><select><option>Too expensive</option><option>Missing a feature</option><option>Switching tool</option><option>Project ended</option></select></div><div class="row"><span class="end row"><button class="btn" data-close>Keep my plan</button><button class="btn" style="color:var(--bad);border-color:var(--bad)" data-close>Cancel at period end</button></span></div></div>`, 'narrow');
+  const payModal = () => modal(`${head('How to pay INV-2026-0142', 'USD 480.00 · due 9 Oct')}<div style="padding:20px 22px" class="gap">${bankBox()}<div class="banner info">${I.mail}<div style="font-size:13px">Paid already? Reply to the reminder with your transfer receipt and we will mark it paid within one business day.</div></div><div class="row"><span class="end"><button class="btn primary" data-close>Done</button></span></div></div>`, 'narrow');
+  const invDrawer = (i) => { const r = INVOICES[i]; layer.innerHTML = `<div class="scrim" id="scrim" style="place-items:stretch end;padding:0"><aside class="drawer" role="dialog" aria-label="Invoice ${r[0]}"><header class="row" style="padding:16px 20px;border-bottom:1px solid var(--line)"><div class="grow"><div class="eyebrow">Invoice</div><h2 class="mono" style="font-size:18px;font-weight:600">${r[0]}</h2></div>${chip(r[4])}<button class="btn ghost" data-close aria-label="Close">${I.x}</button></header>
+    <div style="padding:20px" class="gap"><div class="row wrap"><button class="btn">${I.down} PDF</button>${r[4] === 'paid' ? `<button class="btn">${I.file} Receipt</button>` : '<button class="btn primary" data-act="pay">How to pay</button>'}<button class="btn ghost">${I.mail} Resend</button></div>
+    <dl class="kv" style="margin:0"><dt>Billed to</dt><dd>Ministry of Health, Vanuatu<br><span class="muted">VAT 100-482-117</span></dd><dt>Issued</dt><dd>${r[1]}</dd><dt>Due</dt><dd>${r[4] === 'overdue' ? '9 Oct 2026 · 7 days overdue' : 'Paid on time'}</dd><dt>Period</dt><dd>${r[2]}</dd><dt>PO</dt><dd class="mono">PO-2026-0442</dd></dl>
+    <div class="card"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody><tr><td>Team plan, monthly</td><td class="num mono">1</td><td class="num mono">USD 95.00</td></tr><tr><td>Extra seats</td><td class="num mono">3</td><td class="num mono">USD 18.00</td></tr><tr><td>Dataset rows over 5M</td><td class="num mono">1.1M</td><td class="num mono">USD 91.00</td></tr><tr><td class="muted">Discount 10%</td><td></td><td class="num mono">− USD 20.40</td></tr><tr><td class="muted">Tax 12.5%</td><td></td><td class="num mono">USD ${(r[3] * 0.1111).toFixed(2)}</td></tr><tr><td><b>Total</b></td><td></td><td class="num mono"><b>${money(r[3])}</b></td></tr></tbody></table></div>
+    <div><div class="eyebrow" style="margin-bottom:6px">Payments</div>${r[4] === 'paid' ? `<div class="row"><span style="color:var(--good)">${I.check}</span><span>${r[5]}</span><span class="end mono">${money(r[3])}</span></div>` : '<div class="muted" style="font-size:13px">No payment received yet. Reminder sent 12 Oct.</div>'}</div></div></aside></div>`; layer.querySelector('#scrim').addEventListener('mousedown', (e) => e.target.id === 'scrim' && close()); };
+
+  /* ---------- wiring ---------- */
+  const NOTES = {
+    A: '<b>A · Overview.</b> One page with everything visible: an overdue banner, four figures, usage meters, the invoice list, and a right rail for how to pay, billing details, alerts and activity. Closest to today, with the missing information added.',
+    B: '<b>B · Tabs.</b> Calmer, for organisations that check billing rarely. A short Overview, then Plan & usage, Invoices, Payment & details and Activity each have room for detail, filters and exports.',
+    C: '<b>C · Plan-first.</b> Starts from the decision: three plans side by side with annual savings, a cost breakdown of the next invoice, and an insight that a limit will be reached. Best for self-serve upgrades.',
+    D: '<b>D · Console (staff).</b> The platform team’s view of one organisation: MRR and payment behaviour, a subscription timeline, record payment, remind, void, refund, credits, trial extension, dunning steps and internal notes.',
+  };
+  const note = document.getElementById('note'); note.innerHTML = NOTES.A;
+  document.querySelectorAll('.switch button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.switch button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('.opt').forEach((s) => s.classList.toggle('on', s.id === 'opt' + b.dataset.opt));
+    note.innerHTML = NOTES[b.dataset.opt]; close();
+  }));
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button, tr[data-inv]'); if (!t) return;
+    if (t.matches('[data-close]')) return close();
+    if (t.dataset.tab) { bTab = t.dataset.tab; return paintB(); }
+    if (t.matches('[data-pdf]')) return e.stopPropagation();
+    if (t.dataset.inv !== undefined) return invDrawer(+t.dataset.inv);
+    const act = t.dataset.act; if (act) return ({ plan: planModal, details: detailsModal, cancel: cancelModal, pay: payModal, statement: () => {} }[act] || (() => {}))();
+    const seg = t.closest('.seg'); if (seg) { seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === t))); if (seg.id === 'Cinterval') { annual = t.textContent.startsWith('Annual'); paintPlans(); } }
+  });
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+  paintB(); paintPlans();
+</script>
+</body>
+</html>

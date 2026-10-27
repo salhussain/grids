@@ -33,6 +33,7 @@ export async function hrWorkforce(tx: Tx, c: TemplateCtx, now = new Date()) {
       icon: 'building-2',
       color: '#8a3ffc',
       geometry: 'point',
+      marker: { style: 'pin' },
       attributes: [
         { key: 'region', label: 'Region', type: 'select', options: ['Central', 'Western', 'Northern', 'Eastern'], summary: true },
         { key: 'headcount_target', label: 'Approved positions', type: 'integer', summary: true },

@@ -1,3 +1,9 @@
+// Credentials come from the repository's .env, not from the tests.
+try {
+  process.loadEnvFile(new URL('../.env', import.meta.url));
+} catch {
+  /* no .env: the variables must already be set */
+}
 import { defineConfig } from '@playwright/test';
 
 // Runs against the local stack: docker compose (incl. --profile auth), API on :4000,

@@ -17,7 +17,7 @@ import {
   type TenantDetail,
 } from '@grids/schema';
 import { api } from '../../api';
-import {
+import { confirmDialog,
   Button,
   CopyField,
   Dialog,
@@ -193,8 +193,7 @@ export function PeopleTab({ t, onInvite }: { t: TenantDetail; onInvite: () => vo
                       variant="ghost"
                       size="sm"
                       icon={Trash2}
-                      onClick={() =>
-                        confirm(`Revoke the invitation for ${i.email}?`) && revoke.mutate(i.id)
+                      onClick={async () => (await confirmDialog(`Revoke the invitation for ${i.email}?`)) && revoke.mutate(i.id)
                       }
                     >
                       Revoke
@@ -280,8 +279,7 @@ function MemberRow({
             variant="ghost"
             size="sm"
             disabled={busy}
-            onClick={() =>
-              confirm(`Suspend ${m.email}? They lose access to this organisation.`) &&
+            onClick={async () => (await confirmDialog(`Suspend ${m.email}? They lose access to this organisation.`)) &&
               onChange({ status: 'suspended' })
             }
           >

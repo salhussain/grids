@@ -1,10 +1,15 @@
-import { applyColorMode, cx, storedColorMode, type ColorMode } from '@grids/ui';
+import {
+  applyColorMode,
+  cx,
+  LanguageMenu,
+  storedColorMode,
+  ThemeToggle,
+  type ColorMode,
+} from '@grids/ui';
 import type { LocaleCode } from '@grids/i18n';
-import { Check, ChevronDown, Moon, Sun } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Branding } from './api';
 import { applyBrand } from './brand';
-import { Flag } from './flags';
 import { isDraft, useI18n, useT } from './i18n';
 
 /** The Grids mark: four squares. */
@@ -110,117 +115,38 @@ function GridBackground() {
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />;
 }
 
-/** Language menu: flag and native name for each language the organisation offers. */
+/** Language menu: the languages the organisation offers. */
 function LanguagePicker() {
   const { locale, available, setLocale, t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const wrap = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLUListElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setActive(Math.max(0, available.findIndex((l) => l.code === locale)));
-    list.current?.focus();
-    const onDown = (e: MouseEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  if (available.length < 2) return null;
-  const current = available.find((l) => l.code === locale) ?? available[0]!;
-  const close = () => (setOpen(false), button.current?.focus());
-  const choose = (code: LocaleCode) => (setLocale(code), close());
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown') setActive((i) => (i + 1) % available.length);
-    else if (e.key === 'ArrowUp') setActive((i) => (i - 1 + available.length) % available.length);
-    else if (e.key === 'Home') setActive(0);
-    else if (e.key === 'End') setActive(available.length - 1);
-    else if (e.key === 'Enter' || e.key === ' ') choose(available[active]!.code);
-    else if (e.key === 'Escape' || e.key === 'Tab') return close();
-    else return;
-    e.preventDefault();
-  };
-
   return (
-    <div ref={wrap} className="relative">
-      <button
-        ref={button}
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`${t('common.language')}: ${current.nativeName}`}
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-9 items-center gap-2 border border-zinc-300 bg-snow px-2.5 text-sm text-ink hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-accent-600"
-      >
-        <Flag code={current.code} />
-        <span>{current.nativeName}</span>
-        <ChevronDown className={cx('size-3.5 text-zinc-500 transition-transform', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <ul
-          ref={list}
-          role="listbox"
-          tabIndex={-1}
-          aria-label={t('common.language')}
-          aria-activedescendant={`lang-${available[active]?.code}`}
-          onKeyDown={onKey}
-          className="absolute end-0 top-full z-20 mt-1 min-w-56 border border-zinc-300 bg-snow py-1 whitespace-nowrap shadow-lg focus:outline-none"
-        >
-          {available.map((l, i) => (
-            <li
-              key={l.code}
-              id={`lang-${l.code}`}
-              role="option"
-              lang={l.code}
-              aria-selected={l.code === locale}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => choose(l.code)}
-              className={cx('flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-ink', i === active && 'bg-zinc-100', l.code === locale && 'font-semibold')}
-            >
-              <Flag code={l.code} />
-              <span>{l.nativeName}</span>
-              {isDraft(l.code) && <span className="font-mono text-[10px] tracking-wide text-amber-700 uppercase">{t('common.draftTranslation')}</span>}
-              <Check className={cx('ms-auto size-3.5 text-accent-700', l.code !== locale && 'invisible')} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <LanguageMenu
+      value={locale}
+      onChange={(code) => setLocale(code as LocaleCode)}
+      label={t('common.language')}
+      draftLabel={t('common.draftTranslation')}
+      options={available.map((l) => ({
+        code: l.code,
+        label: l.nativeName,
+        draft: isDraft(l.code),
+      }))}
+    />
   );
 }
 
-/**
- * Light/dark toggle. Follows the operating system until clicked, and always shows
- * the mode it switches to; picking the system's own mode goes back to following it.
- */
-function ThemeToggle() {
+/** Light/dark toggle, remembered on this device. */
+function ModeToggle() {
   const t = useT();
   const [mode, setMode] = useState<ColorMode>(storedColorMode);
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const [systemDark, setSystemDark] = useState(media.matches);
   useEffect(() => applyColorMode(mode), [mode]);
-  useEffect(() => {
-    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
-
-  const dark = mode === 'system' ? systemDark : mode === 'dark';
-  const label = `${t('common.appearance')}: ${dark ? t('common.light') : t('common.dark')}`;
-  const icon = 'absolute size-[17px] transition-[opacity,transform] duration-[400ms] motion-reduce:transition-none';
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={() => setMode(dark === systemDark ? (dark ? 'light' : 'dark') : 'system')}
-      className="relative flex size-9 items-center justify-center border border-zinc-300 bg-snow text-ink hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-accent-600"
-    >
-      <Sun className={cx(icon, dark ? 'scale-100 rotate-0 opacity-100' : 'scale-60 -rotate-90 opacity-0')} />
-      <Moon className={cx(icon, dark ? 'scale-60 rotate-90 opacity-0' : 'scale-100 rotate-0 opacity-100')} />
-    </button>
+    <ThemeToggle
+      mode={mode}
+      onChange={setMode}
+      labels={{
+        toLight: `${t('common.appearance')}: ${t('common.light')}`,
+        toDark: `${t('common.appearance')}: ${t('common.dark')}`,
+      }}
+    />
   );
 }
 
@@ -230,6 +156,7 @@ export function Shell({ org: orgBranding, children }: { org: Branding | null; ch
   const platform = usePlatformBranding(!orgBranding);
   // Without an organisation, the platform's own branding (console › Platform settings).
   const org = orgBranding;
+  const own = org?.signin?.ownLinks ? org.signin : null;
   const name = org ? org.appName || org.name : (platform?.appName ?? 'Grids');
   useEffect(() => applyBrand(org?.primaryColor ?? platform?.primaryColor), [org?.primaryColor, platform?.primaryColor]);
   useEffect(() => {
@@ -240,7 +167,7 @@ export function Shell({ org: orgBranding, children }: { org: Branding | null; ch
       <GridBackground />
       <header className="relative z-10 flex justify-end gap-2 p-4">
         <LanguagePicker />
-        <ThemeToggle />
+        <ModeToggle />
       </header>
       <main className="relative flex flex-1 items-center justify-center px-4 pt-2 pb-8">
         <div className="w-full max-w-[420px] border border-zinc-200 bg-snow px-[22px] pt-8 pb-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.18)] sm:px-9 sm:pt-10 sm:pb-9">
@@ -265,12 +192,29 @@ export function Shell({ org: orgBranding, children }: { org: Branding | null; ch
             {t('common.draftTranslation')}
           </span>
         )}
-        <a href="#" className="hover:text-ink">
-          {t('common.privacy')}
-        </a>
-        <a href="#" className="hover:text-ink">
-          {t('common.terms')}
-        </a>
+        {own ? (
+          <>
+            {own.privacyUrl && (
+              <a href={own.privacyUrl} target="_blank" rel="noopener noreferrer" className="hover:text-ink">
+                {t('common.privacy')}
+              </a>
+            )}
+            {own.termsUrl && (
+              <a href={own.termsUrl} target="_blank" rel="noopener noreferrer" className="hover:text-ink">
+                {t('common.terms')}
+              </a>
+            )}
+          </>
+        ) : (
+          <>
+            <a href="#" className="hover:text-ink">
+              {t('common.privacy')}
+            </a>
+            <a href="#" className="hover:text-ink">
+              {t('common.terms')}
+            </a>
+          </>
+        )}
       </footer>
     </div>
   );

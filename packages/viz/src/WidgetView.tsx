@@ -2,25 +2,48 @@ import { useQuery } from '@tanstack/react-query';
 import type { DashboardParams, QueryResult, Widget } from '@grids/schema';
 import { cx, ErrorNotice, Spinner } from '@grids/ui';
 import { ArrowDownRight, ArrowUpRight, Maximize2, Minus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { Chart, type ChartOption } from './Chart';
 import { FreshnessBadge } from './Freshness';
 import { MapView, type FeatureCollection } from './MapView';
+import { InfoTip } from './richtext';
 import { WidgetModal } from './WidgetModal';
-import { brandColor, CATEGORICAL, INK, STATUS, thresholdColor, useScheme, type Scheme } from './scheme';
+import {
+  brandColor,
+  categorical,
+  INK,
+  STATUS,
+  thresholdColor,
+  useScheme,
+  type Scheme,
+} from './scheme';
 
 export const ROW_HEIGHT = 128;
 // Literal classes so Tailwind generates them: full width on small screens.
 const SPAN: Record<number, string> = {
-  2: 'md:col-span-3 xl:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-6 xl:col-span-4', 5: 'md:col-span-6 xl:col-span-5',
-  6: 'md:col-span-6', 7: 'xl:col-span-7', 8: 'xl:col-span-8', 9: 'xl:col-span-9', 10: 'xl:col-span-10', 11: 'xl:col-span-11', 12: '',
+  2: 'md:col-span-3 xl:col-span-2',
+  3: 'md:col-span-3',
+  4: 'md:col-span-6 xl:col-span-4',
+  5: 'md:col-span-6 xl:col-span-5',
+  6: 'md:col-span-6',
+  7: 'xl:col-span-7',
+  8: 'xl:col-span-8',
+  9: 'xl:col-span-9',
+  10: 'xl:col-span-10',
+  11: 'xl:col-span-11',
+  12: '',
 };
 const pretty = (key: string) => key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 function useFormat(decimals?: number) {
   return useMemo(() => {
     const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: decimals ?? 1 });
-    return (v: unknown) => (v === null || v === undefined || v === '' ? '–' : typeof v === 'number' ? nf.format(v) : String(v));
+    return (v: unknown) =>
+      v === null || v === undefined || v === ''
+        ? '–'
+        : typeof v === 'number'
+          ? nf.format(v)
+          : String(v);
   }, [decimals]);
 }
 
@@ -46,21 +69,79 @@ const alpha = (hex: string, a: number) => {
   const n = parseInt(h.length === 3 ? h.replace(/./g, (c) => c + c) : h.slice(0, 6), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 };
-const valueFormatter = (unit?: string) => (v: unknown) => `${typeof v === 'number' ? v.toLocaleString() : (v ?? '–')}${unit ? ` ${unit}` : ''}`;
+const valueFormatter = (unit?: string) => (v: unknown) =>
+  `${typeof v === 'number' ? v.toLocaleString() : (v ?? '–')}${unit ? ` ${unit}` : ''}`;
 
-function LineWidget({ result, names, scheme, unit, area, stacked }: { result: QueryResult; names: Record<string, string>; scheme: Scheme; unit?: string; area?: boolean; stacked?: boolean }) {
+type LegendPos = 'top' | 'bottom' | 'right' | 'hidden';
+
+/** The chart legend where the widget asks for it (nothing when hidden). */
+function legendOption(pos: LegendPos, ink: { muted: string }, type: 'scroll' | 'plain' = 'scroll') {
+  if (pos === 'hidden') return undefined;
+  const base = {
+    type,
+    icon: 'roundRect',
+    pageIconSize: 9,
+    pageTextStyle: { color: ink.muted },
+    itemWidth: 10,
+    itemHeight: 10,
+    textStyle: { color: ink.muted },
+  };
+  if (pos === 'right') return { ...base, orient: 'vertical', right: 0, top: 'middle' };
+  return { ...base, [pos]: 0, left: 0, right: 0 };
+}
+
+/** Room the legend takes around the plot. */
+const legendGrid = (shown: boolean, pos: LegendPos) => ({
+  left: 8,
+  right: shown && pos === 'right' ? 140 : 16,
+  top: shown && pos === 'top' ? 36 : 16,
+  bottom: shown && pos === 'bottom' ? 36 : 8,
+  containLabel: true,
+});
+
+function LineWidget({
+  result,
+  names,
+  scheme,
+  unit,
+  area,
+  stacked,
+  legend = 'top',
+}: {
+  result: QueryResult;
+  names: Record<string, string>;
+  scheme: Scheme;
+  unit?: string;
+  area?: boolean;
+  stacked?: boolean;
+  legend?: LegendPos;
+}) {
   const option = useMemo<ChartOption>(() => {
     const keys = [...new Set(result.rows.map((r) => String(r.key)))];
     const ink = INK[scheme];
-    const palette = keys.length === 1 ? [brandColor()] : CATEGORICAL[scheme];
+    const palette = keys.length === 1 ? [brandColor()] : categorical(scheme);
     return {
       ...baseChart(scheme),
       color: palette,
-      grid: { left: 8, right: 16, top: keys.length > 1 ? 36 : 16, bottom: 8, containLabel: true },
-      legend: keys.length > 1 ? { type: 'scroll', top: 0, left: 0, right: 0, icon: 'roundRect', pageIconSize: 9, pageTextStyle: { color: ink.muted }, itemWidth: 10, itemHeight: 10, textStyle: { color: ink.muted } } : undefined,
-      tooltip: { ...(baseChart(scheme).tooltip as object), trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: ink.axis } }, valueFormatter: valueFormatter(unit) },
-      xAxis: { type: 'time', axisLine: { lineStyle: { color: ink.axis } }, axisLabel: { color: ink.muted, hideOverlap: true }, splitLine: { show: false } },
-      yAxis: { type: 'value', axisLabel: { color: ink.muted }, splitLine: { lineStyle: { color: ink.grid, type: 'dashed' } } },
+      grid: legendGrid(keys.length > 1 && legend !== 'hidden', legend),
+      legend: keys.length > 1 ? legendOption(legend, ink) : undefined,
+      tooltip: {
+        ...(baseChart(scheme).tooltip as object),
+        trigger: 'axis',
+        axisPointer: { type: 'line', lineStyle: { color: ink.axis } },
+        valueFormatter: valueFormatter(unit),
+      },
+      xAxis: {
+        type: 'time',
+        axisLine: { lineStyle: { color: ink.axis } },
+        axisLabel: { color: ink.muted, hideOverlap: true },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { color: ink.muted },
+        splitLine: { lineStyle: { color: ink.grid, type: 'dashed' } },
+      },
       series: keys.map((k, i) => {
         const c = palette[i % palette.length]!;
         // One series, or an area chart: a soft gradient under the line.
@@ -73,13 +154,28 @@ function LineWidget({ result, names, scheme, unit, area, stacked }: { result: Qu
           symbolSize: 7,
           lineStyle: { width: 2.25 },
           stack: area && stacked ? 'total' : undefined,
-          areaStyle: fill ? { opacity: 1, color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: alpha(c, area ? 0.45 : 0.22) }, { offset: 1, color: alpha(c, 0.02) }] } } : undefined,
+          areaStyle: fill
+            ? {
+                opacity: 1,
+                color: {
+                  type: 'linear',
+                  x: 0,
+                  y: 0,
+                  x2: 0,
+                  y2: 1,
+                  colorStops: [
+                    { offset: 0, color: alpha(c, area ? 0.45 : 0.22) },
+                    { offset: 1, color: alpha(c, 0.02) },
+                  ],
+                },
+              }
+            : undefined,
           emphasis: { focus: 'series' },
           data: result.rows.filter((r) => r.key === k).map((r) => [r.t, r.value]),
         };
       }),
     };
-  }, [result, names, scheme, unit, area, stacked]);
+  }, [result, names, scheme, unit, area, stacked, legend]);
   return <Chart option={option} label={area ? 'Area chart' : 'Line chart'} />;
 }
 
@@ -87,7 +183,25 @@ function LineWidget({ result, names, scheme, unit, area, stacked }: { result: Qu
  * Bars by category (breakdown), grouped or stacked per element (breakdown with
  * several elements), or over time (series).
  */
-function BarWidget({ result, names, scheme, horizontal, stacked, unit }: { result: QueryResult; names: Record<string, string>; scheme: Scheme; horizontal?: boolean; stacked?: boolean; unit?: string }) {
+function BarWidget({
+  result,
+  names,
+  scheme,
+  horizontal,
+  stacked,
+  unit,
+  onPick,
+  legend = 'top',
+}: {
+  result: QueryResult;
+  names: Record<string, string>;
+  scheme: Scheme;
+  horizontal?: boolean;
+  stacked?: boolean;
+  unit?: string;
+  onPick?: (name: string) => void;
+  legend?: LegendPos;
+}) {
   const option = useMemo<ChartOption>(() => {
     const ink = INK[scheme];
     const time = result.kind === 'series';
@@ -95,22 +209,41 @@ function BarWidget({ result, names, scheme, horizontal, stacked, unit }: { resul
     const keys = keyed ? [...new Set(result.rows.map((r) => String(r.key)))] : [''];
     const cats = [...new Set(result.rows.map((r) => String(time ? r.t : r.label)))];
     const ordered = horizontal && !time ? [...cats].reverse() : cats;
-    const palette = keys.length === 1 ? [brandColor()] : CATEGORICAL[scheme];
+    const palette = keys.length === 1 ? [brandColor()] : categorical(scheme);
     const catAxis = {
       type: 'category',
-      data: ordered.map((c) => (time ? new Date(c).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : c)),
+      data: ordered.map((c) =>
+        time ? new Date(c).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : c,
+      ),
       axisLine: { lineStyle: { color: ink.axis } },
       axisTick: { show: false },
-      axisLabel: { color: ink.muted, width: 120, overflow: 'truncate', interval: time ? 'auto' : 0, hideOverlap: true },
+      axisLabel: {
+        color: ink.muted,
+        width: 120,
+        overflow: 'truncate',
+        interval: time ? 'auto' : 0,
+        hideOverlap: true,
+      },
     };
-    const valAxis = { type: 'value', axisLabel: { color: ink.muted }, splitLine: { lineStyle: { color: ink.grid, type: 'dashed' } } };
-    const value = (k: string, c: string) => result.rows.find((r) => String(time ? r.t : r.label) === c && (!keyed || String(r.key) === k))?.value ?? null;
+    const valAxis = {
+      type: 'value',
+      axisLabel: { color: ink.muted },
+      splitLine: { lineStyle: { color: ink.grid, type: 'dashed' } },
+    };
+    const value = (k: string, c: string) =>
+      result.rows.find((r) => String(time ? r.t : r.label) === c && (!keyed || String(r.key) === k))
+        ?.value ?? null;
     return {
       ...baseChart(scheme),
       color: palette,
-      grid: { left: 8, right: 16, top: keys.length > 1 ? 36 : 16, bottom: 8, containLabel: true },
-      legend: keys.length > 1 ? { type: 'scroll', top: 0, left: 0, right: 0, icon: 'roundRect', pageIconSize: 9, pageTextStyle: { color: ink.muted }, itemWidth: 10, itemHeight: 10, textStyle: { color: ink.muted } } : undefined,
-      tooltip: { ...(baseChart(scheme).tooltip as object), trigger: 'axis', axisPointer: { type: 'shadow', shadowStyle: { color: alpha(ink.axis, 0.25) } }, valueFormatter: valueFormatter(unit) },
+      grid: legendGrid(keys.length > 1 && legend !== 'hidden', legend),
+      legend: keys.length > 1 ? legendOption(legend, ink) : undefined,
+      tooltip: {
+        ...(baseChart(scheme).tooltip as object),
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', shadowStyle: { color: alpha(ink.axis, 0.25) } },
+        valueFormatter: valueFormatter(unit),
+      },
       xAxis: horizontal ? valAxis : catAxis,
       yAxis: horizontal ? catAxis : valAxis,
       series: keys.map((k) => ({
@@ -118,18 +251,33 @@ function BarWidget({ result, names, scheme, horizontal, stacked, unit }: { resul
         type: 'bar',
         stack: stacked ? 'total' : undefined,
         barMaxWidth: 32,
-        itemStyle: { borderRadius: stacked && keys.length > 1 ? 0 : horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
+        itemStyle: {
+          borderRadius: stacked && keys.length > 1 ? 0 : horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0],
+        },
         barGap: '12%',
         emphasis: { focus: 'series' },
-        label: { show: keys.length === 1 && ordered.length <= 12, position: horizontal ? 'right' : 'top', color: ink.muted, fontSize: 11 },
+        label: {
+          show: keys.length === 1 && ordered.length <= 12,
+          position: horizontal ? 'right' : 'top',
+          color: ink.muted,
+          fontSize: 11,
+        },
         data: ordered.map((c) => value(k, c)),
       })),
     };
-  }, [result, names, scheme, horizontal, stacked, unit]);
-  return <Chart option={option} label="Bar chart" />;
+  }, [result, names, scheme, horizontal, stacked, unit, legend]);
+  return <Chart option={option} label="Bar chart" onPick={onPick} />;
 }
 
-function GaugeWidget({ result, widget, scheme }: { result: QueryResult; widget: Widget; scheme: Scheme }) {
+function GaugeWidget({
+  result,
+  widget,
+  scheme,
+}: {
+  result: QueryResult;
+  widget: Widget;
+  scheme: Scheme;
+}) {
   const o = widget.options;
   const option = useMemo<ChartOption>(() => {
     const ink = INK[scheme];
@@ -162,15 +310,35 @@ function GaugeWidget({ result, widget, scheme }: { result: QueryResult; widget: 
           radius: '96%',
           center: ['50%', '62%'],
           progress: { show: bands.length === 1, width: 14, itemStyle: { color: brandColor() } },
-          axisLine: { lineStyle: { width: 14, color: bands.length === 1 ? [[1, ink.grid]] : bands } },
-          pointer: { show: bands.length > 1, length: '58%', width: 4, itemStyle: { color: ink.text } },
+          axisLine: {
+            lineStyle: { width: 14, color: bands.length === 1 ? [[1, ink.grid]] : bands },
+          },
+          pointer: {
+            show: bands.length > 1,
+            length: '58%',
+            width: 4,
+            itemStyle: { color: ink.text },
+          },
           anchor: { show: bands.length > 1, size: 10, itemStyle: { color: ink.text } },
           axisTick: { show: false },
           splitLine: { length: 6, distance: -14, lineStyle: { color: ink.surface, width: 2 } },
           splitNumber: 4,
-          axisLabel: { distance: 18, color: ink.muted, fontSize: 10, formatter: (v: number) => Math.round(v).toLocaleString() },
+          axisLabel: {
+            distance: 18,
+            color: ink.muted,
+            fontSize: 10,
+            formatter: (v: number) => Math.round(v).toLocaleString(),
+          },
           title: { show: false },
-          detail: { valueAnimation: true, offsetCenter: [0, '28%'], fontSize: 28, fontWeight: 600, color: ink.text, formatter: (v: number) => `${v.toLocaleString(undefined, { maximumFractionDigits: o.decimals ?? 0 })}${o.unit ? ` ${o.unit}` : ''}` },
+          detail: {
+            valueAnimation: true,
+            offsetCenter: [0, '28%'],
+            fontSize: 28,
+            fontWeight: 600,
+            color: ink.text,
+            formatter: (v: number) =>
+              `${v.toLocaleString(undefined, { maximumFractionDigits: o.decimals ?? 0 })}${o.unit ? ` ${o.unit}` : ''}`,
+          },
           data: [{ value }],
         },
       ],
@@ -180,12 +348,32 @@ function GaugeWidget({ result, widget, scheme }: { result: QueryResult; widget: 
 }
 
 /** Places × indicators with tinted cells (Tupaia-style matrix). */
-function MatrixWidget({ result, names, widget, scheme }: { result: QueryResult; names: Record<string, string>; widget: Widget; scheme: Scheme }) {
+function MatrixWidget({
+  result,
+  names,
+  widget,
+  scheme,
+}: {
+  result: QueryResult;
+  names: Record<string, string>;
+  widget: Widget;
+  scheme: Scheme;
+}) {
   const fmt = useFormat(widget.options.decimals ?? 0);
   const keys = [...new Set(result.rows.map((r) => String(r.key ?? '')))];
   const labels = [...new Set(result.rows.map((r) => String(r.label)))];
-  const cell = new Map(result.rows.map((r) => [`${r.label}|${r.key ?? ''}`, r.value as number | null]));
-  const maxBy = new Map(keys.map((k) => [k, Math.max(0, ...result.rows.filter((r) => String(r.key ?? '') === k).map((r) => Number(r.value) || 0))]));
+  const cell = new Map(
+    result.rows.map((r) => [`${r.label}|${r.key ?? ''}`, r.value as number | null]),
+  );
+  const maxBy = new Map(
+    keys.map((k) => [
+      k,
+      Math.max(
+        0,
+        ...result.rows.filter((r) => String(r.key ?? '') === k).map((r) => Number(r.value) || 0),
+      ),
+    ]),
+  );
   const o = widget.options;
   const thresholds = o.warn !== undefined || o.alert !== undefined;
   const brand = brandColor();
@@ -215,13 +403,20 @@ function MatrixWidget({ result, names, widget, scheme }: { result: QueryResult; 
         <tbody>
           {labels.map((l) => (
             <tr key={l}>
-              <th scope="row" className="border-b border-zinc-100 px-2 py-1.5 text-start font-normal whitespace-nowrap">
+              <th
+                scope="row"
+                className="border-b border-zinc-100 px-2 py-1.5 text-start font-normal whitespace-nowrap"
+              >
                 {l}
               </th>
               {keys.map((k) => {
                 const v = cell.get(`${l}|${k}`) ?? null;
                 return (
-                  <td key={k} className="num border-b border-zinc-100 px-2 py-1.5 text-end" style={{ background: tint(k, v) }}>
+                  <td
+                    key={k}
+                    className="num border-b border-zinc-100 px-2 py-1.5 text-end"
+                    style={{ background: tint(k, v) }}
+                  >
                     {fmt(v)}
                   </td>
                 );
@@ -234,64 +429,165 @@ function MatrixWidget({ result, names, widget, scheme }: { result: QueryResult; 
   );
 }
 
-function PieWidget({ result, scheme }: { result: QueryResult; scheme: Scheme }) {
+function PieWidget({
+  result,
+  scheme,
+  onPick,
+  legend = 'bottom',
+}: {
+  result: QueryResult;
+  scheme: Scheme;
+  onPick?: (name: string) => void;
+  legend?: LegendPos;
+}) {
   const option = useMemo<ChartOption>(() => {
     const ink = INK[scheme];
+    const at = {
+      bottom: { x: 50, y: 45 },
+      top: { x: 50, y: 58 },
+      right: { x: 38, y: 50 },
+      hidden: { x: 50, y: 50 },
+    }[legend];
     // More than 7 categories fold into "Other" (no generated hues).
     const sorted = [...result.rows].sort((a, b) => Number(b.value) - Number(a.value));
     const top = sorted.slice(0, 7);
     const rest = sorted.slice(7).reduce((s, r) => s + Number(r.value ?? 0), 0);
-    const data = [...top.map((r) => ({ name: String(r.label), value: r.value })), ...(rest ? [{ name: 'Other', value: rest }] : [])];
+    const data = [
+      ...top.map((r) => ({ name: String(r.label), value: r.value })),
+      ...(rest ? [{ name: 'Other', value: rest }] : []),
+    ];
     return {
       ...baseChart(scheme),
-      color: CATEGORICAL[scheme],
+      color: categorical(scheme),
       tooltip: { ...(baseChart(scheme).tooltip as object), trigger: 'item' },
-      legend: { orient: 'vertical', right: 0, top: 'middle', icon: 'rect', itemWidth: 10, itemHeight: 10, textStyle: { color: ink.muted } },
+      legend: legendOption(legend, ink, 'plain'),
+      // The total in the middle of the ring.
+      title: {
+        text: data.reduce((n, d) => n + Number(d.value ?? 0), 0).toLocaleString(),
+        subtext: 'total',
+        left: `${at.x}%`,
+        top: at.y === 50 ? 'middle' : `${at.y - 6}%`,
+        textAlign: 'center',
+        itemGap: 2,
+        textStyle: { fontSize: 22, fontWeight: 600, color: ink.text },
+        subtextStyle: { fontSize: 11, color: ink.muted },
+      },
       series: [
         {
           type: 'pie',
-          radius: ['52%', '78%'],
-          center: ['36%', '50%'],
+          radius: legend === 'right' || legend === 'hidden' ? ['46%', '68%'] : ['40%', '60%'],
+          center: [`${at.x}%`, `${at.y}%`],
           itemStyle: { borderColor: ink.surface, borderWidth: 2 },
           label: { show: false },
           data,
         },
       ],
     };
-  }, [result, scheme]);
-  return <Chart option={option} label="Pie chart" />;
+  }, [result, scheme, legend]);
+  return <Chart option={option} label="Pie chart" onPick={onPick} />;
 }
 
-function KpiWidget({ result, widget, scheme }: { result: QueryResult; widget: Widget; scheme: Scheme }) {
+function KpiWidget({
+  result,
+  widget,
+  scheme,
+  large,
+}: {
+  result: QueryResult;
+  widget: Widget;
+  scheme: Scheme;
+  large?: boolean;
+}) {
   const o = widget.options;
   const fmt = useFormat(o.decimals ?? 0);
   const row = result.rows[0] ?? {};
   const value = row.value as number | null;
   const previous = row.previous as number | null | undefined;
   const thresholded = o.warn !== undefined || o.alert !== undefined;
-  const color = thresholded && value !== null ? thresholdColor(value, o.warn, o.alert, scheme) : undefined;
+  const color =
+    thresholded && value !== null ? thresholdColor(value, o.warn, o.alert, scheme) : undefined;
   let delta: { pct: number | null; diff: number } | null = null;
   if (typeof value === 'number' && typeof previous === 'number')
-    delta = { diff: value - previous, pct: previous ? ((value - previous) / Math.abs(previous)) * 100 : null };
-  const good = delta && delta.diff !== 0 ? (delta.diff > 0) !== !!o.invert : null;
+    delta = {
+      diff: value - previous,
+      pct: previous ? ((value - previous) / Math.abs(previous)) * 100 : null,
+    };
+  const good = delta && delta.diff !== 0 ? delta.diff > 0 !== !!o.invert : null;
   const Icon = !delta || delta.diff === 0 ? Minus : delta.diff > 0 ? ArrowUpRight : ArrowDownRight;
+  const pctOnly = o.compareShow === 'percent';
+  const changeOnly = o.compareShow === 'change';
+  const align = o.align ?? 'left';
+  const tone =
+    good === null
+      ? 'bg-zinc-100 text-zinc-600'
+      : good
+        ? 'bg-emerald-50 text-emerald-800'
+        : 'bg-red-50 text-red-800';
   return (
-    <div className="flex h-full flex-col justify-end">
+    <div
+      className={cx(
+        'flex flex-col',
+        large
+          ? 'items-center justify-center text-center'
+          : cx(
+              'h-full justify-end',
+              align === 'center'
+                ? 'items-center text-center'
+                : align === 'right'
+                  ? 'items-end text-end'
+                  : 'items-start',
+            ),
+      )}
+    >
       <div className="flex items-baseline gap-1.5">
-        <span className="num text-[34px] leading-none font-semibold tracking-tight" style={color && color !== STATUS[scheme].good ? { color } : undefined}>
+        <span
+          className={cx(
+            'num leading-none font-semibold tracking-tight',
+            large ? 'text-[88px]' : 'text-[34px]',
+          )}
+          style={
+            color && color !== STATUS[scheme].good
+              ? { color }
+              : o.valueColor
+                ? { color: o.valueColor }
+                : undefined
+          }
+        >
           {fmt(value)}
         </span>
-        {o.unit && <span className="text-sm text-zinc-500">{o.unit}</span>}
+        {o.unit && (
+          <span className={cx('text-zinc-500', large ? 'text-xl' : 'text-sm')}>{o.unit}</span>
+        )}
       </div>
       {delta && (
-        <div className={cx('mt-2 flex flex-wrap items-center gap-x-1 text-xs', good === null ? 'text-zinc-500' : good ? 'text-emerald-700' : 'text-red-700')}>
+        <div
+          className={cx(
+            'inline-flex flex-wrap items-center gap-x-1 rounded-full px-2 py-0.5',
+            large ? 'mt-5 px-3 py-1 text-base' : 'mt-2 text-xs',
+            tone,
+          )}
+        >
           <Icon className="size-3.5" />
           <span className="num font-medium whitespace-nowrap">
-            {delta.diff > 0 ? '+' : ''}
-            {fmt(delta.diff)}
-            {delta.pct !== null && ` (${delta.pct > 0 ? '+' : ''}${Math.round(delta.pct)}%)`}
+            {pctOnly ? (
+              delta.pct !== null ? (
+                `${delta.pct > 0 ? '+' : ''}${Math.round(delta.pct)}%`
+              ) : (
+                fmt(delta.diff)
+              )
+            ) : (
+              <>
+                {delta.diff > 0 ? '+' : ''}
+                {fmt(delta.diff)}
+                {!changeOnly &&
+                  delta.pct !== null &&
+                  ` (${delta.pct > 0 ? '+' : ''}${Math.round(delta.pct)}%)`}
+              </>
+            )}
           </span>
-          <span className="text-zinc-500">vs previous period</span>
+          {(o.compareLabel ?? 'vs previous') && (
+            <span className="opacity-70">{o.compareLabel ?? 'vs previous'}</span>
+          )}
         </div>
       )}
     </div>
@@ -308,7 +604,10 @@ function TableWidget({ result }: { result: QueryResult }) {
         <thead className="sticky top-0 bg-snow text-xs text-zinc-500">
           <tr>
             {cols.map((c) => (
-              <th key={c} className="border-b border-zinc-200 px-2 py-1.5 text-start font-medium whitespace-nowrap">
+              <th
+                key={c}
+                className="border-b border-zinc-200 px-2 py-1.5 text-start font-medium whitespace-nowrap"
+              >
                 {pretty(c === 'parent' ? 'in' : c)}
               </th>
             ))}
@@ -318,8 +617,20 @@ function TableWidget({ result }: { result: QueryResult }) {
           {result.rows.map((r, i) => (
             <tr key={i} className="border-b border-zinc-100 last:border-0">
               {cols.map((c) => (
-                <td key={c} className={cx('px-2 py-1.5 whitespace-nowrap', typeof r[c] === 'number' && 'num text-end')}>
-                  {typeof r[c] === 'boolean' ? (r[c] ? 'Yes' : 'No') : c === 'at' || c === 'updated' ? new Date(String(r[c])).toLocaleString() : fmt(r[c])}
+                <td
+                  key={c}
+                  className={cx(
+                    'px-2 py-1.5 whitespace-nowrap',
+                    typeof r[c] === 'number' && 'num text-end',
+                  )}
+                >
+                  {typeof r[c] === 'boolean'
+                    ? r[c]
+                      ? 'Yes'
+                      : 'No'
+                    : c === 'at' || c === 'updated'
+                      ? new Date(String(r[c])).toLocaleString()
+                      : fmt(r[c])}
                 </td>
               ))}
             </tr>
@@ -330,6 +641,18 @@ function TableWidget({ result }: { result: QueryResult }) {
   );
 }
 
+/**
+ * How often the dashboards around this refresh their widgets, in seconds (0 = never, null = each
+ * widget's own default). Widgets with a live interval of their own keep it.
+ */
+export interface RefreshPrefs {
+  /** Seconds between refreshes; 0 = never. */
+  every: number;
+  /** Keep refreshing while the tab is in the background. */
+  background: boolean;
+}
+export const RefreshContext = createContext<RefreshPrefs | null>(null);
+
 export interface WidgetViewProps {
   widget: Widget;
   queryKey: unknown[];
@@ -338,40 +661,110 @@ export interface WidgetViewProps {
   /** Data element key → display name, for legends. */
   names?: Record<string, string>;
   onSelectEntity?: (id: string) => void;
+  /** A bar or slice was clicked: its name (cross-filtering). */
+  onPick?: (name: string) => void;
   actions?: React.ReactNode;
   /** `stack`: a narrow column (explorer sidebar): full width, KPIs two-up. */
   layout?: 'grid' | 'stack';
   /** Offer the enlarged pop-up with its own filters (default: yes for charts). */
   expandable?: boolean;
+  /** Square corners and a plain border, as the platform draws boxes (the public pages keep rounded, raised tiles). */
+  square?: boolean;
 }
 
 /** Renders a loaded result by widget type (tile and pop-up). */
-export function WidgetBody({ widget, result, names = {}, onSelectEntity }: { widget: Widget; result: QueryResult; names?: Record<string, string>; onSelectEntity?: (id: string) => void }) {
+export function WidgetBody({
+  widget,
+  result,
+  names = {},
+  onSelectEntity,
+  onPick,
+  large,
+}: {
+  widget: Widget;
+  result: QueryResult;
+  names?: Record<string, string>;
+  onSelectEntity?: (id: string) => void;
+  /** A bar or slice was clicked (to filter the other widgets). */ onPick?: (name: string) => void;
+  /** The enlarged pop-up: a KPI is shown big and centred. */ large?: boolean;
+}) {
   const scheme = useScheme();
   const r = result;
   switch (widget.type) {
     case 'text':
-      return <p className="text-sm whitespace-pre-line text-zinc-700">{widget.text}</p>;
+      return (
+        <p
+          className="text-sm whitespace-pre-line text-zinc-700"
+          style={{ textAlign: widget.options.align }}
+        >
+          {widget.text}
+        </p>
+      );
     case 'kpi':
-      return <KpiWidget result={r} widget={widget} scheme={scheme} />;
+      return <KpiWidget result={r} widget={widget} scheme={scheme} large={large} />;
     case 'line':
-      return r.rows.length ? <LineWidget result={r} names={names} scheme={scheme} unit={widget.options.unit} /> : <NoData />;
+      return r.rows.length ? (
+        <LineWidget
+          result={r}
+          names={names}
+          scheme={scheme}
+          unit={widget.options.unit}
+          legend={widget.options.legend}
+        />
+      ) : (
+        <NoData />
+      );
     case 'area':
-      return r.rows.length ? <LineWidget result={r} names={names} scheme={scheme} unit={widget.options.unit} area stacked={widget.options.stacked} /> : <NoData />;
+      return r.rows.length ? (
+        <LineWidget
+          result={r}
+          names={names}
+          scheme={scheme}
+          unit={widget.options.unit}
+          area
+          stacked={widget.options.stacked}
+          legend={widget.options.legend}
+        />
+      ) : (
+        <NoData />
+      );
     case 'bar':
-      return r.rows.length ? <BarWidget result={r} names={names} scheme={scheme} horizontal={widget.options.horizontal} stacked={widget.options.stacked} unit={widget.options.unit} /> : <NoData />;
+      return r.rows.length ? (
+        <BarWidget
+          result={r}
+          names={names}
+          scheme={scheme}
+          horizontal={widget.options.horizontal}
+          stacked={widget.options.stacked}
+          unit={widget.options.unit}
+          onPick={onPick}
+          legend={widget.options.legend}
+        />
+      ) : (
+        <NoData />
+      );
     case 'gauge':
       return <GaugeWidget result={r} widget={widget} scheme={scheme} />;
     case 'matrix':
       return <MatrixWidget result={r} names={names} widget={widget} scheme={scheme} />;
     case 'pie':
-      return r.rows.length ? <PieWidget result={r} scheme={scheme} /> : <NoData />;
+      return r.rows.length ? (
+        <PieWidget result={r} scheme={scheme} onPick={onPick} legend={widget.options.legend} />
+      ) : (
+        <NoData />
+      );
     case 'map':
       return (
         <MapView
           data={r.features as FeatureCollection}
           label={widget.title || 'Map'}
-          options={{ warn: widget.options.warn, alert: widget.options.alert, labelAttribute: widget.options.labelAttribute, unit: widget.options.unit, onSelect: onSelectEntity ? (p) => onSelectEntity(String(p.id)) : undefined }}
+          options={{
+            warn: widget.options.warn,
+            alert: widget.options.alert,
+            labelAttribute: widget.options.labelAttribute,
+            unit: widget.options.unit,
+            onSelect: onSelectEntity ? (p) => onSelectEntity(String(p.id)) : undefined,
+          }}
         />
       );
     case 'table':
@@ -380,47 +773,137 @@ export function WidgetBody({ widget, result, names = {}, onSelectEntity }: { wid
 }
 
 /** One dashboard tile: fetches its query and renders by type; opens enlarged on click. */
-export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity, actions, layout = 'grid', expandable }: WidgetViewProps) {
+export function WidgetView({
+  widget,
+  queryKey,
+  load,
+  names = {},
+  onSelectEntity,
+  onPick,
+  actions,
+  layout = 'grid',
+  expandable,
+  square,
+}: WidgetViewProps) {
   const live = widget.options.refreshSeconds;
+  const every = useContext(RefreshContext);
   const [open, setOpen] = useState(false);
-  const canExpand = (expandable ?? true) && !!widget.query && widget.type !== 'map' && widget.type !== 'text';
+  const canExpand =
+    (expandable ?? true) && !!widget.query && widget.type !== 'map' && widget.type !== 'text';
   const clickBody = canExpand && widget.type !== 'table' && widget.type !== 'matrix';
   const q = useQuery({
     queryKey: [...queryKey, widget.id, widget.query],
     queryFn: () => load(),
     enabled: !!widget.query,
-    refetchInterval: (live ?? 300) * 1000,
+    refetchInterval: live
+      ? live * 1000
+      : every === null
+        ? 300_000
+        : every.every > 0
+          ? every.every * 1000
+          : false,
+    refetchIntervalInBackground: every?.background ?? false,
     placeholderData: (prev) => prev,
   });
   const body = () => {
-    if (widget.type === 'text') return <p className="text-sm whitespace-pre-line text-zinc-700">{widget.text}</p>;
-    if (q.isPending) return <div className="flex h-full items-center justify-center"><Spinner className="size-5 text-zinc-400" /></div>;
+    if (widget.type === 'text')
+      return (
+        <p
+          className="text-sm whitespace-pre-line text-zinc-700"
+          style={{ textAlign: widget.options.align }}
+        >
+          {widget.text}
+        </p>
+      );
+    if (q.isPending)
+      return (
+        <div className="flex h-full items-center justify-center">
+          <Spinner className="size-5 text-zinc-400" />
+        </div>
+      );
     if (q.isError) return <ErrorNotice error={q.error} />;
-    return <WidgetBody widget={widget} result={q.data} names={names} onSelectEntity={onSelectEntity} />;
+    return (
+      <WidgetBody
+        widget={widget}
+        result={q.data}
+        names={names}
+        onSelectEntity={onSelectEntity}
+        onPick={onPick}
+      />
+    );
   };
   const flush = widget.type === 'map';
   return (
     <section
       className={cx(
-        'group/w flex min-w-0 flex-col border border-zinc-200 bg-snow transition-colors',
-        canExpand && 'hover:border-zinc-300',
-        layout === 'stack' ? (widget.type === 'kpi' ? 'col-span-6' : 'col-span-12') : cx('col-span-12', SPAN[widget.w]),
+        'group/w flex min-w-0 flex-col overflow-hidden bg-snow transition-shadow',
+        square
+          ? 'border border-zinc-200'
+          : 'rounded-[16px] border border-zinc-100 shadow-[0_1px_2px_rgb(16_24_40/0.06),0_4px_12px_rgb(16_24_40/0.04)]',
+        canExpand &&
+          !square &&
+          'hover:shadow-[0_2px_4px_rgb(16_24_40/0.08),0_8px_20px_rgb(16_24_40/0.08)]',
+        canExpand && square && 'hover:border-zinc-400',
+        layout === 'stack'
+          ? widget.type === 'kpi'
+            ? 'col-span-6'
+            : 'col-span-12'
+          : cx('col-span-12', SPAN[widget.w]),
       )}
-      style={{ minHeight: layout === 'stack' ? (widget.type === 'kpi' ? ROW_HEIGHT : Math.min(widget.h, 3) * ROW_HEIGHT) : widget.h * ROW_HEIGHT }}
+      style={{
+        minHeight:
+          layout === 'stack'
+            ? widget.type === 'kpi'
+              ? ROW_HEIGHT
+              : Math.min(widget.h, 3) * ROW_HEIGHT
+            : widget.h * ROW_HEIGHT,
+      }}
       aria-label={widget.title || widget.type}
     >
       {(widget.title || actions || canExpand) && (
         <header className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
-          {canExpand ? (
-            <button type="button" onClick={() => setOpen(true)} className={cx('min-w-0 text-start text-[13px] font-medium text-zinc-600 hover:text-ink', layout === 'stack' ? 'line-clamp-2' : 'truncate')} title="Open with filters">
-              {widget.title}
-            </button>
-          ) : (
-            <h3 className="truncate text-[13px] font-medium text-zinc-600">{widget.title}</h3>
-          )}
+          <div
+            className={cx(
+              'flex min-w-0 flex-1 items-center gap-1.5',
+              widget.options.align === 'center' && 'justify-center',
+              widget.options.align === 'right' && 'justify-end',
+            )}
+          >
+            {canExpand ? (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className={cx(
+                  'min-w-0 text-[13px] font-medium hover:text-ink',
+                  !widget.options.titleColor && 'text-zinc-600',
+                  layout === 'stack' ? 'line-clamp-2' : 'truncate',
+                )}
+                style={{
+                  textAlign: widget.options.align,
+                  ...(widget.options.titleColor ? { color: widget.options.titleColor } : {}),
+                }}
+                title="Open with filters"
+              >
+                {widget.title}
+              </button>
+            ) : (
+              <h3
+                className={cx(
+                  'truncate text-[13px] font-medium',
+                  !widget.options.titleColor && 'text-zinc-600',
+                )}
+                style={widget.options.titleColor ? { color: widget.options.titleColor } : undefined}
+              >
+                {widget.title}
+              </h3>
+            )}
+            {widget.options.info && <InfoTip html={widget.options.info} />}
+          </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {q.isFetching && !q.isPending && <Spinner className="size-3 text-zinc-400" />}
-            {widget.type === 'map' && widget.query && q.data && <FreshnessBadge value={q.data.freshness} compact />}
+            {widget.type === 'map' && widget.query && q.data && (
+              <FreshnessBadge value={q.data.freshness} compact />
+            )}
             {actions}
             {canExpand && (
               <button
@@ -435,12 +918,32 @@ export function WidgetView({ widget, queryKey, load, names = {}, onSelectEntity,
           </div>
         </header>
       )}
-      <div className={cx('min-h-0 flex-1', flush ? 'mt-2' : 'px-4 pt-1 pb-3', clickBody && 'cursor-zoom-in')} onClick={clickBody ? () => setOpen(true) : undefined}>
+      <div
+        className={cx(
+          'min-h-0 flex-1',
+          flush ? 'mt-2' : 'px-4 pt-1 pb-3',
+          clickBody && 'cursor-zoom-in',
+        )}
+        onClick={clickBody ? () => setOpen(true) : undefined}
+      >
         {body()}
       </div>
-      {open && <WidgetModal widget={widget} queryKey={queryKey} load={load} names={names} onSelectEntity={onSelectEntity} onClose={() => setOpen(false)} />}
+      {open && (
+        <WidgetModal
+          widget={widget}
+          queryKey={queryKey}
+          load={load}
+          names={names}
+          onSelectEntity={onSelectEntity}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </section>
   );
 }
 
-const NoData = () => <p className="flex h-full items-center justify-center text-sm text-zinc-500">No data for this period</p>;
+const NoData = () => (
+  <p className="flex h-full items-center justify-center text-sm text-zinc-500">
+    No data for this period
+  </p>
+);

@@ -2,13 +2,21 @@ import { sql } from 'kysely';
 import { withTenant } from '@grids/db';
 import { LOCALE_CODES } from '@grids/i18n';
 import {
+  sessionPolicyOf,
   DEFAULT_LOCALIZATION,
   DEFAULT_THEME,
+  EMAIL_MESSAGES,
   LocalizationDto,
   SCOPABLE_PERMISSIONS,
   Theme,
   uuidv7,
+  type ActivitySummaryDto,
+  type ActivitySummaryQuery,
+  type EmailPreviewDto,
+  type EmailPreviewInput,
+  type EmailTestInput,
   type AuditPage,
+  type AuditQuery,
   type LocalizationInput,
   type OrgInsightsDto,
   type PublicBranding,
@@ -22,9 +30,12 @@ import type { GrantInput, OrgUnitInput, WorkspaceRoleInput } from '@grids/schema
 import { badRequest, conflict, forbidden, HttpError, notFound } from '../errors.js';
 import { requireTenantAccess } from './authz.js';
 import { audit, type Actor, type ServiceContext } from './context.js';
+import { brandedMail, type EmailBrand } from './email.js';
 import type { LogService } from './logs.js';
 import { ensureSystemRoles, unitLabel, workspacePolicy } from './policy.js';
 import { iso, isUniqueViolation } from './util.js';
+import type { UsageService } from './usage.js';
+import type { SubscriptionAccess } from './subscription-access.js';
 
 type UnitData = z.output<typeof OrgUnitInput>;
 type RoleData = z.output<typeof WorkspaceRoleInput>;
@@ -34,7 +45,7 @@ type GrantData = z.output<typeof GrantInput>;
 export class WorkspaceService {
   constructor(
     private readonly ctx: ServiceContext,
-    private readonly deps: { logs: LogService },
+    private readonly deps: { logs: LogService; usage?: UsageService; access?: SubscriptionAccess },
   ) {}
 
   private async cell(tenantId: string) {
@@ -46,7 +57,7 @@ export class WorkspaceService {
     const t = await this.ctx.db
       .selectFrom('tenant as t')
       .leftJoin('plan as p', 'p.id', 't.plan_id')
-      .select(['t.id', 't.name', 't.slug', 't.status', 'p.name as plan_name', 'p.features'])
+      .select(['t.id', 't.name', 't.slug', 't.status', 'p.name as plan_name', 'p.features', 't.session_policy'])
       .where('t.id', '=', tenantId)
       .executeTakeFirst();
     if (!t) throw notFound('Organisation');
@@ -60,6 +71,9 @@ export class WorkspaceService {
       theme: await this.theme(tenantId),
       localization: await this.localization(tenantId),
       features: (t.features as string[] | null) ?? [],
+      sessionPolicy: sessionPolicyOf(t.session_policy),
+      limits: (await this.deps.usage?.items(tenantId)) ?? [],
+      subscription: await this.subscriptionState(tenantId),
       me: {
         role: policy.role,
         permissions: [...policy.tenantWide].sort(),
@@ -70,6 +84,11 @@ export class WorkspaceService {
         })),
       },
     };
+  }
+
+  private async subscriptionState(tenantId: string): Promise<WorkspaceDto['subscription']> {
+    const a = await this.deps.access?.evaluate(tenantId);
+    return { state: a?.state ?? 'ok', endsAt: a?.endsAt ? a.endsAt.toISOString() : null, daysLeft: a?.daysLeft ?? null };
   }
 
   // ---------- languages ----------
@@ -130,6 +149,10 @@ export class WorkspaceService {
       appName: theme.appName,
       primaryColor: theme.primaryColor,
       logo: theme.logo,
+      logoDark: theme.logoDark,
+      favicon: theme.favicon,
+      tabTitle: theme.tabTitle,
+      signin: theme.signin,
       welcomeMessage: theme.welcomeMessage,
       languages: loc.languages,
       defaultLanguage: loc.defaultLanguage,
@@ -150,7 +173,44 @@ export class WorkspaceService {
     const row = await withTenant(await this.cell(tenantId), tenantId, (tx) =>
       tx.selectFrom('tenant_profile').select('theme').executeTakeFirst(),
     );
-    return Theme.parse({ ...DEFAULT_THEME, ...((row?.theme as object) ?? {}) });
+    const raw = { ...DEFAULT_THEME, ...((row?.theme as Record<string, unknown>) ?? {}) };
+    // Saved before the palette had colours of its own: just a name.
+    if (typeof raw.chartColors === 'string') raw.chartColors = { mode: raw.chartColors, colors: [] } as never;
+    return Theme.parse(raw);
+  }
+
+  /** The look an email design would have for this organisation, with its name, colour and logo. */
+  private async emailBrand(tenantId: string, settings: z.output<typeof EmailPreviewInput>['settings']): Promise<EmailBrand> {
+    const [b, th] = await Promise.all([this.publicBranding(tenantId), this.theme(tenantId)]);
+    return { name: b.appName || b.name, color: th.primaryColor, logo: th.logo, settings };
+  }
+
+  /** A sample of the message, so the design can be judged with real-looking words. */
+  private sampleMail(kind: string | null, to: string, org: string) {
+    const known = EMAIL_MESSAGES.find((m) => m.key === kind);
+    const text = {
+      invitation: `Amara Okafor invited you to join ${org}.\n\nAccept the invitation: https://example.org/invite/abc123`,
+      ticket_reply: 'Thanks for getting in touch. We have looked at the overlay and the colours are now the right way round.\n\nOpen the conversation: https://example.org/support/1034',
+      invoice_issued: `Your invoice INV-2026-014 for ${org} is ready.\n\nAmount due: USD 120.00`,
+      payment_receipt: `We received your payment of USD 120.00 for ${org}. Thank you.`,
+    }[known?.key as 'invitation'] ?? `This is a sample of how a message from ${org} looks.\n\nIt has a few lines of text, and a link to open something: https://example.org/open/abc123`;
+    return { to, subject: known ? known.label : `A message from ${org}`, text };
+  }
+
+  async emailPreview(actor: Actor, tenantId: string, input: z.output<typeof EmailPreviewInput>): Promise<EmailPreviewDto> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'tenants.edit', workspace: 'branding.manage' });
+    const brand = await this.emailBrand(tenantId, input.settings);
+    const out = brandedMail(this.sampleMail(input.message, actor.email ?? 'you@example.org', brand.name), brand, { template: input.message ?? undefined, inlineLogo: true });
+    return { subject: out.subject, html: out.framed ?? '', text: out.text };
+  }
+
+  /** Sends the sample to the person asking, in the design as it is now (saved or not). */
+  async emailTest(actor: Actor, tenantId: string, input: z.output<typeof EmailTestInput>): Promise<{ sent: boolean; to: string }> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'tenants.edit', workspace: 'branding.manage' });
+    if (!actor.email) throw badRequest('Your account has no email address to send the test to');
+    const brand = await this.emailBrand(tenantId, input.settings);
+    const sent = await this.ctx.email.send('email_test', tenantId, this.sampleMail(input.message, actor.email, brand.name), brand);
+    return { sent, to: actor.email };
   }
 
   async setTheme(actor: Actor, tenantId: string, theme: Theme): Promise<Theme> {
@@ -165,7 +225,12 @@ export class WorkspaceService {
       .where('t.id', '=', tenantId)
       .executeTakeFirst();
     const branded =
-      theme.logo !== null || theme.primaryColor.toLowerCase() !== DEFAULT_THEME.primaryColor;
+      theme.logo !== null ||
+      theme.logoDark !== null ||
+      theme.favicon !== null ||
+      theme.faviconDark !== null ||
+      theme.chartColors.mode !== 'standard' ||
+      theme.primaryColor.toLowerCase() !== DEFAULT_THEME.primaryColor;
     if (branded && !((plan?.features as string[] | null) ?? []).includes('custom_branding')) {
       throw new HttpError(
         402,
@@ -607,13 +672,18 @@ export class WorkspaceService {
   async activity(
     actor: Actor,
     tenantId: string,
-    page: { page: number; pageSize: number },
+    page: Partial<AuditQuery>,
   ): Promise<AuditPage> {
     await requireTenantAccess(this.ctx, actor, tenantId, {
       staff: 'logs.system',
       workspace: 'audit.view',
     });
-    return this.deps.logs.audit({ tenantId, ...page });
+    return this.deps.logs.audit({ ...page, tenantId });
+  }
+
+  async activitySummary(actor: Actor, tenantId: string, query: Partial<ActivitySummaryQuery> = {}): Promise<ActivitySummaryDto> {
+    await requireTenantAccess(this.ctx, actor, tenantId, { staff: 'logs.system', workspace: 'audit.view' });
+    return this.deps.logs.summary(tenantId, undefined, query);
   }
 
   /** Activity across the organisation: submissions, data volume, projects, people and tickets. */
